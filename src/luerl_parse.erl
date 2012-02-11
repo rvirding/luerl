@@ -765,8 +765,7 @@ yeccpars2_16(_, _, _, _, T, _, _) ->
  yeccerror(T).
 
 yeccpars2_17(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- NewStack = yeccpars2_17_(Stack),
- yeccgoto_stat(hd(Ss), Cat, Ss, NewStack, T, Ts, Tzr).
+ yeccgoto_stat(hd(Ss), Cat, Ss, Stack, T, Ts, Tzr).
 
 yeccpars2_18(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccgoto_var(hd(Ss), Cat, Ss, Stack, T, Ts, Tzr).
@@ -2388,14 +2387,6 @@ yeccpars2_8_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
    __1 ++ [ __2 ]
-  end | __Stack].
-
--compile({inline,yeccpars2_17_/1}).
--file("src/luerl_parse.yrl", 0).
-yeccpars2_17_(__Stack0) ->
- [__1 | __Stack] = __Stack0,
- [begin
-   '$undefined'
   end | __Stack].
 
 -compile({inline,yeccpars2_19_/1}).

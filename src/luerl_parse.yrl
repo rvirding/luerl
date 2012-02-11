@@ -78,7 +78,7 @@ semi -> '$empty' .
 stats -> '$empty' : [] .
 stats -> stats stat : '$1' ++ ['$2'] .
 
-stat -> ';' .
+stat -> ';' : '$1' .
 stat -> varlist '=' explist : {assign,line('$2'),'$1','$3'} .
 %% Following rule removed to stop reduce-reduce conflict. Prefixexp
 %% catches the same structure. We hope!

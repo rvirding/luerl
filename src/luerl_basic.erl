@@ -78,7 +78,7 @@ ipairs(As, _) -> error({illegal_arg,ipairs,As}).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
 ipairs_next([{table,T},I|_], St) ->
-    {Tab,_} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     Next = I + 1.0,				%Ensure float!
     case orddict:find(Next, Tab) of
 	{ok,V} -> {[Next,V],St};
@@ -87,7 +87,7 @@ ipairs_next([{table,T},I|_], St) ->
 
 next([A], St) -> next([A,nil], St);
 next([{table,T},K|_], St) ->
-    {Tab,_} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     if K == nil ->
 	    case Tab of
 		[{F,V}|_] -> {[F,V],St};
@@ -123,7 +123,7 @@ rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
 rawequal(As, _) -> illegal_arg_error(rawequal, As).
 
 rawget([{table,N},K|_], St) ->
-    {T,_} = orddict:fetch(N, St#luerl.tabs),	%Get the table.
+    {T,_} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
     case orddict:find(K, T) of
 	{ok,Val} -> Val;
 	error -> nil				%Default value
@@ -132,7 +132,7 @@ rawget(As, _) -> illegal_arg_error(rawget, As).
 
 rawlen([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
 rawlen([{table,N}|_], St) ->
-    Tab = orddict:fetch(N, St#luerl.tabs),
+    Tab = ?GET_TABLE(N, St#luerl.tabs),
     {length(element(1, Tab)),St};
 rawlen(As, _) -> illegal_arg_error(rawlen, As).
 
@@ -140,7 +140,7 @@ rawset([{table,N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
     Upd = if Val =:= nil -> fun ({T,M}) -> {orddict:erase(Key, T),M} end;
 	     true -> fun ({T,M}) -> {orddict:store(Key, Val, T),M} end
 	  end,
-    Ts1 = orddict:update(N, Upd, Ts0),
+    Ts1 = ?UPD_TABLE(N, Upd, Ts0),
     St#luerl{tabs=Ts1};
 rawset(As, _) -> illegal_arg_error(rawset, As).
 
@@ -204,15 +204,15 @@ type(_) -> <<"unknown">>.
 %% Meta table functions.
 
 getmetatable([{table,T}|_], St) ->		%Only tables have metatables
-    {_,M} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {_,M} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     {[M],St};
 getmetatable(_, St) -> {[nil],St}.
 
 setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
-    Ts = orddict:update(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
+    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
 setmetatable([{table,N}=A1,nil|_], St) ->
-    Ts = orddict:update(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
+    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
 setmetatable(As, _) -> illegal_arg_error(setmetatable, As).
 

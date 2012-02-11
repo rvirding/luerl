@@ -91,14 +91,14 @@ pop_env(#luerl{env=[_|Es]}=St) ->
 alloc_table(St) -> alloc_table(orddict:new(), St).
 
 alloc_table(Itab, #luerl{tabs=Ts0,free=[N|Ns]}=St) ->
-    Ts1 = orddict:store(N, {Itab,nil}, Ts0),
+    Ts1 = ?SET_TABLE(N, {Itab,nil}, Ts0),
     {{table,N},St#luerl{tabs=Ts1,free=Ns}};
 alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
-    Ts1 = orddict:store(N, {Itab,nil}, Ts0),
+    Ts1 = ?SET_TABLE(N, {Itab,nil}, Ts0),
     {{table,N},St#luerl{tabs=Ts1,next=N+1}}.
 
 free_table({table,N}, #luerl{tabs=Ts0,free=Ns}=St) ->
-    Ts1 = orddict:erase(N, Ts0),
+    Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{tabs=Ts1,free=[N|Ns]}.
 
 %% set_table_name(Name, Value, Table, State) -> State.
@@ -112,19 +112,19 @@ set_table_name(Name, Val, Tab, St) ->
     set_table_key(atom_to_binary(Name, latin1), Val, Tab, St).
 
 set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
-    {Tab0,Met} = orddict:fetch(N, Ts0),		%Get the table
+    {Tab0,Met} = ?GET_TABLE(N, Ts0),		%Get the table
     case orddict:find(Key, Tab0) of
 	{ok,_} ->
 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
 		      true -> orddict:store(Key, Val, Tab0)
 		   end,
-	    Ts1 = orddict:store(N, {Tab1,Met}, Ts0),
+	    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->
 	    case getmetamethod_tab(Met, <<"__newindex">>, Ts0) of
 		nil ->
 		    Tab1 = orddict:store(Key, Val, Tab0),
-		    Ts1 = orddict:store(N, {Tab1,Met}, Ts0),
+		    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
 		    St#luerl{tabs=Ts1};
 		Meta when element(1, Meta) =:= function ->
 		    functioncall(Meta, [Key,Val], St);
@@ -143,7 +143,7 @@ get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
 
 get_table_key(K, {table,N}=T, #luerl{tabs=Ts}=St) ->
-    {Tab,Met} = orddict:fetch(N, Ts),		%Get the table.
+    {Tab,Met} = ?GET_TABLE(N, Ts),		%Get the table.
     case orddict:find(K, Tab) of
 	{ok,Val} -> {Val,St};
 	error ->
@@ -177,11 +177,11 @@ set_local_key(Key, Val, #luerl{tabs=Ts0,env=Env}=St) ->
 
 set_local_key_env(K, Val, Ts, [{table,E}|_]) ->
     Store = fun ({T,M}) -> {orddict:store(K, Val, T),M} end,
-    orddict:update(E, Store, Ts).
+    ?UPD_TABLE(E, Store, Ts).
 
 set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[{table,E}|_]}=St) ->
     Store = fun ({T,M}) -> {set_local_keys_tab(Ks, Vals, T),M} end,
-    Ts1 = orddict:update(E, Store, Ts0),
+    Ts1 = ?UPD_TABLE(E, Store, Ts0),
     St#luerl{tabs=Ts1}.
 
 set_local_keys_tab([K|Ks], [Val|Vals], T0) ->
@@ -214,13 +214,13 @@ set_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
 
 set_key_env(K, Val, Ts, [{table,_G}]) ->	%Top table _G
     Store = fun ({T,M}) -> {orddict:store(K, Val, T),M} end,
-    orddict:update(_G, Store, Ts);
+    ?UPD_TABLE(_G, Store, Ts);
 set_key_env(K, Val, Ts, [{table,E}|Es]) ->
-    {Tab,_} = orddict:fetch(E, Ts),		%Find the table
+    {Tab,_} = ?GET_TABLE(E, Ts),		%Find the table
     case orddict:is_key(K, Tab) of
 	true ->
 	    Store = fun ({T,M}) -> {orddict:store(K, Val, T),M} end,
-	    orddict:update(E, Store, Ts);
+	    ?UPD_TABLE(E, Store, Ts);
 	false -> set_key_env(K, Val, Ts, Es)
     end.
 
@@ -228,7 +228,7 @@ get_key(K, #luerl{tabs=Ts,env=Env}) ->
     get_key_env(K, Ts, Env).
 
 get_key_env(K, Ts, [{table,E}|Es]) ->
-    {Tab,_} = orddict:fetch(E, Ts),		%Get environment table
+    {Tab,_} = ?GET_TABLE(E, Ts),		%Get environment table
     case orddict:find(K, Tab) of		%Check if variable in the env
 	{ok,Val} -> Val;
 	error -> get_key_env(K, Ts, Es)
@@ -275,17 +275,20 @@ in_block(Do, St0) ->
     ?DP("B-> ~p\n", [{Ret,Sub1 or Sub0}]),
     {Ret,St4#luerl{sub=Sub1 or Sub0}}.
 
+%% stats(Stats, State) -> {Ret,State}.
+
+stats([{';',_}|Ss], St) -> stats(Ss, St);	%A no-op
 stats([{assign,_,Vs,Es}|Ss], St0) ->
     St1 = assign(Vs, Es, St0),
     stats(Ss, St1);
 stats([{return,_,Es}], St0) ->			%Not properly done yet
     {Vals,St1} = explist(Es, St0),
     {Vals,St1};
-stats([{label,_,_}|_], _) ->			%Don't implement this yet
+stats([{label,_,_}|_], _) ->			%Not implemented yet
     error({undefined_op,label});
-stats([{break,_}|_], _) ->			%Don't implement this yet
+stats([{break,_}|_], _) ->			%Not implemented yet
     error({undefined_op,break});
-stats([{goto,_,_}|_], _) ->			%Don't implement this yet
+stats([{goto,_,_}|_], _) ->			%Not implemented yet
     error({undefined_op,goto});
 stats([{block,_,B}|Ss], St0) ->
     {_,St1} = block(B, St0),
@@ -593,7 +596,7 @@ op('#', {table,N}=T, St) ->			%Not right, but will do for now
     Meta = getmetamethod(T, <<"__len">>, St),
     if ?IS_TRUE(Meta) -> functioncall(Meta, [T], St);
        true ->
-	    Tab = orddict:fetch(N, St#luerl.tabs),
+	    Tab = ?GET_TABLE(N, St#luerl.tabs),
 	    {[length(element(1, Tab))],St}
     end;
 op(Op, A, _) -> error({illegal_arg,Op,[A]}).
@@ -720,9 +723,9 @@ getmetamethod(O1, O2, E, St) ->
     end.
 
 getmetamethod({table,N}, E, #luerl{tabs=Ts}) ->
-    case orddict:fetch(N, Ts) of
+    case ?GET_TABLE(N, Ts) of
 	{_,{table,M}} ->			%There is a metatable
-	    {Mtab,_} = orddict:fetch(M, Ts),
+	    {Mtab,_} = ?GET_TABLE(M, Ts),
 	    case orddict:find(E, Mtab) of
 		{ok,Mm} -> Mm;
 		error -> nil
@@ -732,7 +735,7 @@ getmetamethod({table,N}, E, #luerl{tabs=Ts}) ->
 getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab({table,M}, E, Ts) ->
-    {Mtab,_} = orddict:fetch(M, Ts),
+    {Mtab,_} = ?GET_TABLE(M, Ts),
     case orddict:find(E, Mtab) of
 	{ok,Mm} -> Mm;
 	error -> nil
@@ -778,7 +781,7 @@ mark([{table,T}|Todo], More, Seen0, Ts) ->
 	    mark(Todo, More, Seen0, Ts);
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
-	    {Tab,Meta} = orddict:fetch(T, Ts),
+	    {Tab,Meta} = ?GET_TABLE(T, Ts),
 	    %% Have to be careful where add Tab and Meta as Tab is a
 	    %% [{Key,Val}] and Meta is a nil|{table,M}. We want lists.
 	    mark([Meta|Todo], [Tab|More], Seen1, Ts)
