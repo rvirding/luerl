@@ -48,5 +48,15 @@
 		  array:sparse_map(Fil, Ar)
 	  end)(array:default(Ar)))).
 -define(FOLD_TABLE(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
+-endif.
 
+-ifdef(USE_PD).
+%% Use the process dictionary to handle tables.
+-define(MAKE_TABLE(), ok).
+-define(GET_TABLE(N, Pd), get(N)).
+-define(SET_TABLE(N, T, Pd), put(N, T)).
+-define(UPD_TABLE(N, Upd, Pd), put(N, (Upd)(get(N)))).
+-define(DEL_TABLE(N, Pd), erase(N)).
+-define(FILTER_TABLE(Pred, Pd), Pd).		%This needs work
+-define(FOLD_TABLE(Fun, Acc, Pd), Pd).		%This needs work
 -endif.

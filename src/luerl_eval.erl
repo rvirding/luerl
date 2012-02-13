@@ -237,10 +237,8 @@ chunk(Stats, St0) ->
     {Ret,St1}.
 
 %% block(Stats, State) -> State.
-%% A block creates a new local environment which we would like to
-%% remove afterwards. We can only do this if there are no local
-%% functions defined within this block or sub-blocks. The 'locf' field
-%% is set to 'true' when this occurs.
+%%  Evaluate statements in a block. The with_block function requires
+%%  that its action returns a result, which is irrelevant here.
 
 block([], St) -> St;				%Empty block, do nothing
 block(Stats, St0) ->
@@ -272,6 +270,8 @@ stats([S|Ss], St0) ->
     St1 = stat(S, St0),
     stats(Ss, St1);
 stats([], St) -> St.
+
+%% stat(Stat, State) -> State.
 
 stat({';',_}, St) -> St;			%A no-op
 stat({assign,_,Vs,Es}, St) ->
@@ -391,9 +391,11 @@ loop_block(Do, St) ->
 		    Tag = St0#luerl.tag,
 		    try Do(St0)
 		    catch
-			throw:{break,_,Tag,_St} ->
-			    %% Should unwind stack here and free.
-			    {[],_St#luerl{env=St0#luerl.env}}
+			throw:{break,_,Tag,St1} ->
+			    %% Unwind the stack and freeing tables.
+			    Old = St0#luerl.env,
+			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    {[],St2}
 		    end
 	    end,
     with_block(Block, St).
@@ -579,43 +581,42 @@ functioncall(Func, As, St) ->
     end.
 
 %% function_block(Do, State) -> {Return,State}.
-%% A block creates a new local environment which we would like to
-%% remove afterwards. We can only do this if there are no local
-%% functions defined within this block or sub-blocks. The 'locf' field
-%% is set to 'true' when this occurs.
+%%  The top level block in which to evaluate functions run loops
+%%  in. Catch returns and breaks here; breaks are errors as they
+%%  should have been caught already. Stack needs to be reset/unwound
+%%  when we catch a break.
 
 function_block(Do, St) ->
     Block = fun (St0) ->
 		    Tag = St0#luerl.tag,
 		    try Do(St0)
 		    catch
-			throw:{return,_,Tag,_Ret,_St} ->
-			    %% Should unwind stack here and free.
-			    {_Ret,_St#luerl{env=St0#luerl.env}};
-			throw:{break,L,Tag,_St} ->
+			throw:{return,_,Tag,Ret,St1} ->
+			    %% Unwind the stack and freeing tables.
+			    Old = St0#luerl.env,
+			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    {Ret,St2};
+			throw:{break,L,Tag,_} ->
 			    error({illegal_op,L,break})
 		    end
 	    end,
     with_block(Block, St).
 
-%%     Locf0 = St0#luerl.locf,			%"Global" locf value
-%%     {E,St1} = alloc_env(St0),			%New environemnt table
-%%     St2 = push_env(E, St1),
-%%     St3 = St2#luerl{locf=false},		%Set locf to false
-%%     Tag = St3#luerl.tag,
-%%     {Ret,St4} = try Do(St3)
-%% 		catch
-%% 		    throw:{return,_,Tag,_Ret,_St} ->
-%% 			{_Ret,_St};
-%% 		    throw:{break,L,Tag,_St} ->
-%% 			error({illegal_op,L,break})
-%% 		end,
-%%     Locf1 = St4#luerl.locf,			%"Local" locf value
-%%     St5  = case Locf1 of			%Check if we can free table
-%% 	       true -> pop_env(St4);
-%% 	       false -> pop_env(free_table(E, St4))
-%% 	   end,
-%%     {Ret,St5#luerl{locf=Locf1 or Locf0}}.
+%% unwind_stack(From, To, State) -> State.
+%%  If locf else is false then we can unwind env stack freeing tables
+%%  as we go, otherwise if locf is true we can not do this.
+
+%% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
+unwind_stack(_, _, #luerl{locf=true}=St) -> St;
+unwind_stack(From, [Top|_]=To, #luerl{tabs=Ts0,free=Ns0}=St) ->
+    {Ts1,Ns1} = unwind_stack(From, Top, Ts0, Ns0),
+    St#luerl{tabs=Ts1,free=Ns1,env=To}.
+
+unwind_stack([Top|_], Top, Ts, Ns) -> {Ts,Ns};	%Done!
+unwind_stack([{table,N}|From], Top, Ts0, Ns) ->
+    Ts1 = ?DEL_TABLE(N, Ts0),
+    %% io:format("us: ~p\n", [N]),
+    unwind_stack(From, Top, Ts1, [N|Ns]).
 
 %% tableconstructor(Fields, State) -> {TableData,State}.
 
@@ -776,16 +777,19 @@ getmetamethod(O1, O2, E, St) ->
     end.
 
 getmetamethod({table,N}, E, #luerl{tabs=Ts}) ->
-    case ?GET_TABLE(N, Ts) of
-	{_,{table,M}} ->			%There is a metatable
-	    {Mtab,_} = ?GET_TABLE(M, Ts),
-	    case orddict:find(E, Mtab) of
-		{ok,Mm} -> Mm;
-		error -> nil
-	    end;
-	{_,nil} -> nil				%No metatable
-    end;
+    {_,Meta} = ?GET_TABLE(N, Ts),
+    getmetamethod_tab(Meta, E, Ts);
 getmetamethod(_, _, _) -> nil.			%Other types have no metatables
+
+%%     case ?GET_TABLE(N, Ts) of
+%% 	{_,{table,M}} ->			%There is a metatable
+%% 	    {Mtab,_} = ?GET_TABLE(M, Ts),
+%% 	    case orddict:find(E, Mtab) of
+%% 		{ok,Mm} -> Mm;
+%% 		error -> nil
+%% 	    end;
+%% 	{_,nil} -> nil				%No metatable
+%%     end;
 
 getmetamethod_tab({table,M}, E, Ts) ->
     {Mtab,_} = ?GET_TABLE(M, Ts),
