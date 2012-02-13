@@ -1,3 +1,75 @@
 Luerl - an implementation of Lua in Erlang
 
-Some simple interfaces in luerl.erl.
+An experimental implementation of Lua 5.2 written soley in pure Erlang.
+
+Some things which are known not to be implemented or work properly:
+
+- label and goto
+
+- tail-call optimisation in return
+
+- only limited standard libraries
+
+- proper handling of __metatable
+
+There are some simple interfaces in luerl.erl:
+
+- luerl:eval(String) evaluates the Lua code in String. Returns the return values of the evaluation.
+
+- luerl:dofile(FileName) reads in and runs the Lua code in the file and returns the values of the evaluation. Equivalent to doing luerl:eval("dofile('FileName')").
+
+Currently implemented functions in the libraries:
+
+_G
+_VERSION
+dofile
+eprint
+error
+getmetatable
+ipairs
+next
+pairs
+print
+rawequal
+rawget
+rawlen
+rawset
+select
+setmetatable
+tonumber
+tostring
+type
+
+math.abs
+math.acos
+math.asin
+math.atan
+math.atan2
+math.cos
+math.cosh
+math.deg
+math.exp
+math.floor
+math.log
+math.pi
+math.pow
+math.rad
+math.sin
+math.sinh
+math.sqrt
+math.tan
+math.tanh
+
+os.difftime
+os.getenv
+os.time
+
+string.byte
+string.char
+string.len
+string.lower
+string.rep
+string.reverse
+string.upper
+
+table.pack
