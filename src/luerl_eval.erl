@@ -35,20 +35,20 @@
 -export([init/0,chunk/2,gc/1]).
 
 %% Internal functions which can be useful "outside".
--export([functioncall/3,getmetamethod/3,getmetamethod/4]).
+-export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
 
 -include("luerl.hrl").
 
-%% -define(DP(F,As), io:format(F, As)).
+%%-define(DP(F,As), io:format(F, As)).
 -define(DP(F, A), ok).
 
 %% init() -> State.
 %% Initialise the basic state.
 
 init() ->
-    St0 = #luerl{env=[],sub=false},
+    St0 = #luerl{env=[],locf=false,tag=make_ref()},
     %% Initialise the table handling.
-    St1 = St0#luerl{tabs=orddict:new(),free=[],next=0},
+    St1 = St0#luerl{tabs=?MAKE_TABLE(),free=[],next=0},
     %% Allocate the _G table and initialise the environment
     Basic = orddict:from_list(luerl_basic:table()),
     {_G,St2} = alloc_env(Basic, St1),		%Allocate base environment
@@ -58,7 +58,8 @@ init() ->
 %%     St5 = alloc_libs([{<<"math">>,luerl_math},
 %% 		      {<<"os">>,luerl_os},
 %% 		      {<<"string">>,luerl_string}], St4),
-    St5 = alloc_libs([{<<"os">>,luerl_os}], St4),
+    St5 = alloc_libs([{<<"os">>,luerl_os},
+		      {<<"table">>,luerl_table}], St4),
     St5.
 
 alloc_libs(Libs, St) ->
@@ -131,13 +132,6 @@ set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
 		Meta -> set_table_key(Key, Val, Meta, St)
 	    end
     end.
-
-%% set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
-%%     Upd = if Val =:= nil -> fun ({T,M}) -> {orddict:erase(Key, T),M} end;
-%% 	     true -> fun ({T,M}) -> {orddict:store(Key, Val, T),M} end
-%% 	  end,
-%%     Ts1 = orddict:update(N, Upd, Ts0),
-%%     St#luerl{tabs=Ts1}.
 
 get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
@@ -238,90 +232,82 @@ get_key_env(_, _, []) -> nil.			%The default value
 %% chunk(Stats, State) -> {Return,State}.
 
 chunk(Stats, St0) ->
-    {Ret,St1} = block(Stats, St0),
+    {Ret,St1} = function_block(fun (S) -> {[],stats(Stats, S)} end, St0),
     %% Should do GC here.
     {Ret,St1}.
 
-%% block(Stats, State) -> {Return,State}.
+%% block(Stats, State) -> State.
 %% A block creates a new local environment which we would like to
 %% remove afterwards. We can only do this if there are no local
-%% functions defined within this block or sub-blocks. The 'sub' field
+%% functions defined within this block or sub-blocks. The 'locf' field
 %% is set to 'true' when this occurs.
 
 block([], St) -> St;				%Empty block, do nothing
-block(Stats, St) ->
-    Do = fun (S) -> stats(Stats, S) end,
-    in_block(Do, St).
+block(Stats, St0) ->
+    Do = fun (S) -> {[],stats(Stats, S)} end,
+    {_,St1} = with_block(Do, St0),
+    St1.
 
-%% in_block(Do, State) -> {Return,State}.
+%% with_block(Do, State) -> {Return,State}.
 %% A block creates a new local environment which we would like to
 %% remove afterwards. We can only do this if there are no local
-%% functions defined within this block or sub-blocks. The 'sub' field
+%% functions defined within this block or sub-blocks. The 'locf' field
 %% is set to 'true' when this occurs.
 
-in_block(Do, St0) ->
-    Sub0 = St0#luerl.sub,			%"Global" sub value
-    ?DP("B: ~p\n", [St0]),
+with_block(Do, St0) ->
+    Locf0 = St0#luerl.locf,			%"Global" locf value
     {T,St1} = alloc_env(St0),			%Allocate the local table
     St2 = push_env(T, St1),			%Put it in the environment
-    {Ret,St3} = Do(St2#luerl{sub=false}),	%Do its thing
-    Sub1 = St3#luerl.sub,			%"Local" sub value
-    ?DP("B-> ~p\n", [St3]),
-    ?DP("Freeing table ~p: ~p\n", [T,not Sub1]),
-    St4  = case Sub1 of				%Check if we can free table
+    {Ret,St3} = Do(St2#luerl{locf=false}),	%Do its thing
+    Locf1 = St3#luerl.locf,			%"Local" locf value
+    St4  = case Locf1 of			%Check if we can free table
 	       true -> pop_env(St3);
 	       false -> pop_env(free_table(T, St3))
 	   end,
-    ?DP("B-> ~p\n", [{Ret,Sub1 or Sub0}]),
-    {Ret,St4#luerl{sub=Sub1 or Sub0}}.
+    {Ret,St4#luerl{locf=Locf1 or Locf0}}.
 
-%% stats(Stats, State) -> {Ret,State}.
+%% stats(Stats, State) -> State.
 
-stats([{';',_}|Ss], St) -> stats(Ss, St);	%A no-op
-stats([{assign,_,Vs,Es}|Ss], St0) ->
-    St1 = assign(Vs, Es, St0),
+stats([S|Ss], St0) ->
+    St1 = stat(S, St0),
     stats(Ss, St1);
-stats([{return,_,Es}], St0) ->			%Not properly done yet
+stats([], St) -> St.
+
+stat({';',_}, St) -> St;			%A no-op
+stat({assign,_,Vs,Es}, St) ->
+     assign(Vs, Es, St);
+stat({return,L,Es}, #luerl{tag=Tag}=St0) ->
     {Vals,St1} = explist(Es, St0),
-    {Vals,St1};
-stats([{label,_,_}|_], _) ->			%Not implemented yet
+    throw({return,L,Tag,Vals,St1});
+stat({label,_,_}, _) ->			%Not implemented yet
     error({undefined_op,label});
-stats([{break,_}|_], _) ->			%Not implemented yet
-    error({undefined_op,break});
-stats([{goto,_,_}|_], _) ->			%Not implemented yet
+stat({break,L}, #luerl{tag=T}=St) ->
+    throw({break,L,T,St});			%Easier match with explicit tag
+stat({goto,_,_}, _) ->			%Not implemented yet
     error({undefined_op,goto});
-stats([{block,_,B}|Ss], St0) ->
-    {_,St1} = block(B, St0),
-    stats(Ss, St1);
-stats([{functiondef,L,Fname,Ps,B}|Ss], St0) ->
-    St1 = set_var(Fname, {function,L,St0#luerl.env,Ps,B}, St0),
-    stats(Ss, St1#luerl{sub=true});
-stats([{'while',_,Exp,Body}|Ss], St0) ->
-    St1 = do_while(Exp, Body, St0),
-    stats(Ss, St1);
-stats([{repeat,_,Body,Exp}|Ss], St0) ->
-    St1 = do_repeat(Body, Exp, St0),
-    stats(Ss, St1);
-stats([{'if',_,Tests,Else}|Ss], St0) ->
-    St1 = if_tests(Tests, Else, St0),
-    stats(Ss, St1);
-stats([{for,Line,V,I,L,S,B}|Ss], St0) ->
-    {_,St1} = numeric_for(Line, V, I, L, S, B, St0),
-    stats(Ss, St1);
-stats([{for,Line,V,I,L,B}|Ss], St0) ->
-    {_,St1} = numeric_for(Line, V, I, L, {'NUMBER',Line,1.0}, B, St0),
-    stats(Ss, St1);
-stats([{for,Line,Ns,Gen,B}|Ss], St0) ->
-    {_,St1} = generic_for(Line, Ns, Gen, B, St0),
-    stats(Ss, St1);
-stats([{local,Decl}|Ss], St0) ->
-    St1 = local(Decl, St0),
-    ?DP("L: ~p\n", [{Decl,St1}]),
-    stats(Ss, St1);
-stats([P|Ss], St0) ->
+stat({block,_,B}, St) ->
+    block(B, St);
+stat({functiondef,L,Fname,Ps,B}, St) ->
+    St1 = set_var(Fname, {function,L,St#luerl.env,Ps,B}, St),
+    St1#luerl{locf=true};
+stat({'while',_,Exp,Body}, St) ->
+    do_while(Exp, Body, St);
+stat({repeat,_,Body,Exp}, St) ->
+    do_repeat(Body, Exp, St);
+stat({'if',_,Tests,Else}, St) ->
+    do_if(Tests, Else, St);
+stat({for,Line,V,I,L,S,B}, St) ->
+    numeric_for(Line, V, I, L, S, B, St);
+stat({for,Line,V,I,L,B}, St) ->
+    numeric_for(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
+stat({for,Line,Ns,Gen,B}, St) ->
+    generic_for(Line, Ns, Gen, B, St);
+stat({local,Decl}, St) ->
+    local(Decl, St);
+stat(P, St0) ->
+    %% These are just function calls here.
     {_,St1} = prefixexp(P, St0),		%Drop return value
-    stats(Ss, St1);
-stats([], St) -> {[],St}.
+    St1.
 
 assign(Ns, Es, St0) ->
     {Vals,St1} = explist(Es, St0),
@@ -362,36 +348,70 @@ var_last({method,_,{'NAME',_,N}}, {function,L,Env,Pars,B}, SoFar, St) ->
     set_table_name(N, {function,L,Env,[{'NAME',L,self}|Pars],B},
 		   SoFar, St).
 
+%% do_while(TestExp, Body, State) -> State.
+
 do_while(Exp, Body, St0) ->
+    While = fun (St) -> while_loop(Exp, Body, St) end,
+    {_,St1} = loop_block(While, St0),
+    St1.
+
+while_loop(Exp, Body, St0) ->
     {Test,St1} = exp(Exp, St0),
     case is_true(Test) of
        true ->
-	    {_,St2} = block(Body, St1),
-	    do_while(Exp, Body, St2);
-	false -> St1
+	    St2 = block(Body, St1),
+	    while_loop(Exp, Body, St2);
+	false -> {[],St1}
     end.
 
+%% do_repeat(Body, TestExp, State) -> State.
+
 do_repeat(Body, Exp, St0) ->
-    Do = fun (S0) ->
-		 {_,S1} = stats(Body, S0),
-		 exp(Exp, S1)			%Return test expression value
-	 end,
-    {Ret,St1} = in_block(Do, St0),
+    RepeatBody = fun (S0) ->			%Combine body with test
+			 S1 = stats(Body, S0),
+			 exp(Exp, S1)
+		 end,
+    Repeat = fun (St) -> repeat_loop(RepeatBody, St) end,
+    {_,St1} = loop_block(Repeat, St0),		%element(2, ...)
+    St1.
+
+repeat_loop(Body, St0) ->
+    {Ret,St1} = with_block(Body, St0),
     case is_true(Ret) of
-	true -> St1;
-	false -> do_repeat(Body, Exp, St1)
+	true -> {[],St1};
+	false -> repeat_loop(Body, St1)
     end.
+
+%% loop_block(DoLoop, State) -> State.
+%%  The top level block to run loops in. Catch breaks here. Stack
+%%  needs to be reset/unwound when we catch a break.
+
+loop_block(Do, St) ->
+    Block = fun (St0) ->
+		    Tag = St0#luerl.tag,
+		    try Do(St0)
+		    catch
+			throw:{break,_,Tag,_St} ->
+			    %% Should unwind stack here and free.
+			    {[],_St#luerl{env=St0#luerl.env}}
+		    end
+	    end,
+    with_block(Block, St).
+
+%% do_if(Tests, Else, State) -> State.
+
+do_if(Tests, Else, St0) ->
+    if_tests(Tests, Else, St0).
 
 if_tests([{Exp,Block}|Ts], Else, St0) ->
     {[Test|_],St1} = exp(Exp, St0),		%What about the environment
     if Test =:= false; Test =:= nil ->		%Test failed, try again
 	    if_tests(Ts, Else, St1);
        true ->					%Test succeeded, do block
-	    {_,St2} = block(Block, St1),
-	    St2
+	    block(Block, St1)
     end;
-if_tests([], Else, St) ->
-    block(Else, St).
+if_tests([], Else, St0) ->
+    block(Else, St0).
 
 numeric_for(_, {'NAME',_,Name}, Init, Limit, Step, Block, St) ->
     %% Create a local block to run the whole for loop.
@@ -403,17 +423,16 @@ numeric_for(_, {'NAME',_,Name}, Init, Limit, Step, Block, St) ->
 		 if (I1 == nil) or (L1 == nil) or (S1 == nil) ->
 			 error({illegal_arg,for,[I0,L0,S0]});
 		    true ->
-			 St2 = numfor_loop(Name, I1, L1, S1, Block, St1),
-			 {[],St2}
+			 numfor_loop(Name, I1, L1, S1, Block, St1)
 		 end
 	 end,
-    in_block(Do, St).
+    with_block(Do, St).
 
 numfor_loop(Name, I, L, S, B, St0)
   when S > 0, I =< L ; S =< 0, I >= L ->
     St1 = set_local_name(Name, I, St0),
     %% Create a local block for each iteration of the loop.
-    {_,St2} = block(B, St1),
+    St2 = block(B, St1),
     numfor_loop(Name, I+S, L, S, B, St2);
 numfor_loop(_, _, _, _, _, St) -> St.		%We're done
 
@@ -426,10 +445,9 @@ generic_for(_, Names, Exps, Block, St) ->
 		     [F,S] -> Var = nil;
 		     [F,S,Var|_] -> ok
 		 end,
-		 St2 = genfor_loop(Names, F, S, Var, Block, St1),
-		 {[],St2}
+		 genfor_loop(Names, F, S, Var, Block, St1)
 	 end,
-    in_block(Do, St).
+    with_block(Do, St).
 
 genfor_loop(Names, F, S, Var, Block, St0) ->
     {Vals,St1} = functioncall(F, [S,Var], St0),
@@ -437,7 +455,7 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 	true ->	    
 	    St2 = assign_local_loop(Names, Vals, St1),
 	    %% Create a local block for each iteration of the loop.
-	    {_,St3} = block(Block, St2),
+	    St3 = block(Block, St2),
 	    genfor_loop(Names, F, S, hd(Vals), Block, St3);
 	false -> St1				%Done
     end.
@@ -453,7 +471,7 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 %%     end.
 
 local({functiondef,L,{'NAME',_,Name},Ps,B}, St) ->
-    set_local_name(Name, {function,L,St#luerl.env,Ps,B}, St#luerl{sub=true});
+    set_local_name(Name, {function,L,St#luerl.env,Ps,B}, St#luerl{locf=true});
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
     assign_local_loop(Ns, Vals, St1).
@@ -492,7 +510,7 @@ exp({'NUMBER',_,N}, St) -> {[N],St};
 exp({'STRING',_,S}, St) -> {[S],St};
 exp({'...',_}, _) -> error({illegal_val,'...'});
 exp({functiondef,L,Ps,B}, St) ->
-    {[{function,L,St#luerl.env,Ps,B}],St#luerl{sub=true}};
+    {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
@@ -542,19 +560,15 @@ prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
     functioncall(Func, [SoFar|Args1], St2).
 
 functioncall({function,_,Env,Ps,B}, Args, St0) ->
-    ?DP("F: ~p\n", [{Name,Args,St0}]),
-    ?DP("F: ~p\n", [{Env,Ps,B}]),
     Env0 = St0#luerl.env,			%Caller's environment
     St1 = St0#luerl{env=Env},			%Set function's environment
     Do = fun (S0) ->
+		 %% Use local assign to put argument into environment.
 		 S1 = assign_local_loop(Ps, Args, S0),
-		 stats(B, S1)
+		 {[],stats(B, S1)}
 	 end,
-    %% Use local assign to put argument into environment.
-    {Ret,St2} = in_block(Do, St1),
+    {Ret,St2} = function_block(Do, St1),
     St3 = St2#luerl{env=Env0},			%Restore caller's environment
-    ?DP("F-> ~p\n", [{Ret,St2}]),
-    ?DP("F-> ~p\n", [{Ret,St3}]),
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
@@ -563,6 +577,45 @@ functioncall(Func, As, St) ->
 	nil -> error({illegal_arg,Func,As});
 	Meta -> functioncall(Meta, As, St)
     end.
+
+%% function_block(Do, State) -> {Return,State}.
+%% A block creates a new local environment which we would like to
+%% remove afterwards. We can only do this if there are no local
+%% functions defined within this block or sub-blocks. The 'locf' field
+%% is set to 'true' when this occurs.
+
+function_block(Do, St) ->
+    Block = fun (St0) ->
+		    Tag = St0#luerl.tag,
+		    try Do(St0)
+		    catch
+			throw:{return,_,Tag,_Ret,_St} ->
+			    %% Should unwind stack here and free.
+			    {_Ret,_St#luerl{env=St0#luerl.env}};
+			throw:{break,L,Tag,_St} ->
+			    error({illegal_op,L,break})
+		    end
+	    end,
+    with_block(Block, St).
+
+%%     Locf0 = St0#luerl.locf,			%"Global" locf value
+%%     {E,St1} = alloc_env(St0),			%New environemnt table
+%%     St2 = push_env(E, St1),
+%%     St3 = St2#luerl{locf=false},		%Set locf to false
+%%     Tag = St3#luerl.tag,
+%%     {Ret,St4} = try Do(St3)
+%% 		catch
+%% 		    throw:{return,_,Tag,_Ret,_St} ->
+%% 			{_Ret,_St};
+%% 		    throw:{break,L,Tag,_St} ->
+%% 			error({illegal_op,L,break})
+%% 		end,
+%%     Locf1 = St4#luerl.locf,			%"Local" locf value
+%%     St5  = case Locf1 of			%Check if we can free table
+%% 	       true -> pop_env(St4);
+%% 	       false -> pop_env(free_table(E, St4))
+%% 	   end,
+%%     {Ret,St5#luerl{locf=Locf1 or Locf0}}.
 
 %% tableconstructor(Fields, State) -> {TableData,State}.
 
@@ -649,7 +702,7 @@ op(Op, A1, A2, _) -> error({illegal_arg,Op,[A1,A2]}).
 %% neq_op(Op, Arg, Arg, State) -> {[Ret],State}.
 %% lt_op(Op, Arg, Arg, State) -> {[Ret],State}.
 %% le_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% Straigt out of the reference manual.
+%%  Straigt out of the reference manual.
 
 numeric_op(_, O, E, Raw, St0) ->
     N = luerl_lib:tonumber(O),
@@ -762,13 +815,13 @@ gc(#luerl{tabs=Ts0,free=Free0,env=Env}=St) ->
     Seen = mark(Env, [], [], Ts0),
     io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
-    Ts1 = orddict:filter(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
-    Free1 = orddict:fold(fun (K, _, F) ->
-				 case ordsets:is_element(K, Seen) of
-				     true -> F;
-				     false -> [K|F]
-				 end
-			 end, Free0, Ts0),
+    Ts1 = ?FILTER_TABLE(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
+    Free1 = ?FOLD_TABLE(fun (K, _, F) ->
+				case ordsets:is_element(K, Seen) of
+				    true -> F;
+				    false -> [K|F]
+				end
+			end, Free0, Ts0),
     St#luerl{tabs=Ts1,free=Free1}.
 
 %% mark(ToDo, MoreTodo, Seen, Tabs) -> Seen.

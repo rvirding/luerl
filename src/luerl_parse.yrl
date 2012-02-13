@@ -30,7 +30,9 @@
 %% The Grammar rules here are taken directly from the LUA 5.2
 %% manual. Unfortunately it is not an LALR(1) grammar but I have
 %% included a fix by Florian Weimer <fw@deneb.enyo.de> which makes it
-%% so, but it needs some after processing.
+%% so, but it needs some after processing. Actually his fix was
+%% unnecessarily complex and all that was needed was to remove one
+%% rule for statements.
 
 Nonterminals
 chunk block stats stat semi retstat label_stat
@@ -70,6 +72,7 @@ chunk -> block : '$1'  .
 block -> stats : '$1' .
 block -> stats retstat : '$1' ++ ['$2'] .
 
+retstat -> return semi : {return,line('$1'),[]} .
 retstat -> return explist semi : {return,line('$1'),'$2'} .
 
 semi -> ';' .					%semi is never returned

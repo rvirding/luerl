@@ -23,27 +23,28 @@
 %% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %% POSSIBILITY OF SUCH DAMAGE.
 
-%% File    : luerl.erl
+%% File    : luerl_table.erl
 %% Author  : Robert Virding
-%% Purpose : Basic LUA 5.2 interface.
+%% Purpose : The table library for Luerl.
 
--module(luerl).
+-module(luerl_table).
 
--export([eval/1,dofile/1,parse_string/1]).
+-include("luerl.hrl").
 
-eval(S) ->
-    {ok,Ts,_} = luerl_scan:string(S),
-    {ok,C} = luerl_parse:chunk(Ts),
-    {Ret,_} = luerl_eval:chunk(C, luerl_eval:init()),
-    Ret.
+-export([table/0]).
 
-dofile(File) ->
-    {ok,Bin} = file:read_file(File),
-    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
-    {ok,C} = luerl_parse:chunk(Ts),
-    {Ret,_} = luerl_eval:chunk(C, luerl_eval:init()),
-    Ret.
+%% table() -> [{FuncName,Function}].
+%% Caller will convert this list to the correct format.
 
-parse_string(S) ->
-    {ok,Ts,_} = luerl_scan:string(S),
-    luerl_parse:chunk(Ts).
+table() ->
+    [{<<"pack">>,{function,fun pack/2}}
+    ].
+
+pack(As, St0) ->
+    T = pack_loop(As, 0),
+    {Tab,St1} = luerl_eval:alloc_table(T, St0),
+    {[Tab],St1}.
+
+pack_loop([E|Es], N) ->				%In order for an orddict!
+    [{N+1,E}|pack_loop(Es, N+1)];
+pack_loop([], N) -> [{<<"n">>,N}].
