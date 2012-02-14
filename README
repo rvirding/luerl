@@ -12,6 +12,8 @@ Some things which are known not to be implemented or work properly:
 
 - proper handling of __metatable
 
+- ...
+
 There are some simple interfaces in luerl.erl:
 
 - luerl:eval(String) evaluates the Lua code in String. Returns the return values of the evaluation.

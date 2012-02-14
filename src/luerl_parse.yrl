@@ -159,9 +159,8 @@ exp -> '...' : '$1' .
 exp -> functiondef : '$1' .
 exp -> prefixexp : '$1' .
 exp -> tableconstructor : '$1' .
-exp -> exp binop exp : {op,line('$2'),cat('$2'),'$1','$3'} .
-exp -> unop exp : {op,line('$1'),cat('$1'),'$2'} .
-exp -> uminus : '$1' .
+exp -> binop : '$1' . 
+exp -> unop : '$1' .
 
 prefixexp -> var : '$1' .
 prefixexp -> functioncall : '$1' .
@@ -202,27 +201,27 @@ field -> exp : {exp_field,line('$1'),'$1'} .
 fieldsep -> ',' .
 fieldsep -> ';' .
 
-binop -> '+' : '$1'.
-binop -> '-' : '$1'.
-binop -> '*' : '$1'.
-binop -> '/' : '$1'.
-binop -> '^' : '$1'.
-binop -> '%' : '$1'.
-binop -> '..' : '$1'.
-binop -> '<' : '$1'.
-binop -> '<=' : '$1'.
-binop -> '>' : '$1'.
-binop -> '>=' : '$1'.
-binop -> '==' : '$1'.
-binop -> '~=' : '$1'.
-binop -> 'and' : '$1'.
-binop -> 'or' : '$1'.
+binop -> exp '+' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '-' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '*' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '/' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '%' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '^' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '==' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '~=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '<=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '>=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '>' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '<' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '..' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp 'and' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp 'or' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 
-%%unop -> '-' : '$1'.
-unop -> 'not' : '$1'.
-unop -> '#' : '$1'.
+unop -> 'not' exp : {op,line('$1'),cat('$1'),'$2'} .
+unop -> '#' exp :  {op,line('$1'),cat('$1'),'$2'} .
+unop -> uminus : '$1' .
      
-uminus -> '-' exp : {op,line('$1'),'-','$2'}.
+uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.
 
@@ -258,9 +257,15 @@ functiondef(Line, Name, {Pars,Body}) ->
 functiondef(Line, {Pars,Body}) ->
     {functiondef,Line,Pars,Body}.
 
+%% dot_append(DotList, Last) -> DotList.
+%%  Append Last to the end of a dotlist.
+
 dot_append(Line, {'.',L,H,T}, Last) ->
     {'.',L,H,dot_append(Line, T, Last)};
 dot_append(Line, H, Last) -> {'.',Line,H,Last}.
+
+%% check_functioncall(PrefixExp) -> PrefixExp.
+%%  Check that the PrefixExp is a proper function call/method.
 
 check_functioncall({functioncall,_,_}=C) -> C;
 check_functioncall({method,_,_,_}=M) -> M;
