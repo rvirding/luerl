@@ -297,11 +297,11 @@ stat({repeat,_,Body,Exp}, St) ->
 stat({'if',_,Tests,Else}, St) ->
     do_if(Tests, Else, St);
 stat({for,Line,V,I,L,S,B}, St) ->
-    numeric_for(Line, V, I, L, S, B, St);
+    do_numfor(Line, V, I, L, S, B, St);
 stat({for,Line,V,I,L,B}, St) ->
-    numeric_for(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
+    do_numfor(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
 stat({for,Line,Ns,Gen,B}, St) ->
-    generic_for(Line, Ns, Gen, B, St);
+    do_genfor(Line, Ns, Gen, B, St);
 stat({local,Decl}, St) ->
     local(Decl, St);
 stat(P, St0) ->
@@ -415,7 +415,14 @@ if_tests([{Exp,Block}|Ts], Else, St0) ->
 if_tests([], Else, St0) ->
     block(Else, St0).
 
-numeric_for(_, {'NAME',_,Name}, Init, Limit, Step, Block, St) ->
+%% do_numfor(Line, Var, Init, Limit, Step, Block, State) -> State.
+
+do_numfor(_, {'NAME',_,Name}, Init, Limit, Step, Block, St0) ->
+    NumFor = fun (St) -> numeric_for(Name, Init, Limit, Step, Block, St) end,
+    {_,St1} = loop_block(NumFor, St0),
+    St1.
+
+numeric_for(Name, Init, Limit, Step, Block, St) ->
     %% Create a local block to run the whole for loop.
     Do = fun (St0) ->
 		 {[I0,L0,S0],St1} = explist([Init,Limit,Step], St0),
@@ -438,7 +445,14 @@ numfor_loop(Name, I, L, S, B, St0)
     numfor_loop(Name, I+S, L, S, B, St2);
 numfor_loop(_, _, _, _, _, St) -> St.		%We're done
 
-generic_for(_, Names, Exps, Block, St) ->
+%% do_genfor(Line, Names, Exps, Block, State) -> State.
+
+do_genfor(_, Names, Exps, Block, St0) ->
+    GenFor = fun (St) -> generic_for(Names, Exps, Block, St) end,
+    {_,St1} = loop_block(GenFor, St0),
+    St1.
+
+generic_for(Names, Exps, Block, St) ->
     %% Create a local block to run the whole for loop.
     Do = fun (St0) ->
 		 {Rets,St1} = explist(Exps, St0),
@@ -454,23 +468,13 @@ generic_for(_, Names, Exps, Block, St) ->
 genfor_loop(Names, F, S, Var, Block, St0) ->
     {Vals,St1} = functioncall(F, [S,Var], St0),
     case is_true(Vals) of
-	true ->	    
+	true ->	    				%We go on
 	    St2 = assign_local_loop(Names, Vals, St1),
 	    %% Create a local block for each iteration of the loop.
 	    St3 = block(Block, St2),
 	    genfor_loop(Names, F, S, hd(Vals), Block, St3);
-	false -> St1				%Done
+	false -> {[],St1}			%Done
     end.
-
-%%     case functioncall(F, [S,Var], St0) of
-%% 	{[],St1} -> St1;			%Done
-%% 	{[nil|_],St1} -> St1;			%Done
-%% 	{Vals,St1} ->				%We go on
-%% 	    St2 = assign_local_loop(Names, Vals, St1),
-%% 	    %% Create a local block for each iteration of the loop.
-%% 	    {_,St3} = block(Block, St2),
-%% 	    genfor_loop(Names, F, S, hd(Vals), Block, St3)
-%%     end.
 
 local({functiondef,L,{'NAME',_,Name},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
