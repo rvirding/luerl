@@ -56,75 +56,75 @@ table() ->
 %% abs(Args, State) -> {[Ret],State}.
 
 abs([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[abs(N)],St}.
 
 acos([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:acos(N)],St}.
 
 asin([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:asin(N)],St}.
 
 atan([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:atan(N)],St}.
 
 atan2([A1,A2|_], St) ->
-    N1 = luerl_lib:to_number(A1),
-    N2 = luerl_lib:to_number(A2),
+    N1 = luerl_lib:tonumber(A1),
+    N2 = luerl_lib:tonumber(A2),
     {[math:atan2(N1, N2)],St}.
 
 cos([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:cos(N)],St}.
 
 cosh([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:cosh(N)],St}.
 
 deg([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[180.0*N/math:pi()],St}.
 
 exp([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:exp(N)],St}.
 
 floor([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[float(round(N - 0.5))],St}.
 
 log([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:log(N)],St}.
 
 pow([A1,A2|_], St) ->
-    N1 = luerl_lib:to_number(A1),
-    N2 = luerl_lib:to_number(A2),
+    N1 = luerl_lib:tonumber(A1),
+    N2 = luerl_lib:tonumber(A2),
     {[math:pow(N1, N2)],St}.
 
 rad([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:pi()*N/180.0],St}.
 
 sin([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:sin(N)],St}.
 
 sinh([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:sinh(N)],St}.
 
 sqrt([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:sqrt(N)],St}.
 
 tan([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:tan(N)],St}.
 
 tanh([A|_], St) ->
-    N = luerl_lib:to_number(A),
+    N = luerl_lib:tonumber(A),
     {[math:tanh(N)],St}.
