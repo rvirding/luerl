@@ -322,9 +322,9 @@ assign_loop([Pre|Pres], [], St0) ->		%Set remaining to nil
 assign_loop([], _, St) -> St.
 
 %% set_var(PrefixExp, Val, State) -> State.
-%% Step down the prefixexp sequence evaluating as we go, stop at the
-%% end and return a key and a table where to put data. We can reuse
-%% much of the prefixexp code bt must have our own thing at the end.
+%%  Step down the prefixexp sequence evaluating as we go, stop at the
+%%  end and return a key and a table where to put data. We can reuse
+%%  much of the prefixexp code bt must have our own thing at the end.
 
 set_var({'.',_,Exp,Rest}, Val, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
@@ -472,8 +472,11 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 %% 	    genfor_loop(Names, F, S, hd(Vals), Block, St3)
 %%     end.
 
-local({functiondef,L,{'NAME',_,Name},Ps,B}, St) ->
-    set_local_name(Name, {function,L,St#luerl.env,Ps,B}, St#luerl{locf=true});
+local({functiondef,L,{'NAME',_,Name},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
+    %% Set name separately first so recursive call finds right Name.
+    Ts1 = set_local_name_env(Name, nil, Ts0, Env),
+    Ts2 = set_local_name_env(Name, {function,L,Env,Ps,B}, Ts1, Env),
+    St#luerl{tabs=Ts2,locf=true};
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
     assign_local_loop(Ns, Vals, St1).
