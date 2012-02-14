@@ -1,6 +1,6 @@
 -module(luerl_parse).
 -export([parse/1, parse_and_scan/1, format_error/1]).
--file("src/luerl_parse.yrl", 225).
+-file("src/luerl_parse.yrl", 227).
 
 -export([chunk/1,code/1]).
 
@@ -37,6 +37,13 @@ functiondef(Line, {Pars,Body}) ->
 dot_append(Line, {'.',L,H,T}, Last) ->
     {'.',L,H,dot_append(Line, T, Last)};
 dot_append(Line, H, Last) -> {'.',Line,H,Last}.
+
+check_functioncall({functioncall,_,_}=C) -> C;
+check_functioncall({method,_,_,_}=M) -> M;
+check_functioncall({'.',L,H,T}) ->
+    {'.',L,H,check_functioncall(T)};
+check_functioncall(Other) ->
+    return_error(line(Other),"illegal call").
 
 -file("/usr/local/lib/erlang/lib/parsetools-2.0.5/include/yeccpre.hrl", 0).
 %%
@@ -221,7 +228,7 @@ yecctoken2string(Other) ->
 
 
 
--file("src/luerl_parse.erl", 224).
+-file("src/luerl_parse.erl", 231).
 
 yeccpars2(0=S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_0(S, Cat, Ss, Stack, T, Ts, Tzr);
@@ -715,7 +722,8 @@ yeccpars2_10(S, '[', Ss, Stack, T, Ts, Tzr) ->
 yeccpars2_10(S, '{', Ss, Stack, T, Ts, Tzr) ->
  yeccpars1(S, 46, Ss, Stack, T, Ts, Tzr);
 yeccpars2_10(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
- yeccgoto_stat(hd(Ss), Cat, Ss, Stack, T, Ts, Tzr).
+ NewStack = yeccpars2_10_(Stack),
+ yeccgoto_stat(hd(Ss), Cat, Ss, NewStack, T, Ts, Tzr).
 
 yeccpars2_11(_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccgoto_stat(hd(Ss), Cat, Ss, Stack, T, Ts, Tzr).
@@ -2398,14 +2406,14 @@ yeccgoto_while_stat(1=_S, Cat, Ss, Stack, T, Ts, Tzr) ->
  yeccpars2_4(_S, Cat, Ss, Stack, T, Ts, Tzr).
 
 -compile({inline,yeccpars2_0_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_0_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_6_/1}).
--file("src/luerl_parse.yrl", 133).
+-file("src/luerl_parse.yrl", 135).
 yeccpars2_6_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2413,7 +2421,7 @@ yeccpars2_6_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_7_/1}).
--file("src/luerl_parse.yrl", 76).
+-file("src/luerl_parse.yrl", 78).
 yeccpars2_7_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2421,15 +2429,23 @@ yeccpars2_7_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_8_/1}).
--file("src/luerl_parse.yrl", 67).
+-file("src/luerl_parse.yrl", 69).
 yeccpars2_8_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
    __1 ++ [ __2 ]
   end | __Stack].
 
--compile({inline,yeccpars2_19_/1}).
+-compile({inline,yeccpars2_10_/1}).
 -file("src/luerl_parse.yrl", 85).
+yeccpars2_10_(__Stack0) ->
+ [__1 | __Stack] = __Stack0,
+ [begin
+   check_functioncall ( __1 )
+  end | __Stack].
+
+-compile({inline,yeccpars2_19_/1}).
+-file("src/luerl_parse.yrl", 87).
 yeccpars2_19_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2437,14 +2453,14 @@ yeccpars2_19_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_20_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_20_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_26_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_26_(__Stack0) ->
  [begin
    [ ]
@@ -2458,7 +2474,7 @@ yeccpars2_27_(__Stack0) ->
   end | __Stack0].
 
 -compile({inline,yeccpars2_49_/1}).
--file("src/luerl_parse.yrl", 189).
+-file("src/luerl_parse.yrl", 191).
 yeccpars2_49_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2466,7 +2482,7 @@ yeccpars2_49_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_50_/1}).
--file("src/luerl_parse.yrl", 194).
+-file("src/luerl_parse.yrl", 196).
 yeccpars2_50_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2474,7 +2490,7 @@ yeccpars2_50_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_53_/1}).
--file("src/luerl_parse.yrl", 183).
+-file("src/luerl_parse.yrl", 185).
 yeccpars2_53_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2482,7 +2498,7 @@ yeccpars2_53_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_73_/1}).
--file("src/luerl_parse.yrl", 192).
+-file("src/luerl_parse.yrl", 194).
 yeccpars2_73_(__Stack0) ->
  [__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2490,7 +2506,7 @@ yeccpars2_73_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_74_/1}).
--file("src/luerl_parse.yrl", 156).
+-file("src/luerl_parse.yrl", 158).
 yeccpars2_74_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2498,7 +2514,7 @@ yeccpars2_74_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_76_/1}).
--file("src/luerl_parse.yrl", 193).
+-file("src/luerl_parse.yrl", 195).
 yeccpars2_76_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2506,7 +2522,7 @@ yeccpars2_76_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_77_/1}).
--file("src/luerl_parse.yrl", 184).
+-file("src/luerl_parse.yrl", 186).
 yeccpars2_77_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2514,7 +2530,7 @@ yeccpars2_77_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_78_/1}).
--file("src/luerl_parse.yrl", 187).
+-file("src/luerl_parse.yrl", 189).
 yeccpars2_78_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2538,7 +2554,7 @@ yeccpars2_80_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_81_/1}).
--file("src/luerl_parse.yrl", 190).
+-file("src/luerl_parse.yrl", 192).
 yeccpars2_81_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2546,7 +2562,7 @@ yeccpars2_81_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_82_/1}).
--file("src/luerl_parse.yrl", 174).
+-file("src/luerl_parse.yrl", 176).
 yeccpars2_82_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2554,14 +2570,14 @@ yeccpars2_82_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_86_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_86_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_87_/1}).
--file("src/luerl_parse.yrl", 181).
+-file("src/luerl_parse.yrl", 183).
 yeccpars2_87_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2569,7 +2585,7 @@ yeccpars2_87_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_88_/1}).
--file("src/luerl_parse.yrl", 141).
+-file("src/luerl_parse.yrl", 143).
 yeccpars2_88_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2577,7 +2593,7 @@ yeccpars2_88_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_90_/1}).
--file("src/luerl_parse.yrl", 176).
+-file("src/luerl_parse.yrl", 178).
 yeccpars2_90_(__Stack0) ->
  [__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2585,7 +2601,7 @@ yeccpars2_90_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_92_/1}).
--file("src/luerl_parse.yrl", 180).
+-file("src/luerl_parse.yrl", 182).
 yeccpars2_92_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2593,7 +2609,7 @@ yeccpars2_92_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_93_/1}).
--file("src/luerl_parse.yrl", 142).
+-file("src/luerl_parse.yrl", 144).
 yeccpars2_93_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2601,14 +2617,14 @@ yeccpars2_93_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_94_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_94_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_96_/1}).
--file("src/luerl_parse.yrl", 177).
+-file("src/luerl_parse.yrl", 179).
 yeccpars2_96_(__Stack0) ->
  [__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2616,7 +2632,7 @@ yeccpars2_96_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_97_/1}).
--file("src/luerl_parse.yrl", 219).
+-file("src/luerl_parse.yrl", 221).
 yeccpars2_97_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2624,14 +2640,14 @@ yeccpars2_97_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_98_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_98_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_100_/1}).
--file("src/luerl_parse.yrl", 97).
+-file("src/luerl_parse.yrl", 99).
 yeccpars2_100_(__Stack0) ->
  [__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2639,7 +2655,7 @@ yeccpars2_100_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_101_/1}).
--file("src/luerl_parse.yrl", 171).
+-file("src/luerl_parse.yrl", 173).
 yeccpars2_101_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2647,7 +2663,7 @@ yeccpars2_101_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_102_/1}).
--file("src/luerl_parse.yrl", 165).
+-file("src/luerl_parse.yrl", 167).
 yeccpars2_102_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2655,7 +2671,7 @@ yeccpars2_102_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_106_/1}).
--file("src/luerl_parse.yrl", 172).
+-file("src/luerl_parse.yrl", 174).
 yeccpars2_106_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2663,7 +2679,7 @@ yeccpars2_106_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_109_/1}).
--file("src/luerl_parse.yrl", 138).
+-file("src/luerl_parse.yrl", 140).
 yeccpars2_109_(__Stack0) ->
  [__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2671,7 +2687,7 @@ yeccpars2_109_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_111_/1}).
--file("src/luerl_parse.yrl", 167).
+-file("src/luerl_parse.yrl", 169).
 yeccpars2_111_(__Stack0) ->
  [__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2679,7 +2695,7 @@ yeccpars2_111_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_112_/1}).
--file("src/luerl_parse.yrl", 139).
+-file("src/luerl_parse.yrl", 141).
 yeccpars2_112_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2687,7 +2703,7 @@ yeccpars2_112_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_114_/1}).
--file("src/luerl_parse.yrl", 144).
+-file("src/luerl_parse.yrl", 146).
 yeccpars2_114_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2695,7 +2711,7 @@ yeccpars2_114_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_115_/1}).
--file("src/luerl_parse.yrl", 169).
+-file("src/luerl_parse.yrl", 171).
 yeccpars2_115_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2703,7 +2719,7 @@ yeccpars2_115_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_116_/1}).
--file("src/luerl_parse.yrl", 170).
+-file("src/luerl_parse.yrl", 172).
 yeccpars2_116_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2711,7 +2727,7 @@ yeccpars2_116_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_118_/1}).
--file("src/luerl_parse.yrl", 145).
+-file("src/luerl_parse.yrl", 147).
 yeccpars2_118_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2719,7 +2735,7 @@ yeccpars2_118_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_119_/1}).
--file("src/luerl_parse.yrl", 157).
+-file("src/luerl_parse.yrl", 159).
 yeccpars2_119_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2727,7 +2743,7 @@ yeccpars2_119_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_120_/1}).
--file("src/luerl_parse.yrl", 69).
+-file("src/luerl_parse.yrl", 71).
 yeccpars2_120_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2750,7 +2766,7 @@ yeccpars2_122_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_123_/1}).
--file("src/luerl_parse.yrl", 70).
+-file("src/luerl_parse.yrl", 72).
 yeccpars2_123_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2758,7 +2774,7 @@ yeccpars2_123_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_126_/1}).
--file("src/luerl_parse.yrl", 99).
+-file("src/luerl_parse.yrl", 101).
 yeccpars2_126_(__Stack0) ->
  [__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2766,7 +2782,7 @@ yeccpars2_126_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_127_/1}).
--file("src/luerl_parse.yrl", 121).
+-file("src/luerl_parse.yrl", 123).
 yeccpars2_127_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2774,7 +2790,7 @@ yeccpars2_127_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_128_/1}).
--file("src/luerl_parse.yrl", 93).
+-file("src/luerl_parse.yrl", 95).
 yeccpars2_128_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2782,7 +2798,7 @@ yeccpars2_128_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_131_/1}).
--file("src/luerl_parse.yrl", 120).
+-file("src/luerl_parse.yrl", 122).
 yeccpars2_131_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2790,7 +2806,7 @@ yeccpars2_131_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_134_/1}).
--file("src/luerl_parse.yrl", 122).
+-file("src/luerl_parse.yrl", 124).
 yeccpars2_134_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2798,42 +2814,42 @@ yeccpars2_134_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_136_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_136_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_137_/1}).
--file("src/luerl_parse.yrl", 106).
+-file("src/luerl_parse.yrl", 108).
 yeccpars2_137_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_138_/1}).
--file("src/luerl_parse.yrl", 109).
+-file("src/luerl_parse.yrl", 111).
 yeccpars2_138_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_140_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_140_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_143_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_143_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_144_/1}).
--file("src/luerl_parse.yrl", 105).
+-file("src/luerl_parse.yrl", 107).
 yeccpars2_144_(__Stack0) ->
  [__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2841,7 +2857,7 @@ yeccpars2_144_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_145_/1}).
--file("src/luerl_parse.yrl", 108).
+-file("src/luerl_parse.yrl", 110).
 yeccpars2_145_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2849,7 +2865,7 @@ yeccpars2_145_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_146_/1}).
--file("src/luerl_parse.yrl", 103).
+-file("src/luerl_parse.yrl", 105).
 yeccpars2_146_(__Stack0) ->
  [__7,__6,__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2857,7 +2873,7 @@ yeccpars2_146_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_147_/1}).
--file("src/luerl_parse.yrl", 86).
+-file("src/luerl_parse.yrl", 88).
 yeccpars2_147_(__Stack0) ->
  [__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2865,7 +2881,7 @@ yeccpars2_147_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_153_/1}).
--file("src/luerl_parse.yrl", 127).
+-file("src/luerl_parse.yrl", 129).
 yeccpars2_153_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2873,7 +2889,7 @@ yeccpars2_153_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_154_/1}).
--file("src/luerl_parse.yrl", 131).
+-file("src/luerl_parse.yrl", 133).
 yeccpars2_154_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2881,7 +2897,7 @@ yeccpars2_154_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_155_/1}).
--file("src/luerl_parse.yrl", 92).
+-file("src/luerl_parse.yrl", 94).
 yeccpars2_155_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2889,7 +2905,7 @@ yeccpars2_155_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_157_/1}).
--file("src/luerl_parse.yrl", 141).
+-file("src/luerl_parse.yrl", 143).
 yeccpars2_157_(__Stack0) ->
  [__1 | __Stack] = __Stack0,
  [begin
@@ -2897,14 +2913,14 @@ yeccpars2_157_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_160_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_160_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_162_/1}).
--file("src/luerl_parse.yrl", 115).
+-file("src/luerl_parse.yrl", 117).
 yeccpars2_162_(__Stack0) ->
  [__7,__6,__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2912,14 +2928,14 @@ yeccpars2_162_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_165_/1}).
--file("src/luerl_parse.yrl", 75).
+-file("src/luerl_parse.yrl", 77).
 yeccpars2_165_(__Stack0) ->
  [begin
    [ ]
   end | __Stack0].
 
 -compile({inline,yeccpars2_167_/1}).
--file("src/luerl_parse.yrl", 117).
+-file("src/luerl_parse.yrl", 119).
 yeccpars2_167_(__Stack0) ->
  [__7,__6,__5,__4,__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2927,7 +2943,7 @@ yeccpars2_167_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_169_/1}).
--file("src/luerl_parse.yrl", 87).
+-file("src/luerl_parse.yrl", 89).
 yeccpars2_169_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2935,7 +2951,7 @@ yeccpars2_169_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_171_/1}).
--file("src/luerl_parse.yrl", 95).
+-file("src/luerl_parse.yrl", 97).
 yeccpars2_171_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2943,7 +2959,7 @@ yeccpars2_171_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_173_/1}).
--file("src/luerl_parse.yrl", 162).
+-file("src/luerl_parse.yrl", 164).
 yeccpars2_173_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2951,7 +2967,7 @@ yeccpars2_173_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_176_/1}).
--file("src/luerl_parse.yrl", 79).
+-file("src/luerl_parse.yrl", 81).
 yeccpars2_176_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2959,7 +2975,7 @@ yeccpars2_176_(__Stack0) ->
   end | __Stack].
 
 -compile({inline,yeccpars2_177_/1}).
--file("src/luerl_parse.yrl", 134).
+-file("src/luerl_parse.yrl", 136).
 yeccpars2_177_(__Stack0) ->
  [__3,__2,__1 | __Stack] = __Stack0,
  [begin
@@ -2967,4 +2983,4 @@ yeccpars2_177_(__Stack0) ->
   end | __Stack].
 
 
--file("src/luerl_parse.yrl", 262).
+-file("src/luerl_parse.yrl", 271).

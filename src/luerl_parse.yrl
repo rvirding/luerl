@@ -31,7 +31,7 @@
 %% manual. Unfortunately it is not an LALR(1) grammar but I have
 %% included a fix by Florian Weimer <fw@deneb.enyo.de> which makes it
 %% so, but it needs some after processing. Actually his fix was
-%% unnecessarily complex and all that was needed was to remove one
+%% unnecessarily complex and all that was needed was to change one
 %% rule for statements.
 
 Nonterminals
@@ -83,10 +83,10 @@ stats -> stats stat : '$1' ++ ['$2'] .
 
 stat -> ';' : '$1' .
 stat -> varlist '=' explist : {assign,line('$2'),'$1','$3'} .
-%% Following rule removed to stop reduce-reduce conflict. Prefixexp
-%% catches the same structure. We hope!
-%% stat -> functioncall .
-stat -> prefixexp : '$1' .
+%% Following functioncall rule removed to stop reduce-reduce conflict.
+%% Replaced with a prefixexp which should give the same. We hope!
+%%stat -> functioncall : '$1' .
+stat -> prefixexp : check_functioncall('$1') .
 stat -> label_stat : '$1' .
 stat -> 'break' : {break,line('$1')} .
 stat -> 'goto' NAME : {goto,line('$1'),'$2'} .
@@ -261,3 +261,10 @@ functiondef(Line, {Pars,Body}) ->
 dot_append(Line, {'.',L,H,T}, Last) ->
     {'.',L,H,dot_append(Line, T, Last)};
 dot_append(Line, H, Last) -> {'.',Line,H,Last}.
+
+check_functioncall({functioncall,_,_}=C) -> C;
+check_functioncall({method,_,_,_}=M) -> M;
+check_functioncall({'.',L,H,T}) ->
+    {'.',L,H,check_functioncall(T)};
+check_functioncall(Other) ->
+    return_error(line(Other),"illegal call").
