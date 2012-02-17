@@ -211,8 +211,8 @@ binop -> exp '==' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '~=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '<=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '>=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
-binop -> exp '>' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '<' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '>' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '..' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp 'and' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp 'or' exp : {op,line('$2'),cat('$2'),'$1','$3'}.

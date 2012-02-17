@@ -55,10 +55,18 @@ init() ->
     St3 = push_env(_G, St2),
     St4 = set_local_name('_G', _G, St3),	%Set _G to itself
     %% Add the other standard libraries.
+%%     St5 = alloc_libs([{<<"os">>,luerl_os},
+%% 		      {<<"table">>,luerl_table}], St4),
 %%     St5 = alloc_libs([{<<"math">>,luerl_math},
 %% 		      {<<"os">>,luerl_os},
-%% 		      {<<"string">>,luerl_string}], St4),
-    St5 = alloc_libs([{<<"os">>,luerl_os},
+%% 		      {<<"table">>,luerl_table}], St4),
+%%     St5 = alloc_libs([{<<"math">>,luerl_math},
+%% 		      {<<"os">>,luerl_os},
+%% 		      {<<"string">>,luerl_string},
+%% 		      {<<"table">>,luerl_table}], St4),
+    St5 = alloc_libs([{<<"math">>,luerl_math},
+		      {<<"os">>,luerl_os},
+		      {<<"string">>,luerl_string},
 		      {<<"table">>,luerl_table}], St4),
     St5.
 
@@ -430,7 +438,7 @@ numeric_for(Name, Init, Limit, Step, Block, St) ->
 		 L1 = luerl_lib:tonumber(L0),
 		 S1 = luerl_lib:tonumber(S0),
 		 if (I1 == nil) or (L1 == nil) or (S1 == nil) ->
-			 error({illegal_arg,for,[I0,L0,S0]});
+			 badarg_error(for, [I0,L0,S0]);
 		    true ->
 			 numfor_loop(Name, I1, L1, S1, Block, St1)
 		 end
@@ -517,7 +525,7 @@ exp({false,_}, St) -> {[false],St};
 exp({true,_}, St) -> {[true],St};
 exp({'NUMBER',_,N}, St) -> {[N],St};
 exp({'STRING',_,S}, St) -> {[S],St};
-exp({'...',_}, _) -> error({illegal_val,'...'});
+exp({'...',_}, _) -> illegal_val_error('...');
 exp({functiondef,L,Ps,B}, St) ->
     {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
@@ -583,7 +591,7 @@ functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
-	nil -> error({illegal_arg,Func,As});
+	nil -> badarg_error(Func, As);
 	Meta -> functioncall(Meta, As, St)
     end.
 
@@ -653,14 +661,9 @@ op('not', false, St) -> {[true],St};
 op('not', nil, St) -> {[true],St};
 op('not', _, St) -> {[false],St};		%Everything else is false
 op('#', B, St) when is_binary(B) -> {[byte_size(B)],St};
-op('#', {table,N}=T, St) ->			%Not right, but will do for now
-    Meta = getmetamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meta) -> functioncall(Meta, [T], St);
-       true ->
-	    Tab = ?GET_TABLE(N, St#luerl.tabs),
-	    {[length(element(1, Tab))],St}
-    end;
-op(Op, A, _) -> error({illegal_arg,Op,[A]}).
+op('#', {table,_}=T, St) ->
+    table_length(T, St);
+op(Op, A, _) -> badarg_error(Op, [A]).
 
 %% Numeric operators.
 
@@ -681,10 +684,10 @@ op('^', A1, A2, St) ->
 %% Relational operators, getting close.
 op('==', A1, A2, St) -> eq_op('==', A1, A2, St);
 op('~=', A1, A2, St) -> neq_op('~=', A1, A2, St);
-op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
 op('<=', A1, A2, St) -> le_op('<=', A1, A2, St);
-op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
+op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
+op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 %% Logical operators, handle truthy/falsey first arguments.
 op('and', nil, _, St) -> {[nil],St};
 op('and', false, _, St) -> {[false],St};
@@ -702,7 +705,7 @@ op('..', A1, A2, St) ->
 	    functioncall(Meta, [A1,A2], St)
     end;
 %% Bad args here.
-op(Op, A1, A2, _) -> error({illegal_arg,Op,[A1,A2]}).
+op(Op, A1, A2, _) -> badarg_error(Op, [A1,A2]).
 
 %% numeric_op(Op, Arg, Event, Raw, State) -> {[Ret],State}.
 %% numeric_op(Op, Arg, Arg, Event, Raw, State) -> {[Ret],State}.
@@ -773,6 +776,25 @@ le_op(_, O1, O2, St0) ->
 	    {[not is_true(Ret)],St1}
     end.
 
+%% table_length(Stable, State) -> {Length,State}.
+%%  The length of a table is the number of numeric keys in sequence
+%%  from 1.0.
+
+table_length({table,N}=T, St) ->
+    Meta = getmetamethod(T, <<"__len">>, St),
+    if ?IS_TRUE(Meta) -> functioncall(Meta, [T], St);
+       true ->
+	    Tab = ?GET_TABLE(N, St#luerl.tabs),
+	    {[length_loop(element(1, Tab))],St}
+    end.
+
+length_loop([{1.0,_}|T]) -> length_loop(T, 2.0);
+length_loop([_|T]) -> length_loop(T);
+length_loop([]) -> 0.
+
+length_loop([{K,_}|T], K) -> length_loop(T, K+1);
+length_loop(_, N) -> N-1.
+
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
 %% getmetamethod(Object, Event, State) -> Method | nil.
 %% Get the metamethod for object(s).
@@ -816,6 +838,12 @@ is_true([]) -> false.
 first_value([V|_]) -> V;
 first_value([]) -> nil.
 
+badarg_error(What, Args) ->
+    error({badarg,What,Args}).
+
+illegal_val_error(Val) ->
+    error({illegal_val,Val}).
+
 %% gc(State) -> State.
 %% The garbage collector. Its main job is to reclaim unused tables. It
 %% is a mark/sweep collector which passes over all objects and marks
@@ -824,7 +852,7 @@ first_value([]) -> nil.
 
 gc(#luerl{tabs=Ts0,free=Free0,env=Env}=St) ->
     Seen = mark(Env, [], [], Ts0),
-    io:format("gc: ~p\n", [Seen]),
+    %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
     Ts1 = ?FILTER_TABLE(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
     Free1 = ?FOLD_TABLE(fun (K, _, F) ->

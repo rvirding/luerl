@@ -29,7 +29,7 @@
 
 -module(luerl).
 
--export([eval/1,dofile/1,parse_string/1]).
+-export([eval/1,dofile/1,ps/1,init/0,do/2,gc/1]).
 
 eval(S) ->
     {ok,Ts,_} = luerl_scan:string(S),
@@ -44,6 +44,20 @@ dofile(File) ->
     {Ret,_} = luerl_eval:chunk(C, luerl_eval:init()),
     Ret.
 
-parse_string(S) ->
+%% ps(String) -> {ok,ChunkCode}.
+%% init() -> State.
+%% do(String, State) -> {Res,State}.
+%% gc(State) -> State.
+%%  Some testing utilities.
+
+ps(S) ->
     {ok,Ts,_} = luerl_scan:string(S),
     luerl_parse:chunk(Ts).
+
+init() -> luerl_eval:init().
+
+do(S, St) ->
+    {ok,C} = ps(S),
+    luerl_eval:chunk(C, St).
+
+gc(St) -> luerl_eval:gc(St).

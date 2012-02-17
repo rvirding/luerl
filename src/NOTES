@@ -1,0 +1,18 @@
+Implementation Notes
+--------------------
+
+All tables are orddicts. We use this information when building/
+processing tables. Seems like Lua internaly stores elements as a
+(unordered) sequence of key-value elements.
+
+The table table can be either an ordict, an array or use the process
+dictionary; these are accessed through macros. To use ETS would need a
+bigger change as copying the whole table for each access would be very
+inefficient. Either use bags and have one per table or sue sets and
+have the ETS key as {Tab,Key}.
+
+Lua implementation "features"
+-----------------------------
+
+When "integers" are wanted then float input values are often "rounded"
+to the correct float value. So 1.3 --> 1.0 and 3.7 --> 4.0.
