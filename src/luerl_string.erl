@@ -44,7 +44,7 @@ table() ->
 byte([A], St) -> byte(A, 1, 1, St);
 byte([A1,A2], St) -> byte(A1, A2, A2, St);
 byte([A1,A2,A3|_], St) -> byte(A1, A2, A3, St);
-byte(As, _) -> error({illegal_arg,byte,As}).
+byte(As, _) -> error({badarg,byte,As}).
 
 byte(A1, A2, A3, St) when is_binary(A1), is_number(A2), is_number(A3) ->
     F = round(A2),				%First and last positions
@@ -60,30 +60,35 @@ char(Cs, St) -> {list_to_binary(Cs),St}.
 len([A|_], St) when is_binary(A) -> {byte_size(A),St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
-len(As, _) -> error({illegal_arg,len,As}).
+len(As, _) -> error({badarg,len,As}).
 
 lower([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:tolist(A),
     {[list_to_binary(string:to_lower(S))],St};
-lower(As, _) -> error({illegal_arg,lower,As}).
+lower(As, _) -> error({badarg,lower,As}).
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([A1,A2,A3|_], St) ->
     case catch {luerl_lib:tolist(A1),
 		luerl_lib:tonumber(A2),
 		luerl_lib:tolist(A3)} of
-	{S,N,Sep} when N /= nil ->
-	    {[string:join(lists:duplicate(N, S), Sep)],St};
-	_ -> error({illegal_val,[A1,A2,A3]})
+	{S,N,Sep} when S =/= nil, N =/= nil, Sep =/= nil ->
+	    case round(N) of
+		I when I > 0 ->
+		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
+		_ -> {[<<>>],St}
+	    end;
+	_ ->					%Error or bad values
+	    error({badarg,rep,[A1,A2,A3]})
     end;
-rep(As, _) -> error({illegal_arg,rep,As}).
+rep(As, _) -> error({badarg,rep,As}).
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:tolist(A),
     {[list_to_binary(lists:reverse(S))],St};
-reverse(As, _) -> error({illegal_arg,reverse,As}).
+reverse(As, _) -> error({badarg,reverse,As}).
 
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:tolist(A),
     {[list_to_binary(string:to_upper(S))],St};
-upper(As, _) -> error({illegal_arg,upper,As}).
+upper(As, _) -> error({badarg,upper,As}).

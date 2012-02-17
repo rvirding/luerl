@@ -37,12 +37,15 @@ table() ->
      {<<"asin">>,{function,fun asin/2}},
      {<<"atan">>,{function,fun atan/2}},
      {<<"atan2">>,{function,fun atan2/2}},
+     {<<"ceil">>,{function,fun ceil/2}},
      {<<"cos">>,{function,fun cos/2}},
      {<<"cosh">>,{function,fun cosh/2}},
      {<<"deg">>,{function,fun deg/2}},
      {<<"exp">>,{function,fun exp/2}},
      {<<"floor">>,{function,fun floor/2}},
      {<<"log">>,{function,fun log/2}},
+     {<<"max">>,{function,fun max/2}},
+     {<<"min">>,{function,fun min/2}},
      {<<"pi">>,math:pi()},
      {<<"pow">>,{function,fun pow/2}},
      {<<"rad">>,{function,fun rad/2}},
@@ -55,76 +58,130 @@ table() ->
 
 %% abs(Args, State) -> {[Ret],State}.
 
-abs([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[abs(N)],St}.
+abs(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[abs(N)],St};
+	_ -> error({badarg,abs,As})
+    end.
 
-acos([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:acos(N)],St}.
+acos(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:acos(N)],St};
+	nil -> error({badarg,acos,As})
+    end.
 
-asin([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:asin(N)],St}.
+asin(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:asin(N)],St};
+	_ -> error({badarg,asin,As})
+    end.
 
-atan([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:atan(N)],St}.
+atan(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:atan(N)],St};
+	_ -> error({badarg,atan,As})
+    end.
 
-atan2([A1,A2|_], St) ->
-    N1 = luerl_lib:tonumber(A1),
-    N2 = luerl_lib:tonumber(A2),
-    {[math:atan2(N1, N2)],St}.
+atan2(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N1,N2|_] -> {[math:atan2(N1, N2)],St};
+	_ -> error({badarg,atan2,As})
+    end.
 
-cos([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:cos(N)],St}.
+ceil(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[float(round(N + 0.5))],St};
+	_ -> error({badarg,ceil,As})
+    end.
 
-cosh([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:cosh(N)],St}.
+cos(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:cos(N)],St};
+	_ -> error({badarg,cos,As})
+    end.
 
-deg([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[180.0*N/math:pi()],St}.
+cosh(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:cosh(N)],St};
+	_ -> error({badarg,cosh,As})
+    end.
 
-exp([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:exp(N)],St}.
+deg(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[180.0*N/math:pi()],St};
+	_ -> error({badarg,deg,As})
+    end.
 
-floor([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[float(round(N - 0.5))],St}.
+exp(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:exp(N)],St};
+	_ -> error({badarg,exp,As})
+    end.
 
-log([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:log(N)],St}.
+floor(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[float(round(N - 0.5))],St};
+	_ -> error({badarg,floor,As})
+    end.
 
-pow([A1,A2|_], St) ->
-    N1 = luerl_lib:tonumber(A1),
-    N2 = luerl_lib:tonumber(A2),
-    {[math:pow(N1, N2)],St}.
+log(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N] -> {[math:log(N)],St};
+	[N1,N2|_] ->
+	    {[math:log(N1)/math:log(N2)],St};
+	_ -> error({badarg,log,As})
+    end.
 
-rad([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:pi()*N/180.0],St}.
+max(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[_|_]=Ns -> {[lists:max(Ns)],St};
+	_ -> error({badarg,max,As})
+    end.
 
-sin([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:sin(N)],St}.
+min(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[_|_]=Ns -> {[lists:min(Ns)],St};
+	_ -> error({badarg,min,As})
+    end.
 
-sinh([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:sinh(N)],St}.
+pow(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N1,N2|_] -> {[math:pow(N1, N2)],St};
+	_ -> error({badarg,pow,As})
+    end.
 
-sqrt([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:sqrt(N)],St}.
+rad(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:pi()*N/180.0],St};
+	_ -> error({badarg,sinh,As})
+    end.
 
-tan([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:tan(N)],St}.
+sin(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:sin(N)],St};
+	_ -> error({badarg,sin,As})
+    end.
 
-tanh([A|_], St) ->
-    N = luerl_lib:tonumber(A),
-    {[math:tanh(N)],St}.
+sinh(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:sinh(N)],St};
+	_ -> error({badarg,sinh,As})
+    end.
+
+sqrt(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:sqrt(N)],St};
+	_ -> error({badarg,sqrt,As})
+    end.
+
+tan(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:tan(N)],St};
+	_ -> error({badarg,tan,As})
+    end.
+
+tanh(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] -> {[math:tanh(N)],St};
+	_ -> error({badarg,tanh,As})
+    end.

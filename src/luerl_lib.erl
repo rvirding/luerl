@@ -31,8 +31,19 @@
 
 -include("luerl.hrl").
 
--export([is_integer/1,tonumber/1,tonumber/2,
-	 number_to_list/1,tolist/1,tostring/1]).
+-export([is_true/1,first_value/1,is_integer/1,number_to_list/1,
+	 tonumber/1,tonumber/2,tointeger/1,tonumbers/1,tonumbers/2,
+	 tointegers/1,tointegers/2,tolist/1,tostring/1]).
+
+%% is_true(Rets) -> boolean()>
+
+is_true([nil|_]) -> false;
+is_true([false|_]) -> false;
+is_true([_|_]) -> true;
+is_true([]) -> false.
+
+first_value([V|_]) -> V;
+first_value([]) -> nil.
 
 %% is_integer(Number) -> boolean().
 
@@ -40,6 +51,7 @@ is_integer(N) -> round(N) == N.
 
 %% tonumber(Arg) -> Number | nil.
 %% tonumber(Arg, Base) -> Number | nil.
+%% Tonumber/2 only generates "integers". Lua does it like that.
 
 tonumber(N) when is_number(N) -> N;
 tonumber(B) when is_binary(B) ->
@@ -66,6 +78,34 @@ tonumber(A, B) when is_binary(A) ->
 	{'EXIT',_} -> nil
     end;
 tonumber(_, _) -> nil.
+
+tointeger(A) ->
+    case tonumber(A) of
+	nil -> nil;
+	N -> float(round(N))
+    end.
+
+tonumbers(As) -> tonumbers(As, []).
+
+tonumbers(As, Acc) ->
+    lists:foldr(fun (_, nil) -> nil;		%Propagate nil
+		    (A, Ns) ->
+			case tonumber(A) of
+			    nil -> nil;		%Propagate nil
+			    N -> [N|Ns]
+			end
+		end, Acc, As).
+
+tointegers(As) -> tointegers(As, []).
+
+tointegers(As, Acc) ->
+    lists:foldr(fun (_, nil) -> nil;		%Propagate nil
+		    (A, Ns) ->
+			case tonumber(A) of
+			    nil -> nil;		%Propagate nil
+			    N -> [float(round(N))|Ns]
+			end
+		end, Acc, As).
 
 number_to_list(N) ->
     I = round(N),

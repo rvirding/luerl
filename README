@@ -14,11 +14,23 @@ Some things which are known not to be implemented or work properly:
 
 - ...
 
-There are some simple interfaces in luerl.erl:
+There are some simple interface functions in luerl.erl:
 
 - luerl:eval(String) evaluates the Lua code in String. Returns the return values of the evaluation.
 
 - luerl:dofile(FileName) reads in and runs the Lua code in the file and returns the values of the evaluation. Equivalent to doing luerl:eval("dofile('FileName')").
+
+and some more basic interface functions:
+
+- luerl:ps(String) parses the string and returns a chunk code.
+
+- luerl:init() initialises the system and returns an initial state.
+
+- luerl:do(String, State) evaluates the chunk in String with the current state and returns the values and a new state.
+
+- luerl:gc(State) runs the (experimental) garbage collector on a state and returns the new state.
+
+N.B. This interface is subject to change!
 
 Currently implemented functions in the libraries:
 
@@ -47,12 +59,15 @@ math.acos
 math.asin
 math.atan
 math.atan2
+math.ceil
 math.cos
 math.cosh
 math.deg
 math.exp
 math.floor
 math.log
+math.max
+math.min
 math.pi
 math.pow
 math.rad
@@ -74,4 +89,6 @@ string.rep
 string.reverse
 string.upper
 
+table.concat
 table.pack
+table.unpack
