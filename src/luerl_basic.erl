@@ -37,7 +37,9 @@
 %% Caller will convert this list to the correct format.
 
 table() ->
-    [{<<"dofile">>,{function,fun dofile/2}},
+    [{<<"assert">>,{function,fun assert/2}},
+     {<<"collectgarbage">>,{function,fun collectgarbage/2}},
+     {<<"dofile">>,{function,fun dofile/2}},
      {<<"eprint">>,{function,fun eprint/2}},
      {<<"error">>,{function,fun error/2}},
      {<<"getmetatable">>,{function,fun getmetatable/2}},
@@ -57,11 +59,22 @@ table() ->
      {<<"_VERSION">>,<<"Lua 5.2">>}		%We are optimistic
     ].
 
-%% print(Args, State) -> {[Ret],State}.
-%% tonumber(Args, State) -> {[Ret],State}.
-%% tostring(Args, State) -> {[Ret],State}.
-%% type(Args, State) -> {[Ret],State}.
-%% Prototypical basic library functions.
+assert(As, St) ->
+    case luerl_lib:is_true(As) of
+	true -> {As,St};
+	false ->
+	    M = case As of
+		[_,M0|_] -> M0;
+		_ -> <<"assertion failed">>
+		end,
+	    error({assert_error,M})
+    end.
+
+collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
+collectgarbage([<<"collect">>|_], St) ->
+    {[],luerl_eval:gc(St)};
+collectgarbage(_, St) ->			%Ignore everything else
+    {[],St}.
 
 eprint(Args, St) ->
     lists:foreach(fun (A) -> io:format("~w ", [A]) end, Args),
@@ -69,16 +82,16 @@ eprint(Args, St) ->
     {[],St}.
 
 error([M|_], _) -> error({lua_error,M});	%Never returns!
-error(As, _) -> error({illegal_arg,error,As}).
+error(As, _) -> error({badarg,error,As}).
 
 
 ipairs([{table,_}=T|_], St) ->
     {[{function,fun ipairs_next/2},T,0],St};
-ipairs(As, _) -> error({illegal_arg,ipairs,As}).
+ipairs(As, _) -> error({badarg,ipairs,As}).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
 ipairs_next([{table,T},I|_], St) ->
-    {Tab,_} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     Next = I + 1.0,				%Ensure float!
     case orddict:find(Next, Tab) of
 	{ok,V} -> {[Next,V],St};
@@ -87,7 +100,7 @@ ipairs_next([{table,T},I|_], St) ->
 
 next([A], St) -> next([A,nil], St);
 next([{table,T},K|_], St) ->
-    {Tab,_} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     if K == nil ->
 	    case Tab of
 		[{F,V}|_] -> {[F,V],St};
@@ -100,7 +113,7 @@ next([{table,T},K|_], St) ->
 		error -> error({invalid_key,K})
 	    end
     end;
-next(As, _) -> illegal_arg_error(next, As).
+next(As, _) -> error({badarg,next,As}).
 
 next_loop(K, [{K,_}|Tab]) -> Tab;
 next_loop(K, [_|Tab]) -> next_loop(K, Tab);
@@ -108,7 +121,7 @@ next_loop(_, []) ->  error.
 
 pairs([{table,_}=T|_], St) ->
     {[{function,fun next/2},T,nil],St};
-pairs(As, _) -> illegal_arg_error(pairs, As).
+pairs(As, _) -> error({badarg,pairs,As}).
 
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
@@ -120,39 +133,38 @@ print(Args, St0) ->
     {[],St1}.
 
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
-rawequal(As, _) -> illegal_arg_error(rawequal, As).
+rawequal(As, _) -> error({badarg,rawequal,As}).
 
 rawget([{table,N},K|_], St) ->
-    {T,_} = orddict:fetch(N, St#luerl.tabs),	%Get the table.
+    {T,_} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
     case orddict:find(K, T) of
 	{ok,Val} -> Val;
 	error -> nil				%Default value
     end;
-rawget(As, _) -> illegal_arg_error(rawget, As).
+rawget(As, _) -> error({badarg,rawget,As}).
 
 rawlen([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
 rawlen([{table,N}|_], St) ->
-    Tab = orddict:fetch(N, St#luerl.tabs),
+    Tab = ?GET_TABLE(N, St#luerl.tabs),
     {length(element(1, Tab)),St};
-rawlen(As, _) -> illegal_arg_error(rawlen, As).
+rawlen(As, _) -> error({badarg,rawlen,As}).
 
 rawset([{table,N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
     Upd = if Val =:= nil -> fun ({T,M}) -> {orddict:erase(Key, T),M} end;
 	     true -> fun ({T,M}) -> {orddict:store(Key, Val, T),M} end
 	  end,
-    Ts1 = orddict:update(N, Upd, Ts0),
+    Ts1 = ?UPD_TABLE(N, Upd, Ts0),
     St#luerl{tabs=Ts1};
-rawset(As, _) -> illegal_arg_error(rawset, As).
+rawset(As, _) -> error({badarg,rawset,As}).
 
 select([<<$#>>|As], St) -> {[length(As)],St};
-select([A|As], St) when is_number(A) ; is_binary(A) ->
+select([A|As], St) ->
     case luerl_lib:tonumber(A) of
 	N when is_number(N), N > 0 -> {select_front(round(N), As),St};
 	N when is_number(N), N < 0 -> {select_back(-round(N), As),St};
-	_ -> illegal_arg_error(select, [A|As])
+	_ -> error({badarg,select,[A|As]})
     end;
-select(As, _) -> illegal_arg_error(select, As).
-
+select(As, _) -> error({badarg,select,As}).
 
 select_front(N, As) when N < length(As) ->
     lists:nthtail(N-1, As);
@@ -204,18 +216,17 @@ type(_) -> <<"unknown">>.
 %% Meta table functions.
 
 getmetatable([{table,T}|_], St) ->		%Only tables have metatables
-    {_,M} = orddict:fetch(T, St#luerl.tabs),	%Get the table
+    {_,M} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     {[M],St};
 getmetatable(_, St) -> {[nil],St}.
 
 setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
-    Ts = orddict:update(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
+    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
 setmetatable([{table,N}=A1,nil|_], St) ->
-    Ts = orddict:update(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
+    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
-setmetatable(As, _) -> illegal_arg_error(setmetatable, As).
-
+setmetatable(As, _) -> error({badarg,setmetatable,As}).
 
 %% Load files
 
@@ -226,8 +237,4 @@ dofile([A1|_], St0) when is_number(A1) ; is_binary(A1) ->
     {ok,C} = luerl_parse:chunk(Ts),
     {Ret,St1} = luerl_eval:chunk(C, St0),
     {Ret,St1};
-dofile(As, _) -> illegal_arg_error(dofile, As).
-
-
-illegal_arg_error(What, Args) ->
-    error({illegal_arg,What,Args}).
+dofile(As, _) -> error({badarg,dofile,As}).
