@@ -36,6 +36,8 @@ Currently implemented functions in the libraries:
 
 _G
 _VERSION
+assert
+collectgarbage
 dofile
 eprint
 error
