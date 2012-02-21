@@ -37,6 +37,9 @@
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
 
+%% Currently unused internal functions, to suppress warnings.
+-export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,set_name_env/4]).
+
 -include("luerl.hrl").
 
 %%-define(DP(F,As), io:format(F, As)).
@@ -200,7 +203,7 @@ set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 %% get_key(Key, State) -> Value.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
-%%  them in the envornment stack..
+%%  them in the environment stack.
 
 set_name(Name, Val, St) ->
     set_key(atom_to_binary(Name, latin1), Val, St).

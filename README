@@ -26,7 +26,9 @@ and some more basic interface functions:
 
 - luerl:init() initialises the system and returns an initial state.
 
-- luerl:do(String, State) evaluates the chunk in String with the current state and returns the values and a new state.
+- luerl:do(String, State) evaluates the String with the current state and returns the results and a new state.
+
+- luerl:dochunk(Chunk, State) evaluates the chunk, which was produced with ps/1, with the current state and returns the results and a new state.
 
 - luerl:gc(State) runs the (experimental) garbage collector on a state and returns the new state.
 
