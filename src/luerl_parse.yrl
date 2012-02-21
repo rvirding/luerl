@@ -34,6 +34,8 @@
 %% unnecessarily complex and all that was needed was to change one
 %% rule for statements.
 
+Expect 2. %Suppress shift/reduce warning
+
 Nonterminals
 chunk block stats stat semi retstat label_stat
 while_stat repeat_stat if_stat if_elseif if_else for_stat local_decl
