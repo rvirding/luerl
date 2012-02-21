@@ -9,14 +9,14 @@
 run() ->
 
     % execute a string
-    luerl:eval("print(\"Hello, Robert(o)!\")"),
+    luerl:do("print(\"Hello, Robert(o)!\")"),
 
     % execute a file
     luerl:dofile("./examples/hello/hello.lua"),
 
     % separately parse, then execute
-    {ok, Chunk} = luerl:ps("print(\"Hello, Chunk!\")"),
-    State = luerl:init(),
-    {_Ret, _NewState} = luerl:dochunk(Chunk, State),
+    {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
+    State = luerl:newstate(),
+    {_Ret, _NewState} = luerl:do(Chunk, State),
 
     done.
