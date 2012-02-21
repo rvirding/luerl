@@ -36,6 +36,12 @@ hello.beam: hello.erl
 	erlc hello.erl
 	erl -pa ./ebin -s hello run -s init stop -noshell
 
+hello2: all
+	@ echo "-------------------------------------------" 
+	@ echo "./examples/hello/hello2.erl:" 
+	erlc -o ebin ./examples/hello/hello2.erl
+	erl -pa ./ebin -s hello2 run -s init stop -noshell
+
 clean:
 	@ rm -rf $(BEAMDIR)
 	@ rm -f *.beam

@@ -233,7 +233,15 @@ Erlang code.
 
 -export([chunk/1,code/1]).
 
-chunk(Ts) -> parse(Ts).
+chunk(Ts) -> 
+    case F = parse(Ts) of
+        {error,{Line,luerl_parse,MsgList}} ->
+            io:format("~nLuerl parse error in line ~p: ~p~n", [Line, lists:flatten(MsgList)]),
+            F;
+        {ok,{functiondef,_,_,_}} -> F;
+        {ok,{functiondef,_,_,_,_}} -> F;
+        {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[],Body}}
+    end.        
 
 code(Ts) -> parse(Ts).
 

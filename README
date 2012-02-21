@@ -1,5 +1,6 @@
 Luerl - an implementation of Lua in Erlang
 
+
 An experimental implementation of Lua 5.2 written solely in pure Erlang.
 
 Some things which are known not to be implemented or work properly:
@@ -14,25 +15,73 @@ Some things which are known not to be implemented or work properly:
 
 - ...
 
-There are some simple interface functions in luerl.erl:
 
-- luerl:eval(String) evaluates the Lua code in String. Returns the return values of the evaluation.
+These are the interface functions in luerl.erl:
 
-- luerl:dofile(FileName) reads in and runs the Lua code in the file and returns the values of the evaluation. Equivalent to doing luerl:eval("dofile('FileName')").
+All functions optionally accept a **Lua State** parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.
 
-and some more basic interface functions:
+**eval** and **do** functions differ only in what they return. The **do** functions return results and a new Lua State, the **eval** functions only the result.
 
-- luerl:ps(String) parses the string and returns a chunk code.
+#### luerl:eval(String|Binary|Compiled[, State]) -> Result.
+ Evaluate a Lua expression passed in as a string or binary, and return its result.
 
-- luerl:init() initialises the system and returns an initial state.
+#### luerl:evalfile(Path[, State]) -> Result.
+ Load and execute a file, and return the result.
 
-- luerl:do(String, State) evaluates the String with the current state and returns the results and a new state.
+#### luerl:do(String|Binary|Compiled[, State]) -> {Result, NewState}.
+ Evaluate a Lua expression and return its result, and the new Lua State.
 
-- luerl:dochunk(Chunk, State) evaluates the chunk, which was produced with ps/1, with the current state and returns the results and a new state.
+#### luerl:dofile(Path[, State]) -> {Result, NewState}.
+ Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
 
-- luerl:gc(State) runs the (experimental) garbage collector on a state and returns the new state.
+#### load(String|Binary) -> {ok,Compiled}.
+ Parse a Lua chunk as string or binary, and return a compiled chunk.
+
+#### loadfile(Path) -> {ok,Compiled}.
+ Parse a Lua file, and return a compiled chunk.
+
+#### newstate() -> State.
+ Get a new Lua State = a fresh Lua VM instance.
+
+#### call(Compiled[, State]) -> {Result,State}
+ Execute a compiled chunk.
+
+#### pcall(Compiled[, State][, ErlParam]) -> {Result,State}
+ (Todo:) protected variant of call().
+
+#### close(State) -> GCedState.
+ Garbage collects the state and (todo:) does away with it.
+
+#### gc(State) -> State.
+ Runs the (experimental) garbage collector on a state and returns the new state.
 
 N.B. This interface is subject to change!
+
+
+Examples
+
+#### execute a string
+    luerl:do("print(\"Hello, Robert(o)!\")"),
+
+#### execute a file
+    luerl:dofile("./examples/hello/hello.lua"),
+
+#### separately parse, then execute
+    {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
+    State = luerl:newstate(),
+    {_Ret, _NewState} = luerl:do(Chunk, State),
+
+
+For more examples see `examples/hello/hello2.erl`.
+
+`./hello.erl` is a very brief example while `examples/hello/hello2.erl` is a comprehensive lists of most ways that come to mind of how to use the individual interface functions.
+
+You can build and run these samples with:
+
+    make hello
+    make hello2
+
+
 
 Currently implemented functions in the libraries:
 

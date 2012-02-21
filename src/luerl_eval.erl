@@ -32,7 +32,7 @@
 
 -module(luerl_eval).
 
--export([init/0,chunk/2,gc/1]).
+-export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
@@ -246,6 +246,24 @@ chunk(Stats, St0) ->
     {Ret,St1} = function_block(fun (S) -> {[],stats(Stats, S)} end, St0),
     %% Should do GC here.
     {Ret,St1}.
+
+%% funchunk(Function, State) -> {Return,State}.
+
+funchunk({functiondef,_Line,_Name,_Pars,Body}, St0) ->
+    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
+    %% Should do GC here.
+    {Ret,St1};
+
+funchunk({functiondef,_Line,_Pars,Body}, St0) ->
+    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
+    %% Should do GC here.
+    {Ret,St1}.
+
+funchunk(Func, St0, _Pars) ->           %Todo: Parameters.
+    funchunk(Func, St0).                %Note: from ERLANG. And the functiondef
+                                        %is a wrap around ALL chunks except
+                                        %those that already were functions.
+
 
 %% block(Stats, State) -> State.
 %%  Evaluate statements in a block. The with_block function requires
