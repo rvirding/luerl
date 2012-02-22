@@ -53,9 +53,8 @@ concat(As, _) -> error({badarg,concat,As}).
 
 concat({table,N}=T, A2, As, St) ->
     {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
-    case {luerl_lib:tostring(A2),luerl_lib:tointegers(As)} of
-	{Sep,Is} when Sep =/= nil, Is =/= nil ->
-	    {[concat(Tab, Sep, Is)],St};
+    case luerl_lib:tostrings([A2], luerl_lib:tointegers(As)) of
+	[Sep|Is] -> {[concat(Tab, Sep, Is)],St};
 	_ -> error({badarg,concat,[T,A2|As]})
     end.
 
@@ -71,7 +70,7 @@ concat(Tab, Sep, [I,J|_]) ->
     concat_join(Conc, Sep).
 
 concat_loop([{N,V}|Tab], N) ->			%An interesting element
-    case luerl_lib:tolist(V) of			%Check if right type
+    case luerl_lib:to_list(V) of		%Check if right type
 	nil -> error({illegal_val,concat,V});
 	S -> [S|concat_loop(Tab, N+1)]
     end;
@@ -81,7 +80,7 @@ concat_loop(_, _) -> [].			%No more interesting elements
 
 concat_loop(_, N, J) when N > J -> [];		%Done
 concat_loop([{N,V}|Tab], N, J) ->		%An interesting element
-    case luerl_lib:tolist(V) of			%Check if right type
+    case luerl_lib:to_list(V) of		%Check if right type
 	nil -> error({illegal_val,concat,V});
 	S -> [S|concat_loop(Tab, N+1, J)]
     end;

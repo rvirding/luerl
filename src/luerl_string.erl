@@ -34,10 +34,12 @@
 table() ->
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
+     {<<"format">>,{function, fun format/2}},
      {<<"len">>,{function,fun len/2}},
      {<<"lower">>,{function,fun lower/2}},
      {<<"rep">>,{function,fun rep/2}},
      {<<"reverse">>,{function,fun reverse/2}},
+     {<<"sub">>,{function,fun sub/2}},
      {<<"upper">>,{function,fun upper/2}}
     ].
 
@@ -57,38 +59,111 @@ byte(_, _, _, St) -> {[],St}.
 
 char(Cs, St) -> {list_to_binary(Cs),St}.
 
+%% format([Format,Arg|_], State) -> {String,State}.
+% A VERY primitive format function, barely works.
+
+format([F|As], St) ->
+    L = format_loop(F, As),
+    {[iolist_to_binary(L)],St};
+format(As, _) -> error({badarg,format,As}).
+
+format_loop(<<$%,F0/binary>>, As0) ->
+    {Fo,F1} = collect(F0),
+    {Out,As1} = build(Fo, As0),
+    [Out|format_loop(F1, As1)];
+format_loop(<<$\\,C,Rest/binary>>, As) ->
+    [C|format_loop(Rest, As)];
+format_loop(<<C,Rest/binary>>, As) ->
+    [C|format_loop(Rest, As)];
+format_loop(<<>>, _) -> [].
+
+%% collect(Format) -> {{C,F,Ad,P},Format}.
+
+collect(F0) ->
+    {C,F1} = collect_loop(F0),
+    {{C,0,0,0},F1}.
+
+collect_loop(<<D,F/binary>>) when D >= $0, D =< $9 ->
+    collect_loop(F);
+collect_loop(<<$.,F/binary>>) ->
+    collect_loop(F);
+collect_loop(<<C,F/binary>>) -> {C,F}.
+
+%% build({C,F,Ad,P}, Args) -> {Out,Args}.
+
+build({$s,_,_,_}, [A|As]) ->
+    S = luerl_lib:tostring(A),
+    {io_lib:fwrite("~s", [S]),As};
+build({$q,_,_,_}, [A|As]) ->
+    S = luerl_lib:tostring(A),
+    {io_lib:fwrite("\"~s\"", [S]),As};
+build({$d,_,_,_}, [A|As]) ->
+    I = luerl_lib:tointeger(A),
+    {io_lib:write(I),As};
+build({$e,_,_,_}, [A|As]) ->
+    F = luerl_lib:tonumber(A),
+    {io_lib:format("~e", [F]),As};
+build({$f,_,_,_}, [A|As]) ->
+    F = luerl_lib:tonumber(A),
+    {io_lib:format("~f", [F]),As};
+build({$g,_,_,_}, [A|As]) ->
+    F = luerl_lib:tonumber(A),
+    {io_lib:format("~g", [F]),As}.
+
 len([A|_], St) when is_binary(A) -> {byte_size(A),St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
 len(As, _) -> error({badarg,len,As}).
 
 lower([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:tolist(A),
+    S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_lower(S))],St};
 lower(As, _) -> error({badarg,lower,As}).
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
-rep([A1,A2,A3|_], St) ->
-    case catch {luerl_lib:tolist(A1),
-		luerl_lib:tonumber(A2),
-		luerl_lib:tolist(A3)} of
-	{S,N,Sep} when S =/= nil, N =/= nil, Sep =/= nil ->
-	    case round(N) of
-		I when I > 0 ->
+rep([_,_,_|_]=As, St) ->
+    case luerl_lib:conv_list(As, [list,int,list]) of
+	[S,I,Sep] ->
+	    if I > 0 ->
 		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
-		_ -> {[<<>>],St}
+	       true -> {[<<>>],St}
 	    end;
-	_ ->					%Error or bad values
-	    error({badarg,rep,[A1,A2,A3]})
+	nil ->					%Error or bad values
+	    error({badarg,rep,As})
     end;
 rep(As, _) -> error({badarg,rep,As}).
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:tolist(A),
+    S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
 reverse(As, _) -> error({badarg,reverse,As}).
 
+sub([A1|As], St) ->
+    do_sub(luerl_lib:conv_list([A1|As], [string,int,int]), St);
+sub(As, _) -> error({badarg,sub,As}).
+
+do_sub(nil, _) -> error({badarg,sub,nil});
+do_sub([S|Is], St) ->
+    Len = byte_size(S),
+    Sub = case Is of
+	      %% The cases where we just have an I.
+	      [I] -> do_sub(S, Len, I);
+	      [I,J] -> do_sub(S, Len, I, J)
+	  end,
+    {[Sub],St}.
+
+do_sub(S, _, 0) -> S;
+do_sub(S, Len, I) when I < 1 -> do_sub(S, Len, Len+I+1, Len);
+do_sub(S, Len, I) -> do_sub(S, Len, I, Len).
+
+do_sub(S, Len, I, J) when I < 1 -> do_sub(S, Len, 1, J);
+do_sub(S, Len, I, J) when J < 0 -> do_sub(S, Len, I, Len+J+1);
+do_sub(S, Len, I, J) when J > Len -> do_sub(S, Len, I, Len);
+do_sub(_, Len, I, _) when I > Len -> <<>>;
+do_sub(_, _, I, J) when J < I -> <<>>;
+do_sub(S, _, I, J) -> binary:part(S, I-1, J-I+1). %Zero-based, yuch!
+
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:tolist(A),
+    S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
 upper(As, _) -> error({badarg,upper,As}).

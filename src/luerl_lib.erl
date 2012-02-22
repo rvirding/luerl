@@ -27,13 +27,19 @@
 %% Author  : Robert Virding
 %% Purpose : Luerl libraries.
 
+%% A collection of useful functions. Those with '_' in their names
+%% generate Erlang data types while those with generate Lua data types
+%% (floats and binaries).
+
 -module(luerl_lib).
 
 -include("luerl.hrl").
 
 -export([is_true/1,first_value/1,is_integer/1,number_to_list/1,
-	 tonumber/1,tonumber/2,tointeger/1,tonumbers/1,tonumbers/2,
-	 tointegers/1,tointegers/2,tolist/1,tostring/1]).
+	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
+	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
+	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
+	 conv_list/2,conv_list/3]).
 
 %% is_true(Rets) -> boolean()>
 
@@ -45,9 +51,32 @@ is_true([]) -> false.
 first_value([V|_]) -> V;
 first_value([]) -> nil.
 
-%% is_integer(Number) -> boolean().
+to_list(N) when is_number(N) -> number_to_list(N);
+to_list(B) when is_binary(B) -> binary_to_list(B);
+to_list(_) -> nil.
 
-is_integer(N) -> round(N) == N.    
+to_lists(As) -> to_lists(As, []).
+
+to_lists(As, Acc) ->
+    to_loop(As, fun to_list/1, Acc).
+
+to_int(N) when is_number(N) -> round(N);
+to_int(B) when is_binary(B) ->
+    L = binary_to_list(B),
+    case catch {ok,list_to_integer(L)} of
+	{ok,I} -> I;
+	{'EXIT',_} ->
+	    case catch {ok,list_to_float(L)} of
+		{ok,F} -> round(F);
+		{'EXIT',_} -> nil
+	    end
+    end;
+to_int(_) -> nil.
+
+to_ints(As) -> to_ints(As, []).
+
+to_ints(As, Acc) ->
+    to_loop(As, fun to_int/1, Acc).
 
 %% tonumber(Arg) -> Number | nil.
 %% tonumber(Arg, Base) -> Number | nil.
@@ -88,24 +117,12 @@ tointeger(A) ->
 tonumbers(As) -> tonumbers(As, []).
 
 tonumbers(As, Acc) ->
-    lists:foldr(fun (_, nil) -> nil;		%Propagate nil
-		    (A, Ns) ->
-			case tonumber(A) of
-			    nil -> nil;		%Propagate nil
-			    N -> [N|Ns]
-			end
-		end, Acc, As).
+    to_loop(As, fun tonumber/1, Acc).
 
 tointegers(As) -> tointegers(As, []).
 
 tointegers(As, Acc) ->
-    lists:foldr(fun (_, nil) -> nil;		%Propagate nil
-		    (A, Ns) ->
-			case tonumber(A) of
-			    nil -> nil;		%Propagate nil
-			    N -> [float(round(N))|Ns]
-			end
-		end, Acc, As).
+    to_loop(As, fun tonumber/1, Acc).
 
 number_to_list(N) ->
     I = round(N),
@@ -114,10 +131,50 @@ number_to_list(N) ->
 	false -> io_lib:write(N)
     end.
 
-tolist(N) when is_number(N) -> number_to_list(N);
-tolist(B) when is_binary(B) -> binary_to_list(B);
-tolist(_) -> nil.
-
 tostring(N) when is_number(N) -> list_to_binary(number_to_list(N));
 tostring(B) when is_binary(B) -> B;
 tostring(_) -> nil.
+
+tostrings(As) -> tostrings(As, []).
+
+tostrings(As, Acc) ->
+    to_loop(As, fun tostring/1, Acc).
+
+%% to_loop(List, Convert, Acc) -> List | nil.
+
+to_loop(As, Fun, Acc) ->
+    lists:foldr(fun (_, nil) -> nil;		%Propagate nil
+		    (A, Ns) ->
+			case Fun(A) of
+			    nil -> nil;		%Propagate nil
+			    N -> [N|Ns]
+			end
+		end, Acc, As).
+
+%% conv_list(Args, ToTypes) -> List | nil.
+%% Basically a type driven foldr where we return a list or nil.
+
+conv_list(As, Tos) -> conv_list(As, Tos, []).
+
+conv_list(_, _, nil) -> nil;			%Propagate nil
+conv_list([A|As], [To|Tos], Rs0) ->
+    case conv_list(As, Tos, Rs0) of
+	nil -> nil;				%Propagate nil
+	Rs1 ->
+	    %% Get the right value.
+	    Ret = case To of
+		      %% Erlang types.
+		      list -> to_list(A);
+		      int -> to_int(A);
+		      %% Lua types.
+		      integer -> tointeger(A);
+		      number -> tonumber(A);
+		      string -> tostring(A)
+		  end,
+	    case Ret of
+		nil -> nil;			%Propagate nil
+		Ret -> [Ret|Rs1]
+	    end
+    end;
+conv_list([], _, Acc) -> Acc;			%No more arguments, done
+conv_list(_, [], Acc) -> Acc.			%No more conversions, done

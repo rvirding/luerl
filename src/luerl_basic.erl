@@ -189,7 +189,10 @@ tostring(nil) -> <<"nil">>;
 tostring(true) -> <<"true">>;
 tostring(false) -> <<"false">>;
 tostring(N) when is_number(N) ->
-    S = if ?IS_INTEGER(N) -> integer_to_list(round(N));
+    A = abs(N),
+    %% Print really big/small "integers" as floats as well.
+    S = if A < 1.0e-4 ; A > 1.0e14 -> io_lib:write(N);
+	   ?IS_INTEGER(N) -> integer_to_list(round(N));
 	   true -> io_lib:write(N)
 	end,
     iolist_to_binary(S);
@@ -208,7 +211,8 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type({table,_}) -> <<"table">>;
-type({function,_,_,_,_}) -> <<"function">>;
+type({function,_,_,_,_}) -> <<"function">>;	%Functions defined in Lua
+type({function,_}) -> <<"function">>;		%Internal functions
 type({thread,_}) -> <<"thread">>;
 type({userdata,_}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
