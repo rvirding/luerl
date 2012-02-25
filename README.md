@@ -1,5 +1,5 @@
 Luerl - an implementation of Lua in Erlang
-------------------------------------------
+==========================================
 
 An experimental implementation of Lua 5.2 written solely in pure Erlang.
 
@@ -15,8 +15,31 @@ Some things which are known not to be implemented or work properly:
 
 - ...
 
+When to use Luerl
+-----------------
 
-These are the interface functions in luerl.erl:
+Luerl will be slower than a reasonable native Lua implementation. This
+is mainly due to having to emulate mutable data on top of an immutable
+world. There is really no way around this. An alternative would be to
+implement a special Lua memory outside of the normal Erlang, but this
+would defeat the purpose of Luerl. It would instead be then more
+logical to connect to a native Lua.
+
+Some valid use cases for Luerl are:
+
+- Lua code will be run only occasionally and it wouldn't be worth
+  managing an extra language implementation in the appkication.
+
+- The Lua code chunks are small so the slower speed are wayed up by
+  Luerl's faster interface.
+
+- It is easy to run multiple instances of Luerl which could better
+  utilise multicores.
+
+There may be others.
+
+Interface functions in luerl.erl
+--------------------------------
 
 All functions optionally accept a **Lua State** parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.
 
@@ -65,7 +88,7 @@ The 'compile' functions double the 'load' function, with but a different name.
 
 #### gc(State) -> State.
  Runs the (experimental) garbage collector on a state and returns the new state.
-
+ 
 N.B. This interface is subject to change!
 
 
@@ -93,66 +116,70 @@ You can build and run these samples with:
     make hello2
 
 
+Currently implemented functions in the libraries
+------------------------------------------------
 
-Currently implemented functions in the libraries:
+- _G
+- _VERSION
+- assert
+- collectgarbage
+- dofile
+- eprint
+- error
+- getmetatable
+- ipairs
+- load
+- loadfile
+- next
+- pairs
+- print
+- rawequal
+- rawget
+- rawlen
+- rawset
+- select
+- setmetatable
+- tonumber
+- tostring
+- type
 
-_G
-_VERSION
-assert
-collectgarbage
-dofile
-eprint
-error
-getmetatable
-ipairs
-next
-pairs
-print
-rawequal
-rawget
-rawlen
-rawset
-select
-setmetatable
-tonumber
-tostring
-type
+- math.abs
+- math.acos
+- math.asin
+- math.atan
+- math.atan2
+- math.ceil
+- math.cos
+- math.cosh
+- math.deg
+- math.exp
+- math.floor
+- math.log
+- math.max
+- math.min
+- math.pi
+- math.pow
+- math.rad
+- math.sin
+- math.sinh
+- math.sqrt
+- math.tan
+- math.tanh
 
-math.abs
-math.acos
-math.asin
-math.atan
-math.atan2
-math.ceil
-math.cos
-math.cosh
-math.deg
-math.exp
-math.floor
-math.log
-math.max
-math.min
-math.pi
-math.pow
-math.rad
-math.sin
-math.sinh
-math.sqrt
-math.tan
-math.tanh
+- os.difftime
+- os.getenv
+- os.time
 
-os.difftime
-os.getenv
-os.time
+- string.byte
+- string.char
+- string.format (very limited as yet)
+- string.len
+- string.lower
+- string.rep
+- string.reverse
+- string.sub
+- string.upper
 
-string.byte
-string.char
-string.len
-string.lower
-string.rep
-string.reverse
-string.upper
-
-table.concat
-table.pack
-table.unpack
+- table.concat
+- table.pack
+- table.unpack
