@@ -122,7 +122,7 @@ lower(As, _) -> error({badarg,lower,As}).
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
-    case luerl_lib:conv_list(As, [list,int,list]) of
+    case luerl_lib:conv_list(As, [list,integer,list]) of
 	[S,I,Sep] ->
 	    if I > 0 ->
 		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
@@ -139,24 +139,23 @@ reverse([A|_], St) when is_binary(A) ; is_number(A) ->
 reverse(As, _) -> error({badarg,reverse,As}).
 
 sub([A1|As], St) ->
-    do_sub(luerl_lib:conv_list([A1|As], [string,int,int]), St);
+    case luerl_lib:conv_list([A1|As], [lstring,integer,integer]) of
+	[S|Is] ->
+	    Len = byte_size(S),
+	    Sub = case Is of
+		      [I] -> do_sub(S, Len, I);		%Just an I
+		      [I,J] -> do_sub(S, Len, I, J)	%Both an I and a J
+		  end,
+	    {[Sub],St}
+    end;
 sub(As, _) -> error({badarg,sub,As}).
-
-do_sub(nil, _) -> error({badarg,sub,nil});
-do_sub([S|Is], St) ->
-    Len = byte_size(S),
-    Sub = case Is of
-	      %% The cases where we just have an I.
-	      [I] -> do_sub(S, Len, I);
-	      [I,J] -> do_sub(S, Len, I, J)
-	  end,
-    {[Sub],St}.
 
 do_sub(S, _, 0) -> S;
 do_sub(S, Len, I) when I < 1 -> do_sub(S, Len, Len+I+1, Len);
 do_sub(S, Len, I) -> do_sub(S, Len, I, Len).
 
 do_sub(S, Len, I, J) when I < 1 -> do_sub(S, Len, 1, J);
+do_sub(_, Len, _, J) when J < -Len -> <<>>;
 do_sub(S, Len, I, J) when J < 0 -> do_sub(S, Len, I, Len+J+1);
 do_sub(S, Len, I, J) when J > Len -> do_sub(S, Len, I, Len);
 do_sub(_, Len, I, _) when I > Len -> <<>>;

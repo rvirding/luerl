@@ -35,7 +35,7 @@
 
 -include("luerl.hrl").
 
--export([is_true/1,first_value/1,is_integer/1,number_to_list/1,
+-export([is_true/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
@@ -152,6 +152,7 @@ to_loop(As, Fun, Acc) ->
 		end, Acc, As).
 
 %% conv_list(Args, ToTypes) -> List | nil.
+%% conv_list(Args, ToTypes, Done) -> List | nil.
 %% Basically a type driven foldr where we return a list or nil.
 
 conv_list(As, Tos) -> conv_list(As, Tos, []).
@@ -165,11 +166,12 @@ conv_list([A|As], [To|Tos], Rs0) ->
 	    Ret = case To of
 		      %% Erlang types.
 		      list -> to_list(A);
-		      int -> to_int(A);
+		      integer -> to_int(A);
+		      string -> to_list(A);
 		      %% Lua types.
-		      integer -> tointeger(A);
-		      number -> tonumber(A);
-		      string -> tostring(A)
+		      linteger -> tointeger(A);
+		      lnumber -> tonumber(A);
+		      lstring -> tostring(A)
 		  end,
 	    case Ret of
 		nil -> nil;			%Propagate nil

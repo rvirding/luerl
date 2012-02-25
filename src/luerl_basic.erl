@@ -44,6 +44,8 @@ table() ->
      {<<"error">>,{function,fun error/2}},
      {<<"getmetatable">>,{function,fun getmetatable/2}},
      {<<"ipairs">>,{function,fun ipairs/2}},
+     {<<"load">>,{function,fun load/2}},
+     {<<"loadfile">>,{function,fun loadfile/2}},
      {<<"next">>,{function,fun next/2}},
      {<<"pairs">>,{function,fun pairs/2}},
      {<<"print">>,{function,fun print/2}},
@@ -83,7 +85,6 @@ eprint(Args, St) ->
 
 error([M|_], _) -> error({lua_error,M});	%Never returns!
 error(As, _) -> error({badarg,error,As}).
-
 
 ipairs([{table,_}=T|_], St) ->
     {[{function,fun ipairs_next/2},T,0],St};
@@ -232,13 +233,56 @@ setmetatable([{table,N}=A1,nil|_], St) ->
     {[A1],St#luerl{tabs=Ts}};
 setmetatable(As, _) -> error({badarg,setmetatable,As}).
 
-%% Load files
+%% Load string and files.
+
+load(As, St) ->
+    case luerl_lib:conv_list(As, [string]) of
+	[S] -> do_load(S, St);
+	nil -> error({badarg,load,As})
+    end.
+
+loadfile(As, St) ->
+    case luerl_lib:conv_list(As, [string]) of
+	[F] ->
+	    case file:read_file(F) of
+		{ok,B} -> do_load(binary_to_list(B), St);
+		{error,E} ->
+		    Msg = iolist_to_binary(file:format_error(E)),
+		    {[nil,Msg],St}
+	    end;
+	nil -> error({badarg,loadfile,As})
+    end.
+
+do_load(S, St) ->
+    case parse_string(S) of
+	{ok,C} ->
+	    F = fun (_, St0) ->
+			Env0 = St0#luerl.env,	%Caller's environment
+			%% Evaluate at top-level,
+			Env = [lists:last(Env0)],
+			{Ret,St1} = luerl_eval:chunk(C, St0#luerl{env=Env}),
+			St2 = St1#luerl{env=Env0},
+			{Ret,St2}
+		end,
+	    {[{function,F}],St};
+	{error,{_,Mod,E}} ->
+	    Msg = iolist_to_binary(Mod:format_error(E)),
+	    {[nil,Msg],St}
+    end.
 
 dofile([A1|_], St0) when is_number(A1) ; is_binary(A1) ->
     File = luerl_lib:tostring(A1),
     {ok,Bin} = file:read_file(File),
-    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
-    {ok,C} = luerl_parse:chunk(Ts),
-    {Ret,St1} = luerl_eval:chunk(C, St0),
-    {Ret,St1};
+    {ok,C} = parse_string(binary_to_list(Bin)),
+    luerl_eval:chunk(C, St0);
 dofile(As, _) -> error({badarg,dofile,As}).
+
+parse_string(S) ->
+    case luerl_scan:string(S) of
+	{ok,Ts,_} ->
+	    case luerl_parse:chunk(Ts) of
+		{ok,C} -> {ok,C};
+		{error,E} -> {error,E}
+	    end;
+	{error,E} -> {error,E}
+    end.
