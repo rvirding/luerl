@@ -32,10 +32,13 @@
 
 -module(luerl_eval).
 
--export([init/0,chunk/2,gc/1]).
+-export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
+
+%% Currently unused internal functions, to suppress warnings.
+-export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,set_name_env/4]).
 
 -include("luerl.hrl").
 
@@ -121,23 +124,23 @@ set_table_name(Name, Val, Tab, St) ->
     set_table_key(atom_to_binary(Name, latin1), Val, Tab, St).
 
 set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
-    {Tab0,Met} = ?GET_TABLE(N, Ts0),		%Get the table
+    {Tab0,Meta} = ?GET_TABLE(N, Ts0),		%Get the table
     case orddict:find(Key, Tab0) of
 	{ok,_} ->
 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
 		      true -> orddict:store(Key, Val, Tab0)
 		   end,
-	    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
+	    Ts1 = ?SET_TABLE(N, {Tab1,Meta}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->
-	    case getmetamethod_tab(Met, <<"__newindex">>, Ts0) of
+	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    Tab1 = orddict:store(Key, Val, Tab0),
-		    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
+		    Ts1 = ?SET_TABLE(N, {Tab1,Meta}, Ts0),
 		    St#luerl{tabs=Ts1};
-		Meta when element(1, Meta) =:= function ->
-		    functioncall(Meta, [Key,Val], St);
-		Meta -> set_table_key(Key, Val, Meta, St)
+		Meth when element(1, Meth) =:= function ->
+		    functioncall(Meth, [Key,Val], St);
+		Meth -> set_table_key(Key, Val, Meth, St)
 	    end
     end.
 
@@ -145,17 +148,17 @@ get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
 
 get_table_key(K, {table,N}=T, #luerl{tabs=Ts}=St) ->
-    {Tab,Met} = ?GET_TABLE(N, Ts),		%Get the table.
+    {Tab,Meta} = ?GET_TABLE(N, Ts),		%Get the table.
     case orddict:find(K, Tab) of
 	{ok,Val} -> {Val,St};
 	error ->
 	    %% Key not present so try metamethod
-	    case getmetamethod_tab(Met, <<"__index">>, Ts) of
+	    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 		nil -> {nil,St};
-		Meta when element(1, Meta) =:= function ->
-		    {Vs,St1} = functioncall(Meta, [T,K], St),
+		Meth when element(1, Meth) =:= function ->
+		    {Vs,St1} = functioncall(Meth, [T,K], St),
 		    {first_value(Vs),St1};	%Only one value
-		Meta -> get_table_key(K, Meta, St)
+		Meth -> get_table_key(K, Meth, St)
 	    end
     end;
 get_table_key(_, _, St) -> {nil,St}.		%Key can never be present
@@ -200,7 +203,7 @@ set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 %% get_key(Key, State) -> Value.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
-%%  them in the envornment stack..
+%%  them in the environment stack.
 
 set_name(Name, Val, St) ->
     set_key(atom_to_binary(Name, latin1), Val, St).
@@ -243,6 +246,24 @@ chunk(Stats, St0) ->
     {Ret,St1} = function_block(fun (S) -> {[],stats(Stats, S)} end, St0),
     %% Should do GC here.
     {Ret,St1}.
+
+%% funchunk(Function, State) -> {Return,State}.
+
+funchunk({functiondef,_Line,_Name,_Pars,Body}, St0) ->
+    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
+    %% Should do GC here.
+    {Ret,St1};
+
+funchunk({functiondef,_Line,_Pars,Body}, St0) ->
+    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
+    %% Should do GC here.
+    {Ret,St1}.
+
+funchunk(Func, St0, _Pars) ->           %Todo: Parameters.
+    funchunk(Func, St0).                %Note: from ERLANG. And the functiondef
+                                        %is a wrap around ALL chunks except
+                                        %those that already were functions.
+
 
 %% block(Stats, State) -> State.
 %%  Evaluate statements in a block. The with_block function requires
@@ -588,6 +609,8 @@ functioncall({function,_,Env,Ps,B}, Args, St0) ->
     St3 = St2#luerl{env=Env0},			%Restore caller's environment
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
+    Fun(Args, St);
+functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
