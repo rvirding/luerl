@@ -32,27 +32,33 @@
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
         do/1,do/2,dofile/1,dofile/2,
         load/1,loadfile/1,
-        call/1,call/2,pcall/1,pcall/2,
-        newstate/0,close/1,gc/1]).
+        compile/1,compilefile/1,
+        call/1,call/2,
+        start/0,stop/1,gc/1]).
 
-%% luerl:eval(String|Binary|Compiled[, State]) -> Result.
+%% luerl:eval(String|Binary|Form[, State]) -> Result.
 eval(Chunk) ->
     eval(Chunk, luerl_eval:init()).
 
 eval(Chunk, St) ->
-    {Ret,_} = do(Chunk, St),
-    Ret.
-
-%% luerl:evalfile(Path[, State]) -> Result.
+    try do(Chunk, St) of
+        {Ret,_} -> {ok,Ret}
+    catch 
+         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+    end.
+    
+%% luerl:evalfile(Path[, State]) -> {ok, Result} | {error,Reason}.
 evalfile(Path) ->
     evalfile(Path, luerl_eval:init()).
 
 evalfile(Path, St) ->
-    %Todo: add try catch?
-    {Ret,_} = dofile(Path,St),
-    Ret.
+    try dofile(Path, St) of
+        {Ret,_} -> {ok,Ret}
+    catch 
+         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+    end.
 
-%% luerl:do(String|Binary|Compiled[, State]) -> {Result, NewState}.
+%% luerl:do(String|Binary|Form[, State]) -> {Result, NewState} 
 do(SBC) ->
     do(SBC, luerl_eval:init()).
 
@@ -80,7 +86,7 @@ dofile(Path, St) ->
     {ok,C} = luerl_parse:chunk(Ts),
     luerl_eval:funchunk(C, St).
 
-%% load(String|Binary) -> {ok,Compiled}.
+%% load(String|Binary) -> {ok,Form}.
 load(Chunk) when is_binary(Chunk) ->
     load(binary_to_list(Chunk));
 
@@ -88,17 +94,31 @@ load(Chunk) when is_list(Chunk) ->
     {ok,Ts,_} = luerl_scan:string(Chunk),
     luerl_parse:chunk(Ts).
 
-%% loadfile(Path) -> {ok,Compiled}.
+%% compilefile(Path) -> {ok,Form}.
 loadfile(Path) ->
     {ok,Bin} = file:read_file(Path),
     {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
     luerl_parse:chunk(Ts).
 
-%% newstate() -> State.
-newstate() -> 
+%% compile(String|Binary) -> {ok,Form} | {error,Reason}.
+compile(Chunk) when is_binary(Chunk) ->
+    compile(binary_to_list(Chunk));
+
+compile(Chunk) when is_list(Chunk) ->
+    {ok,Ts,_} = luerl_scan:string(Chunk),
+    luerl_parse:chunk(Ts).
+
+%% compilefile(Path) -> {ok,Form} | {error,Reason}.
+compilefile(Path) ->
+    {ok,Bin} = file:read_file(Path),
+    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
+    luerl_parse:chunk(Ts).
+
+%% start() -> State.
+start() -> 
     luerl_eval:init().
 
-%% call(Compiled[, State][, ErlParam]) -> {Result,State}
+%% call(Form[, State][, ErlParam]) -> {Result,State}
 call(C) ->
     call(C, luerl_eval:init(), []).
 
@@ -111,27 +131,16 @@ call({functiondef,_,_,_}=C, St, P) ->
 call({functiondef,_,_,_,_}=C, St, P) ->
     luerl_eval:funchunk(C, St, P).
 
-%% pcall(Compiled[, State][, ErlParam]) -> {Result,State}
-pcall(C) ->
-    pcall(C, luerl_eval:init(), []).
-
-pcall(C, St) ->
-    pcall(C, St, []).
-
-pcall(C, St, P) ->
-    %Todo: add try catch?
-    call(C, St, P).
-
-%% close(State) -> GCedState.
-close(St) -> 
+%% stop(State) -> GCedState.
+stop(St) -> 
     luerl_eval:gc(St).
 
 %% gc(State) -> State.
 gc(St) -> luerl_eval:gc(St).
 
-%% luerl:tolua(list()) -> LuerlTermsList().
-% luerl:tolua(list()) -> LuerlTermsList().
+%% luerl:encode(list()) -> LuerlTermsList().
+% luerl:encode(list()) -> LuerlTermsList().
 
-%% luerl:toerlang(LuerlTermsList()) -> list().
-% toerlang(LuerlTermsList) ->
+%% luerl:decode(LuerlTermsList()) -> list().
+% decode(LuerlTermsList) ->
 %    list().
