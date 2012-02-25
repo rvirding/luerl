@@ -34,6 +34,8 @@
 %% unnecessarily complex and all that was needed was to change one
 %% rule for statements.
 
+Expect 2. %Suppress shift/reduce warning
+
 Nonterminals
 chunk block stats stat semi retstat label_stat
 while_stat repeat_stat if_stat if_elseif if_else for_stat local_decl
@@ -201,6 +203,10 @@ field -> exp : {exp_field,line('$1'),'$1'} .
 fieldsep -> ',' .
 fieldsep -> ';' .
 
+%% exp ::= exp binop exp
+%% exp ::= unop exp
+%% We have to write them these way for the prioriies to work.
+
 binop -> exp '+' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '-' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '*' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
@@ -227,7 +233,15 @@ Erlang code.
 
 -export([chunk/1,code/1]).
 
-chunk(Ts) -> parse(Ts).
+chunk(Ts) -> 
+    case F = parse(Ts) of
+        {error,{Line,luerl_parse,MsgList}} ->
+            io:format("~nLuerl parse error in line ~p: ~p~n", [Line, lists:flatten(MsgList)]),
+            F;
+        {ok,{functiondef,_,_,_}} -> F;
+        {ok,{functiondef,_,_,_,_}} -> F;
+        {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[],Body}}
+    end.        
 
 code(Ts) -> parse(Ts).
 

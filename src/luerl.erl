@@ -24,40 +24,123 @@
 %% POSSIBILITY OF SUCH DAMAGE.
 
 %% File    : luerl.erl
-%% Author  : Robert Virding
+%% Authors : Robert Virding, Henning Diedrich
 %% Purpose : Basic LUA 5.2 interface.
 
 -module(luerl).
 
--export([eval/1,dofile/1,ps/1,init/0,do/2,gc/1]).
+-export([eval/1,eval/2,evalfile/1,evalfile/2,
+        do/1,do/2,dofile/1,dofile/2,
+        load/1,loadfile/1,
+        compile/1,compilefile/1,
+        call/1,call/2,
+        start/0,stop/1,gc/1]).
 
-eval(S) ->
+%% luerl:eval(String|Binary|Form[, State]) -> Result.
+eval(Chunk) ->
+    eval(Chunk, luerl_eval:init()).
+
+eval(Chunk, St) ->
+    try do(Chunk, St) of
+        {Ret,_} -> {ok,Ret}
+    catch 
+         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+    end.
+    
+%% luerl:evalfile(Path[, State]) -> {ok, Result} | {error,Reason}.
+evalfile(Path) ->
+    evalfile(Path, luerl_eval:init()).
+
+evalfile(Path, St) ->
+    try dofile(Path, St) of
+        {Ret,_} -> {ok,Ret}
+    catch 
+         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+    end.
+
+%% luerl:do(String|Binary|Form[, State]) -> {Result, NewState} 
+do(SBC) ->
+    do(SBC, luerl_eval:init()).
+
+do({functiondef,_,_,_}=C, St) ->
+    luerl_eval:funchunk(C, St);
+
+do({functiondef,_,_,_,_}=C, St) ->
+    luerl_eval:funchunk(C, St);
+
+do(B, St) when is_binary(B) ->
+    do(binary_to_list(B), St);
+
+do(S, St) when is_list(S) ->
     {ok,Ts,_} = luerl_scan:string(S),
     {ok,C} = luerl_parse:chunk(Ts),
-    {Ret,_} = luerl_eval:chunk(C, luerl_eval:init()),
-    Ret.
+    luerl_eval:funchunk(C, St).
 
-dofile(File) ->
-    {ok,Bin} = file:read_file(File),
+%% luerl:dofile(Path[, State]) -> {Result, NewState}.
+dofile(Path) ->
+    dofile(Path, luerl_eval:init()).
+
+dofile(Path, St) ->
+    {ok,Bin} = file:read_file(Path),
     {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
     {ok,C} = luerl_parse:chunk(Ts),
-    {Ret,_} = luerl_eval:chunk(C, luerl_eval:init()),
-    Ret.
+    luerl_eval:funchunk(C, St).
 
-%% ps(String) -> {ok,ChunkCode}.
-%% init() -> State.
-%% do(String, State) -> {Res,State}.
-%% gc(State) -> State.
-%%  Some testing utilities.
+%% load(String|Binary) -> {ok,Form}.
+load(Chunk) when is_binary(Chunk) ->
+    load(binary_to_list(Chunk));
 
-ps(S) ->
-    {ok,Ts,_} = luerl_scan:string(S),
+load(Chunk) when is_list(Chunk) ->
+    {ok,Ts,_} = luerl_scan:string(Chunk),
     luerl_parse:chunk(Ts).
 
-init() -> luerl_eval:init().
+%% compilefile(Path) -> {ok,Form}.
+loadfile(Path) ->
+    {ok,Bin} = file:read_file(Path),
+    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
+    luerl_parse:chunk(Ts).
 
-do(S, St) ->
-    {ok,C} = ps(S),
-    luerl_eval:chunk(C, St).
+%% compile(String|Binary) -> {ok,Form} | {error,Reason}.
+compile(Chunk) when is_binary(Chunk) ->
+    compile(binary_to_list(Chunk));
 
+compile(Chunk) when is_list(Chunk) ->
+    {ok,Ts,_} = luerl_scan:string(Chunk),
+    luerl_parse:chunk(Ts).
+
+%% compilefile(Path) -> {ok,Form} | {error,Reason}.
+compilefile(Path) ->
+    {ok,Bin} = file:read_file(Path),
+    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
+    luerl_parse:chunk(Ts).
+
+%% start() -> State.
+start() -> 
+    luerl_eval:init().
+
+%% call(Form[, State][, ErlParam]) -> {Result,State}
+call(C) ->
+    call(C, luerl_eval:init(), []).
+
+call(C, St) ->
+    call(C, St, []).
+
+call({functiondef,_,_,_}=C, St, P) ->
+    luerl_eval:funchunk(C, St, P);
+
+call({functiondef,_,_,_,_}=C, St, P) ->
+    luerl_eval:funchunk(C, St, P).
+
+%% stop(State) -> GCedState.
+stop(St) -> 
+    luerl_eval:gc(St).
+
+%% gc(State) -> State.
 gc(St) -> luerl_eval:gc(St).
+
+%% luerl:encode(list()) -> LuerlTermsList().
+% luerl:encode(list()) -> LuerlTermsList().
+
+%% luerl:decode(LuerlTermsList()) -> list().
+% decode(LuerlTermsList) ->
+%    list().
