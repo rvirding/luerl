@@ -201,6 +201,10 @@ field -> exp : {exp_field,line('$1'),'$1'} .
 fieldsep -> ',' .
 fieldsep -> ';' .
 
+%% exp ::= exp binop exp
+%% exp ::= unop exp
+%% We have to write them these way for the prioriies to work.
+
 binop -> exp '+' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '-' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '*' exp : {op,line('$2'),cat('$2'),'$1','$3'}.

@@ -121,23 +121,23 @@ set_table_name(Name, Val, Tab, St) ->
     set_table_key(atom_to_binary(Name, latin1), Val, Tab, St).
 
 set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
-    {Tab0,Met} = ?GET_TABLE(N, Ts0),		%Get the table
+    {Tab0,Meta} = ?GET_TABLE(N, Ts0),		%Get the table
     case orddict:find(Key, Tab0) of
 	{ok,_} ->
 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
 		      true -> orddict:store(Key, Val, Tab0)
 		   end,
-	    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
+	    Ts1 = ?SET_TABLE(N, {Tab1,Meta}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->
-	    case getmetamethod_tab(Met, <<"__newindex">>, Ts0) of
+	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    Tab1 = orddict:store(Key, Val, Tab0),
-		    Ts1 = ?SET_TABLE(N, {Tab1,Met}, Ts0),
+		    Ts1 = ?SET_TABLE(N, {Tab1,Meta}, Ts0),
 		    St#luerl{tabs=Ts1};
-		Meta when element(1, Meta) =:= function ->
-		    functioncall(Meta, [Key,Val], St);
-		Meta -> set_table_key(Key, Val, Meta, St)
+		Meth when element(1, Meth) =:= function ->
+		    functioncall(Meth, [Key,Val], St);
+		Meth -> set_table_key(Key, Val, Meth, St)
 	    end
     end.
 
@@ -145,17 +145,17 @@ get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
 
 get_table_key(K, {table,N}=T, #luerl{tabs=Ts}=St) ->
-    {Tab,Met} = ?GET_TABLE(N, Ts),		%Get the table.
+    {Tab,Meta} = ?GET_TABLE(N, Ts),		%Get the table.
     case orddict:find(K, Tab) of
 	{ok,Val} -> {Val,St};
 	error ->
 	    %% Key not present so try metamethod
-	    case getmetamethod_tab(Met, <<"__index">>, Ts) of
+	    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 		nil -> {nil,St};
-		Meta when element(1, Meta) =:= function ->
-		    {Vs,St1} = functioncall(Meta, [T,K], St),
+		Meth when element(1, Meth) =:= function ->
+		    {Vs,St1} = functioncall(Meth, [T,K], St),
 		    {first_value(Vs),St1};	%Only one value
-		Meta -> get_table_key(K, Meta, St)
+		Meth -> get_table_key(K, Meth, St)
 	    end
     end;
 get_table_key(_, _, St) -> {nil,St}.		%Key can never be present
@@ -588,6 +588,8 @@ functioncall({function,_,Env,Ps,B}, Args, St0) ->
     St3 = St2#luerl{env=Env0},			%Restore caller's environment
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
+    Fun(Args, St);
+functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     case getmetamethod(Func, <<"__call">>, St) of

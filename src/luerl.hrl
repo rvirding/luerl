@@ -16,6 +16,7 @@
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
+%% Set which table store to use.
 -define(USE_ORDDICT, true).
 
 -ifdef(USE_ORDDICT).
@@ -59,4 +60,19 @@
 -define(DEL_TABLE(N, Pd), erase(N)).
 -define(FILTER_TABLE(Pred, Pd), Pd).		%This needs work
 -define(FOLD_TABLE(Fun, Acc, Pd), Pd).		%This needs work
+-endif.
+
+-ifdef(USE_ETS).
+%% Use ETS to handle tables. Must get return values right!
+-define(MAKE_TABLE(),ets:new(luerl_tables, [set])).
+-define(GET_TABLE(N, E), ets:lookup_element(E, N, 2)).
+-define(SET_TABLE(N, T, E), begin ets:insert(E, {N,T}), E end).
+-define(UPD_TABLE(N, Upd, E),
+	begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
+	      E end).
+-define(DEL_TABLE(N, E), begin ets:delete(E, N), E end).
+-define(FILTER_TABLE(Pred, E), E).		%This needs work
+-define(FOLD_TABLE(Fun, Acc, E),
+	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
+		  Acc, E)).
 -endif.
