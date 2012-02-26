@@ -1,5 +1,5 @@
 Luerl - an implementation of Lua in Erlang
-
+------------------------------------------
 
 An experimental implementation of Lua 5.2 written solely in pure Erlang.
 
@@ -20,36 +20,47 @@ These are the interface functions in luerl.erl:
 
 All functions optionally accept a **Lua State** parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.
 
-**eval** and **do** functions differ only in what they return. The **do** functions return results and a new Lua State, the **eval** functions only the result.
+**eval** and **do** functions differ only in what they return. The **do** functions return results and a new Lua State, the **eval** functions return a tuple starting on 'ok' or 'error', then the result, or cause of error.
 
-#### luerl:eval(String|Binary|Compiled[, State]) -> Result.
+    do --> {Result, State} 
+
+    eval --> {ok, Result} | {error, Reason}
+
+The 'compile' functions double the 'load' function, with but a different name.
+
+#### luerl:eval(String|Binary|Form[, State]) -> {ok, Result} | {error, Reason}.
  Evaluate a Lua expression passed in as a string or binary, and return its result.
 
-#### luerl:evalfile(Path[, State]) -> Result.
+#### luerl:evalfile(Path[, State]) -> {ok, Result} | {error, Reason}.
  Load and execute a file, and return the result.
 
-#### luerl:do(String|Binary|Compiled[, State]) -> {Result, NewState}.
+#### luerl:do(String|Binary|Form[, State]) -> {Result, NewState}.
  Evaluate a Lua expression and return its result, and the new Lua State.
 
 #### luerl:dofile(Path[, State]) -> {Result, NewState}.
  Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
 
-#### load(String|Binary) -> {ok,Compiled}.
+#### load(String|Binary) -> {ok, Form} | {error, Reason} .
  Parse a Lua chunk as string or binary, and return a compiled chunk.
 
-#### loadfile(Path) -> {ok,Compiled}.
+#### loadfile(Path) -> {ok,Form}.
  Parse a Lua file, and return a compiled chunk.
 
-#### newstate() -> State.
+#### compile(String|Binary) -> {ok, Form} | {error, Reason} .
+ Parse a Lua chunk as string or binary, and return a compiled chunk.
+ Same as load/1.
+
+#### compilefile(Path) -> {ok,Form}.
+ Parse a Lua file, and return a compiled chunk.
+ Same as loadfile/1.
+
+#### start() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
-#### call(Compiled[, State]) -> {Result,State}
+#### call(Form[, State]) -> {Result,State}
  Execute a compiled chunk.
 
-#### pcall(Compiled[, State][, ErlParam]) -> {Result,State}
- (Todo:) protected variant of call().
-
-#### close(State) -> GCedState.
+#### stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
 
 #### gc(State) -> State.
@@ -68,7 +79,7 @@ Examples
 
 #### separately parse, then execute
     {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
-    State = luerl:newstate(),
+    State = luerl:start(),
     {_Ret, _NewState} = luerl:do(Chunk, State),
 
 

@@ -36,12 +36,14 @@ table() ->
      {<<"getenv">>,{function,fun getenv/2}},
      {<<"time">>,{function,fun time/2}}].
 
+getenv([<<>>|_], St) -> {[nil],St};
 getenv([A|_], St) when is_binary(A) ; is_number(A) ->
-    case os:getenv(luerl_lib:tolist(A)) of
+    case os:getenv(luerl_lib:to_list(A)) of
 	Env when is_list(Env) ->
 	    {[list_to_binary(Env)],St};
 	false -> {[nil],St}
-    end.
+    end;
+getenv(As, _) -> error({badarg,getenv,As}).
 
 %% Time functions.
 
