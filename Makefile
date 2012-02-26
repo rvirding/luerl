@@ -15,7 +15,7 @@ YRL_INTERM   := $(YRL_MODULES:%=$(SRCDIR)/%.erl)
 MODULES      := $(XRL_MODULES) $(YRL_MODULES) $(ERL_MODULES)
 OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
 
-all: $(OBJECTS) hello.beam 
+all: $(OBJECTS) hello.beam
 
 $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
 	@ mkdir -p $(BEAMDIR) 
@@ -41,6 +41,12 @@ hello2: all
 	@ echo "./examples/hello/hello2.erl:" 
 	erlc -o ebin ./examples/hello/hello2.erl
 	erl -pa ./ebin -s hello2 run -s init stop -noshell
+
+bench: all bench.beam
+	@ erl -pa ./ebin -s bench run -s init stop -noshell
+
+bench.beam: bench.erl
+	erlc bench.erl
 
 clean:
 	@ rm -rf $(BEAMDIR)

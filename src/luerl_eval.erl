@@ -142,7 +142,10 @@ set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
 		    functioncall(Meth, [Key,Val], St);
 		Meth -> set_table_key(Key, Val, Meth, St)
 	    end
-    end.
+    end;
+
+set_table_key(Key, Val, T, #luerl{}=St) ->
+    error({luerl_error, {"not a table record:", T, {Key, Val, St}}}).
 
 get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
