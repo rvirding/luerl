@@ -11,6 +11,6 @@ run() ->
     % separately parse, then execute
     {ok, Chunk} = luerl:loadfile("./bench.lua"),
     State = luerl:start(),
-    luerl:do(Chunk, State),
+    luerl:call(Chunk, State),
     
     done.

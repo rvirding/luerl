@@ -43,7 +43,8 @@ hello2: all
 	erl -pa ./ebin -s hello2 run -s init stop -noshell
 
 bench: all bench.beam
-	@ erl -pa ./ebin -s bench run -s init stop -noshell
+	@ echo "(Do 'lua bench.lua' to see what you should see.)" 
+	erl -pa ./ebin -s bench run -s init stop -noshell
 
 bench.beam: bench.erl
 	erlc bench.erl
