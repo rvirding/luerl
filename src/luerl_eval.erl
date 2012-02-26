@@ -32,6 +32,9 @@
 
 -module(luerl_eval).
 
+-include("luerl.hrl").
+
+%% Basic interface.
 -export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
@@ -40,7 +43,7 @@
 %% Currently unused internal functions, to suppress warnings.
 -export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,set_name_env/4]).
 
--include("luerl.hrl").
+-import(luerl_lib, [lua_error/1]).		%Shorten this
 
 %%-define(DP(F,As), io:format(F, As)).
 -define(DP(F, A), ok).
@@ -308,12 +311,12 @@ stat({assign,_,Vs,Es}, St) ->
 stat({return,L,Es}, #luerl{tag=Tag}=St0) ->
     {Vals,St1} = explist(Es, St0),
     throw({return,L,Tag,Vals,St1});
-stat({label,_,_}, _) ->			%Not implemented yet
-    error({undefined_op,label});
+stat({label,_,_}, _) ->				%Not implemented yet
+    lua_error({undefined_op,label});
 stat({break,L}, #luerl{tag=T}=St) ->
     throw({break,L,T,St});			%Easier match with explicit tag
-stat({goto,_,_}, _) ->			%Not implemented yet
-    error({undefined_op,goto});
+stat({goto,_,_}, _) ->				%Not implemented yet
+    lua_error({undefined_op,goto});
 stat({block,_,B}, St) ->
     block(B, St);
 stat({functiondef,L,Fname,Ps,B}, St) ->
@@ -635,7 +638,7 @@ function_block(Do, St) ->
 			    St2 = unwind_stack(St1#luerl.env, Old, St1),
 			    {Ret,St2};
 			throw:{break,L,Tag,_} ->
-			    error({illegal_op,L,break})
+			    lua_error({illegal_op,L,break})
 		    end
 	    end,
     with_block(Block, St).
@@ -862,10 +865,10 @@ first_value([V|_]) -> V;
 first_value([]) -> nil.
 
 badarg_error(What, Args) ->
-    error({badarg,What,Args}).
+    lua_error({badarg,What,Args}).
 
 illegal_val_error(Val) ->
-    error({illegal_val,Val}).
+    lua_error({illegal_val,Val}).
 
 %% gc(State) -> State.
 %% The garbage collector. Its main job is to reclaim unused tables. It

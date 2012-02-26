@@ -31,6 +31,8 @@
 
 -export([table/0]).
 
+-import(luerl_lib, [lua_error/1]).		%Shorten this
+
 table() ->
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
@@ -46,7 +48,7 @@ table() ->
 byte([A], St) -> byte(A, 1, 1, St);
 byte([A1,A2], St) -> byte(A1, A2, A2, St);
 byte([A1,A2,A3|_], St) -> byte(A1, A2, A3, St);
-byte(As, _) -> error({badarg,byte,As}).
+byte(As, _) -> lua_error({badarg,byte,As}).
 
 byte(A1, A2, A3, St) when is_binary(A1), is_number(A2), is_number(A3) ->
     F = round(A2),				%First and last positions
@@ -65,7 +67,7 @@ char(Cs, St) -> {list_to_binary(Cs),St}.
 format([F|As], St) ->
     L = format_loop(F, As),
     {[iolist_to_binary(L)],St};
-format(As, _) -> error({badarg,format,As}).
+format(As, _) -> lua_error({badarg,format,As}).
 
 format_loop(<<$%,F0/binary>>, As0) ->
     {Fo,F1} = collect(F0),
@@ -113,12 +115,12 @@ build({$g,_,_,_}, [A|As]) ->
 len([A|_], St) when is_binary(A) -> {byte_size(A),St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
-len(As, _) -> error({badarg,len,As}).
+len(As, _) -> lua_error({badarg,len,As}).
 
 lower([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_lower(S))],St};
-lower(As, _) -> error({badarg,lower,As}).
+lower(As, _) -> lua_error({badarg,lower,As}).
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
@@ -129,14 +131,14 @@ rep([_,_,_|_]=As, St) ->
 	       true -> {[<<>>],St}
 	    end;
 	nil ->					%Error or bad values
-	    error({badarg,rep,As})
+	    lua_error({badarg,rep,As})
     end;
-rep(As, _) -> error({badarg,rep,As}).
+rep(As, _) -> lua_error({badarg,rep,As}).
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
-reverse(As, _) -> error({badarg,reverse,As}).
+reverse(As, _) -> lua_error({badarg,reverse,As}).
 
 sub([A1|As], St) ->
     case luerl_lib:conv_list([A1|As], [lstring,integer,integer]) of
@@ -148,7 +150,7 @@ sub([A1|As], St) ->
 		  end,
 	    {[Sub],St}
     end;
-sub(As, _) -> error({badarg,sub,As}).
+sub(As, _) -> lua_error({badarg,sub,As}).
 
 do_sub(S, _, 0) -> S;
 do_sub(S, Len, I) when I < 1 -> do_sub(S, Len, Len+I+1, Len);
@@ -165,4 +167,4 @@ do_sub(S, _, I, J) -> binary:part(S, I-1, J-I+1). %Zero-based, yuch!
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
-upper(As, _) -> error({badarg,upper,As}).
+upper(As, _) -> lua_error({badarg,upper,As}).

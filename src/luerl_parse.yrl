@@ -34,7 +34,7 @@
 %% unnecessarily complex and all that was needed was to change one
 %% rule for statements.
 
-Expect 2. %Suppress shift/reduce warning
+Expect 2.					%Suppress shift/reduce warning
 
 Nonterminals
 chunk block stats stat semi retstat label_stat
@@ -175,8 +175,8 @@ functioncall -> prefixexp ':' NAME args :
 
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
-args -> tableconstructor : ['$1'] .	%Syntactic sugar
-args -> STRING : ['$1'] .		%Syntactic sugar
+args -> tableconstructor : ['$1'] .		%Syntactic sugar
+args -> STRING : ['$1'] .			%Syntactic sugar
 
 functiondef -> 'function' funcbody : functiondef(line('$1'), '$2').
 
@@ -254,7 +254,7 @@ numeric_for(Line, Var, [Init,Limit], Block) ->
     {for,Line,Var,Init,Limit,Block};
 numeric_for(Line, Var, [Init,Limit,Step], Block) ->
     {for,Line,Var,Init,Limit,Step,Block};
-numeric_for(Line, _, _, _) ->		%Wrong number of expressions
+numeric_for(Line, _, _, _) ->			%Wrong number of expressions
     return_error(Line, "illegal for").
 
 %% generic_for(Line, Names, ExpList, Block).

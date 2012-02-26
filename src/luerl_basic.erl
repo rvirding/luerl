@@ -33,6 +33,8 @@
 
 -export([table/0]).
 
+-import(luerl_lib, [lua_error/1]).		%Shorten this
+
 %% table() -> [{FuncName,Function}].
 %% Caller will convert this list to the correct format.
 
@@ -66,10 +68,10 @@ assert(As, St) ->
 	true -> {As,St};
 	false ->
 	    M = case As of
-		[_,M0|_] -> M0;
-		_ -> <<"assertion failed">>
+		    [_,M0|_] -> M0;
+		    _ -> <<"assertion failed">>
 		end,
-	    error({assert_error,M})
+	    lua_error({assert_error,M})
     end.
 
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
@@ -83,12 +85,12 @@ eprint(Args, St) ->
     io:nl(),
     {[],St}.
 
-error([M|_], _) -> error({lua_error,M});	%Never returns!
-error(As, _) -> error({badarg,error,As}).
+error([M|_], _) -> lua_error(M);		%Never returns!
+error(As, _) -> lua_error({badarg,error,As}).
 
 ipairs([{table,_}=T|_], St) ->
     {[{function,fun ipairs_next/2},T,0],St};
-ipairs(As, _) -> error({badarg,ipairs,As}).
+ipairs(As, _) -> lua_error({badarg,ipairs,As}).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
 ipairs_next([{table,T},I|_], St) ->
@@ -111,10 +113,10 @@ next([{table,T},K|_], St) ->
 	    case next_loop(K, Tab) of
 		[{Next,V}|_] -> {[Next,V],St};
 		[] -> {[nil],St};
-		error -> error({invalid_key,K})
+		error -> lua_error({invalid_key,K})
 	    end
     end;
-next(As, _) -> error({badarg,next,As}).
+next(As, _) -> lua_error({badarg,next,As}).
 
 next_loop(K, [{K,_}|Tab]) -> Tab;
 next_loop(K, [_|Tab]) -> next_loop(K, Tab);
@@ -122,7 +124,7 @@ next_loop(_, []) ->  error.
 
 pairs([{table,_}=T|_], St) ->
     {[{function,fun next/2},T,nil],St};
-pairs(As, _) -> error({badarg,pairs,As}).
+pairs(As, _) -> lua_error({badarg,pairs,As}).
 
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
@@ -134,7 +136,7 @@ print(Args, St0) ->
     {[],St1}.
 
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
-rawequal(As, _) -> error({badarg,rawequal,As}).
+rawequal(As, _) -> lua_error({badarg,rawequal,As}).
 
 rawget([{table,N},K|_], St) ->
     {T,_} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
@@ -142,13 +144,13 @@ rawget([{table,N},K|_], St) ->
 	{ok,Val} -> Val;
 	error -> nil				%Default value
     end;
-rawget(As, _) -> error({badarg,rawget,As}).
+rawget(As, _) -> lua_error({badarg,rawget,As}).
 
 rawlen([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
 rawlen([{table,N}|_], St) ->
     Tab = ?GET_TABLE(N, St#luerl.tabs),
     {length(element(1, Tab)),St};
-rawlen(As, _) -> error({badarg,rawlen,As}).
+rawlen(As, _) -> lua_error({badarg,rawlen,As}).
 
 rawset([{table,N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
     Upd = if Val =:= nil -> fun ({T,M}) -> {orddict:erase(Key, T),M} end;
@@ -156,16 +158,16 @@ rawset([{table,N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
 	  end,
     Ts1 = ?UPD_TABLE(N, Upd, Ts0),
     St#luerl{tabs=Ts1};
-rawset(As, _) -> error({badarg,rawset,As}).
+rawset(As, _) -> lua_error({badarg,rawset,As}).
 
 select([<<$#>>|As], St) -> {[length(As)],St};
 select([A|As], St) ->
     case luerl_lib:tonumber(A) of
 	N when is_number(N), N > 0 -> {select_front(round(N), As),St};
 	N when is_number(N), N < 0 -> {select_back(-round(N), As),St};
-	_ -> error({badarg,select,[A|As]})
+	_ -> lua_error({badarg,select,[A|As]})
     end;
-select(As, _) -> error({badarg,select,As}).
+select(As, _) -> lua_error({badarg,select,As}).
 
 select_front(N, As) when N < length(As) ->
     lists:nthtail(N-1, As);
@@ -231,14 +233,14 @@ setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
 setmetatable([{table,N}=A1,nil|_], St) ->
     Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
-setmetatable(As, _) -> error({badarg,setmetatable,As}).
+setmetatable(As, _) -> lua_error({badarg,setmetatable,As}).
 
 %% Load string and files.
 
 load(As, St) ->
     case luerl_lib:conv_list(As, [string]) of
 	[S] -> do_load(S, St);
-	nil -> error({badarg,load,As})
+	nil -> lua_error({badarg,load,As})
     end.
 
 loadfile(As, St) ->
@@ -250,7 +252,7 @@ loadfile(As, St) ->
 		    Msg = iolist_to_binary(file:format_error(E)),
 		    {[nil,Msg],St}
 	    end;
-	nil -> error({badarg,loadfile,As})
+	nil -> lua_error({badarg,loadfile,As})
     end.
 
 do_load(S, St) ->
@@ -275,7 +277,7 @@ dofile([A1|_], St0) when is_number(A1) ; is_binary(A1) ->
     {ok,Bin} = file:read_file(File),
     {ok,C} = parse_string(binary_to_list(Bin)),
     luerl_eval:chunk(C, St0);
-dofile(As, _) -> error({badarg,dofile,As}).
+dofile(As, _) -> lua_error({badarg,dofile,As}).
 
 parse_string(S) ->
     case luerl_scan:string(S) of

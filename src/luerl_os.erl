@@ -31,6 +31,8 @@
 
 -export([table/0]).
 
+-import(luerl_lib, [lua_error/1]).		%Shorten this
+
 table() ->
     [{<<"difftime">>,{function,fun difftime/2}},
      {<<"getenv">>,{function,fun getenv/2}},
@@ -43,7 +45,7 @@ getenv([A|_], St) when is_binary(A) ; is_number(A) ->
 	    {[list_to_binary(Env)],St};
 	false -> {[nil],St}
     end;
-getenv(As, _) -> error({badarg,getenv,As}).
+getenv(As, _) -> lua_error({badarg,getenv,As}).
 
 %% Time functions.
 

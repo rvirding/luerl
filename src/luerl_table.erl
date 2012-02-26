@@ -37,6 +37,8 @@
 
 -export([table/0]).
 
+-import(luerl_lib, [lua_error/1]).		%Shorten this
+
 %% table() -> [{FuncName,Function}].
 %% Caller will convert this list to the correct format.
 
@@ -49,17 +51,17 @@ table() ->
 concat([{table,_}=T], St) -> concat(T, <<>>, [1.0], St);
 concat([{table,_}=T,A2], St) -> concat(T, A2, [1.0], St);
 concat([{table,_}=T,A2|As], St) -> concat(T, A2, As, St);
-concat(As, _) -> error({badarg,concat,As}).
+concat(As, _) -> lua_error({badarg,concat,As}).
 
 concat({table,N}=T, A2, As, St) ->
     {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:tostrings([A2], luerl_lib:tointegers(As)) of
 	[Sep|Is] -> {[concat(Tab, Sep, Is)],St};
-	_ -> error({badarg,concat,[T,A2|As]})
+	_ -> lua_error({badarg,concat,[T,A2|As]})
     end.
 
 concat(_, _, [I|_]) when I < 1.0 ->
-    error({illegal_val,concat,I});
+    lua_error({illegal_val,concat,I});
 concat(Tab, Sep, [I]) ->
     Rest = skip_until(Tab, I),
     Conc = concat_loop(Rest, I),
@@ -71,7 +73,7 @@ concat(Tab, Sep, [I,J|_]) ->
 
 concat_loop([{N,V}|Tab], N) ->			%An interesting element
     case luerl_lib:to_list(V) of		%Check if right type
-	nil -> error({illegal_val,concat,V});
+	nil -> lua_error({illegal_val,concat,V});
 	S -> [S|concat_loop(Tab, N+1)]
     end;
 concat_loop([{K,_}|Tab], N) when K < N ->	%Skip intermediates
@@ -81,13 +83,13 @@ concat_loop(_, _) -> [].			%No more interesting elements
 concat_loop(_, N, J) when N > J -> [];		%Done
 concat_loop([{N,V}|Tab], N, J) ->		%An interesting element
     case luerl_lib:to_list(V) of		%Check if right type
-	nil -> error({illegal_val,concat,V});
+	nil -> lua_error({illegal_val,concat,V});
 	S -> [S|concat_loop(Tab, N+1, J)]
     end;
 concat_loop([{K,_}|Tab], N, J) when K < N ->	%Skip intermediates
     concat_loop(Tab, N, J);
 concat_loop(_, _, J) ->				%No more interesting elements
-    error({illegal_val,concat,J}).
+    lua_error({illegal_val,concat,J}).
 
 concat_join([E], _) -> list_to_binary(E);
 concat_join([E1|Es], Sep) ->
@@ -113,7 +115,7 @@ unpack([{table,N}=T|As], St) ->
 	[I,J|_] ->
 	    Start = skip_until(Tab, I),
 	    {unpack_loop(Start, I, J),St};
-	_ -> error({badarg,unpack,[T|As]})
+	_ -> lua_error({badarg,unpack,[T|As]})
     end.
 
 skip_until([{K,_}|_]=Tab, I) when K >= I -> Tab;
