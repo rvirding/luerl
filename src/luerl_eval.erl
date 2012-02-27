@@ -52,7 +52,7 @@
 %% Initialise the basic state.
 
 init() ->
-    St0 = #luerl{env=[],locf=false,tag=make_ref()},
+    St0 = #luerl{meta=[],env=[],locf=false,tag=make_ref()},
     %% Initialise the table handling.
     St1 = St0#luerl{tabs=?MAKE_TABLE(),free=[],next=0},
     %% Allocate the _G table and initialise the environment
@@ -65,10 +65,6 @@ init() ->
 %% 		      {<<"table">>,luerl_table}], St4),
 %%     St5 = alloc_libs([{<<"math">>,luerl_math},
 %% 		      {<<"os">>,luerl_os},
-%% 		      {<<"table">>,luerl_table}], St4),
-%%     St5 = alloc_libs([{<<"math">>,luerl_math},
-%% 		      {<<"os">>,luerl_os},
-%% 		      {<<"string">>,luerl_string},
 %% 		      {<<"table">>,luerl_table}], St4),
     St5 = alloc_libs([{<<"math">>,luerl_math},
 		      {<<"os">>,luerl_os},
@@ -836,16 +832,6 @@ getmetamethod({table,N}, E, #luerl{tabs=Ts}) ->
     getmetamethod_tab(Meta, E, Ts);
 getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
-%%     case ?GET_TABLE(N, Ts) of
-%% 	{_,{table,M}} ->			%There is a metatable
-%% 	    {Mtab,_} = ?GET_TABLE(M, Ts),
-%% 	    case orddict:find(E, Mtab) of
-%% 		{ok,Mm} -> Mm;
-%% 		error -> nil
-%% 	    end;
-%% 	{_,nil} -> nil				%No metatable
-%%     end;
-
 getmetamethod_tab({table,M}, E, Ts) ->
     {Mtab,_} = ?GET_TABLE(M, Ts),
     case orddict:find(E, Mtab) of
@@ -880,13 +866,13 @@ gc(#luerl{tabs=Ts0,free=Free0,env=Env}=St) ->
     Seen = mark(Env, [], [], Ts0),
     %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
-    Ts1 = ?FILTER_TABLE(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
-    Free1 = ?FOLD_TABLE(fun (K, _, F) ->
-				case ordsets:is_element(K, Seen) of
-				    true -> F;
-				    false -> [K|F]
-				end
-			end, Free0, Ts0),
+    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
+    Free1 = ?FOLD_TABLES(fun (K, _, F) ->
+				 case ordsets:is_element(K, Seen) of
+				     true -> F;
+				     false -> [K|F]
+				 end
+			 end, Free0, Ts0),
     St#luerl{tabs=Ts1,free=Free1}.
 
 %% mark(ToDo, MoreTodo, Seen, Tabs) -> Seen.

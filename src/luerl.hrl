@@ -4,6 +4,7 @@
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
 -record(luerl, {tabs,free,next,			%Table structure
+		meta=[],			%Data type metatables
 		env,				%Environment
 		locf=false,			%Started local function
 		tag				%Unique tag
@@ -26,8 +27,8 @@
 -define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
 -define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
 -define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
--define(FILTER_TABLE(Pred, Ts), orddict:filter(Pred, Ts)).
--define(FOLD_TABLE(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
+-define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
+-define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(USE_ARRAY).
@@ -38,7 +39,7 @@
 -define(UPD_TABLE(N, Upd, Ar),
 	array:set(N, (Upd)(array:get(N, Ar)), Ar)).
 -define(DEL_TABLE(N, Ar), array:reset(N, Ar)).
--define(FILTER_TABLE(Pred, Ar),
+-define(FILTER_TABLES(Pred, Ar),
 	((fun (___Def) ->
 		  Fil = fun (___K, ___V) ->
 				case Pred(___K, ___V) of
@@ -48,7 +49,7 @@
 			end,
 		  array:sparse_map(Fil, Ar)
 	  end)(array:default(Ar)))).
--define(FOLD_TABLE(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
+-define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
 -endif.
 
 -ifdef(USE_PD).
@@ -58,8 +59,8 @@
 -define(SET_TABLE(N, T, Pd), put(N, T)).
 -define(UPD_TABLE(N, Upd, Pd), put(N, (Upd)(get(N)))).
 -define(DEL_TABLE(N, Pd), erase(N)).
--define(FILTER_TABLE(Pred, Pd), Pd).		%This needs work
--define(FOLD_TABLE(Fun, Acc, Pd), Pd).		%This needs work
+-define(FILTER_TABLES(Pred, Pd), Pd).		%This needs work
+-define(FOLD_TABLES(Fun, Acc, Pd), Pd).		%This needs work
 -endif.
 
 -ifdef(USE_ETS).
@@ -71,8 +72,8 @@
 	begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
 	      E end).
 -define(DEL_TABLE(N, E), begin ets:delete(E, N), E end).
--define(FILTER_TABLE(Pred, E), E).		%This needs work
--define(FOLD_TABLE(Fun, Acc, E),
+-define(FILTER_TABLES(Pred, E), E).		%This needs work
+-define(FOLD_TABLES(Fun, Acc, E),
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
