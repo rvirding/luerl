@@ -27,14 +27,14 @@ underlying Erlang VM takes care of the distribution.
 
 **Microprocesses:** It should give you a Lua environment that allows you to
 effortlessly run tens of thousands of Lua processes in parallel, leveraging the
-famed microprocesses implementation of the the Erlang VM. The empty Luerl
+famed microprocesses implementation of the Erlang VM. The empty Luerl
 State footprint will be yet smaller than the C Lua State footprint.
 
 **Forking Up:** Because of the immutable nature of the Luerl VM, it becomes
-a natural operation use the same Lua State as a starting point for multiple
+a natural operation to use the same Lua State as a starting point for multiple
 parallel calculations.
 
-However, Luerl will generally execute slower than a reasonable native Lua
+However, Luerl will generally run slower than a reasonable native Lua
 implementation. This is mainly due the emulation of mutable data on top of an
 immutable world. There is really no way around this. An alternative would be
 to implement a special Lua memory outside of the normal Erlang, but this would
