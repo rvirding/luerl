@@ -29,7 +29,7 @@
 
 -module(luerl_string).
 
--export([table/0]).
+-export([table/0,do_match/2]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -39,6 +39,7 @@ table() ->
      {<<"format">>,{function, fun format/2}},
      {<<"len">>,{function,fun len/2}},
      {<<"lower">>,{function,fun lower/2}},
+     {<<"match">>,{function,fun match/2}},
      {<<"rep">>,{function,fun rep/2}},
      {<<"reverse">>,{function,fun reverse/2}},
      {<<"sub">>,{function,fun sub/2}},
@@ -122,6 +123,29 @@ lower([A|_], St) when is_binary(A) ; is_number(A) ->
     {[list_to_binary(string:to_lower(S))],St};
 lower(As, _) -> lua_error({badarg,lower,As}).
 
+match([A1,A2], St) -> match([A1,A2,1.0], St);
+match(As, St) ->
+    case luerl_lib:conv_list(As, [string,string,integer]) of
+	[S,P,I] -> {match(S, length(S), P, I),St};
+	_ -> lua_error({badarg,match,As})
+    end.
+
+match(S, Len, P, I) when I > Len -> [nil];
+match(S, Len, P, I) when I < -Len -> [nil];
+match(S, Len, P, I) when I < 0 ->
+    match(S, Len, P, Len+I+1);
+match(S, Len, P, I) ->
+    match_loop(lists:nthtail(I-1, S), P).
+
+match_loop([], _) -> [nil];
+match_loop(S, P) ->
+    case do_match(S, P) of
+	nomatch -> match_loop(tl(S), P);
+	{match,[Ca],_} -> [list_to_binary(Ca)];
+	{match,[_|Cas],_} ->
+	    [ list_to_binary(Ca) || Ca <- Cas ]
+    end.
+
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
     case luerl_lib:conv_list(As, [list,integer,list]) of
@@ -168,3 +192,113 @@ upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
 upper(As, _) -> lua_error({badarg,upper,As}).
+
+%% Patterns.
+%% %a
+%% %d
+%% *
+%% ^$
+%% ()
+%% []
+
+%% do_match(String, Pattern) -> {match,[Capture],Rest} | nomatch.
+
+do_match(S0, P0) ->
+    case do_match(P0, S0, [], []) of
+	{match,_,[$)|S],Ca,Cas} -> {match,[lists:reverse(Ca)|Cas],S};
+	{match,_,S,Ca,Cas} -> {match,[lists:reverse(Ca)|Cas],S};
+	{nomatch,_,_,_,_} -> nomatch
+    end.
+
+%% do_match(Pattern, String, Cap, [Cap]) ->
+%%     {match,Pat,Str,Cap,[Cap]} | {nomatch,Pat,Str,Cap,[Cap]}.
+
+do_match([$%,$a|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_a_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$c|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_c_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$d|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_d_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$l|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_l_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$u|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_u_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$w|P]=P0, [C|S]=S0, Ca, Cas) ->
+    case is_w_char(C) of
+	true -> do_match(P, S, [C|Ca], Cas);
+	false -> {nomatch,P0,S0,Ca,Cas}
+    end;
+do_match([$%,$x|P]=P0, [C|S]=S0, Ca, Cas) ->
+    do_match_type(is_x_char(C), P0, P, S0, Ca, Cas);
+do_match([$(|P], S, Ca, Cas) ->			%Enter new capture
+    do_match_cap(P, S, Ca, Cas);
+do_match([$)|_]=P, S, Ca, Cas) ->		%Exit this capture
+    {match,P, S, Ca, Cas};
+do_match([$.|P], [C|S], Ca, Cas) ->
+    do_match(P, S, [C|Ca], Cas);
+do_match([C|P], [C|S], Ca, Cas) ->
+    do_match(P, S, [C|Ca], Cas);
+do_match([$$], [], Ca, Cas) -> {match,[],[],Ca,Cas};
+do_match([_|_]=P0, S, Ca, Cas) -> {nomatch,P0,S,Ca,Cas};
+do_match([], S, [], Cas) -> {match,[],S,[],Cas};
+do_match([], S, Ca, Cas) -> {match,[],S,Ca,Cas}.
+
+do_match_type(true, _, P, [C|S], Ca, Cas) ->
+    do_match(P, S, [C|Ca], Cas);
+do_match_type(false, P0, _, S, Ca, Cas) ->
+    {nomatch,P0,S,Ca,Cas}.
+
+do_match_cap(P0, S0, Ca0, Cas0) ->
+    case do_match(P0, S0, [], Cas0) of
+	{match,[$)|P1],S1,Ca1,Cas1} ->		%Correctly terminated
+	    Ca2 = lists:reverse(Ca1),
+	    do_match(P1, S1, Ca1 ++ Ca0, [Ca2|Cas1]);
+	{match,P1,S1,Ca1,Cas1} ->		%Missing ')', ignore
+	    Ca2 = lists:reverse(Ca1),
+	    do_match(P1, S1, Ca1 ++ Ca0, [Ca2|Cas1]);
+	{nomatch,_P1,_S1,_Ca1,_Cas1}=NM -> NM
+    end.
+
+%% Test for various character types.
+
+is_a_char($_) -> true;				%All letters
+is_a_char(C) ->
+    is_l_char(C) orelse is_u_char(C).
+
+is_c_char(C) when C >= 0, C =< 31 -> true;	%All control characters
+is_c_char(C) when C >= 128, C =< 159 -> true;
+is_c_char(_) -> false.
+
+is_d_char(C) -> (C >= $0) and (C =< $9).	%All digits
+
+is_l_char(C) when C >= $a, C =< $z -> true;	%All lowercase letters
+is_l_char(C) when C >= 224, C =< 246 -> true;
+is_l_char(C) when C >= 248, C =< 255 -> true;
+is_l_char(_) -> false.
+
+is_u_char(C) when C >= $A, C =< $Z -> true;	%All uppercase letters
+is_u_char(C) when C >= 192, C =< 214 -> true;
+is_u_char(C) when C >= 216, C =< 223 -> true;
+is_u_char(_) -> false.
+
+is_w_char(C) ->					%All alphanumeric characters
+    is_a_char(C) orelse is_d_char(C).
+
+is_x_char(C) when C >= $a, C =< $f -> true;	%All hexadecimal characters
+is_x_char(C) when C >= $A, C =< $F -> true;
+is_x_char(C) -> is_d_char(C).
