@@ -18,20 +18,41 @@ Some things which are known not to be implemented or work properly:
 When to use Luerl
 -----------------
 
-Luerl will be slower than a reasonable native Lua implementation. This
-is mainly due to having to emulate mutable data on top of an immutable
-world. There is really no way around this. An alternative would be to
-implement a special Lua memory outside of the normal Erlang, but this
-would defeat the purpose of Luerl. It would instead be then more
-logical to connect to a native Lua.
+**Fast Language Switch:** Luerl should allow you to switch between Erlang and
+Lua incredibly fast, introducing a way to use very small bits of logic
+programmed in Lua, inside an Erlang application, with good performance.
+
+**Multicore:** Luerl provides a way to transparently utilize multicores. The
+underlying Erlang VM takes care of the distribution.
+
+**Microprocesses:** It should give you a Lua environment that allows you to
+effortlessly run tens of thousands of Lua processes in parallel, leveraging the
+famed microprocesses implementation of the Erlang VM. The empty Luerl
+State footprint will be yet smaller than the C Lua State footprint.
+
+**Forking Up:** Because of the immutable nature of the Luerl VM, it becomes
+a natural operation to use the same Lua State as a starting point for multiple
+parallel calculations.
+
+However, Luerl will generally run slower than a reasonable native Lua
+implementation. This is mainly due the emulation of mutable data on top of an
+immutable world. There is really no way around this. An alternative would be
+to implement a special Lua memory outside of the normal Erlang, but this would
+defeat the purpose of Luerl. It would instead be then more logical to connect to
+a native Lua.
 
 Some valid use cases for Luerl are:
 
 - Lua code will be run only occasionally and it wouldn't be worth
-  managing an extra language implementation in the appkication.
+  managing an extra language implementation in the application.
 
-- The Lua code chunks are small so the slower speed are wayed up by
+- The Lua code chunks are small so the slower speed is weighed up by
   Luerl's faster interface.
+
+- The Lua code calculates and reads variables more than changing them.
+
+- The same Lua State is repeatedly used to 'fork up' as a basis for
+  massively many parallel calculations, based on the same state.
 
 - It is easy to run multiple instances of Luerl which could better
   utilise multicores.
