@@ -141,26 +141,29 @@ set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
 		    functioncall(Meth, [Key,Val], St);
 		Meth -> set_table_key(Key, Val, Meth, St)
 	    end
-    end.
+    end;
+set_table_key(Key, _, Tab, _) ->
+    lua_error({illegal_index,Tab,Key}).
 
 get_table_name(Name, Tab, St) ->
     get_table_key(atom_to_binary(Name, latin1), Tab, St).
 
-get_table_key(K, {table,N}=T, #luerl{tabs=Ts}=St) ->
+get_table_key(Key, {table,N}=T, #luerl{tabs=Ts}=St) ->
     {Tab,Meta} = ?GET_TABLE(N, Ts),		%Get the table.
-    case orddict:find(K, Tab) of
+    case orddict:find(Key, Tab) of
 	{ok,Val} -> {Val,St};
 	error ->
 	    %% Key not present so try metamethod
 	    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 		nil -> {nil,St};
 		Meth when element(1, Meth) =:= function ->
-		    {Vs,St1} = functioncall(Meth, [T,K], St),
+		    {Vs,St1} = functioncall(Meth, [T,Key], St),
 		    {first_value(Vs),St1};	%Only one value
-		Meth -> get_table_key(K, Meth, St)
+		Meth -> get_table_key(Key, Meth, St)
 	    end
     end;
-get_table_key(_, _, St) -> {nil,St}.		%Key can never be present
+get_table_key(Key, Tab, _) ->
+    lua_error({illegal_index,Tab,Key}).
 
 %% set_local_name(Name, Val, State) -> State.
 %% set_local_key(Key, Value, State) -> State.
@@ -172,12 +175,12 @@ get_table_key(_, _, St) -> {nil,St}.		%Key can never be present
 set_local_name(Name, Val, St) ->
     set_local_key(atom_to_binary(Name, latin1), Val, St).
 
-set_local_name_env(Name, Val, Ts, Env) ->
-    set_local_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
-
 set_local_key(Key, Val, #luerl{tabs=Ts0,env=Env}=St) ->
     Ts1 = set_local_key_env(Key, Val, Ts0, Env),
     St#luerl{tabs=Ts1}.
+
+set_local_name_env(Name, Val, Ts, Env) ->
+    set_local_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
 set_local_key_env(K, Val, Ts, [{table,E}|_]) ->
     Store = fun ({T,M}) -> {orddict:store(K, Val, T),M} end,
@@ -197,17 +200,17 @@ set_local_keys_tab([K|Ks], [], T0) ->
 set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 
 %% set_name(Name, Val, State) -> State.
-%% get_name(Name, State) -> Val.
 %% set_key(Key, Value, State) -> State.
+%% set_key_env(Key, Value, Tables, Env) -> Tables.
+%% get_name(Name, State) -> Val.
 %% get_key(Key, State) -> Value.
+%% get_key_env(Key, Tables, Env) -> Value.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
 %%  them in the environment stack.
 
 set_name(Name, Val, St) ->
     set_key(atom_to_binary(Name, latin1), Val, St).
-
-get_name(Name, St) -> get_key(atom_to_binary(Name, latin1), St).
 
 set_name_env(Name, Val, Ts, Env) ->
     set_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
@@ -227,6 +230,8 @@ set_key_env(K, Val, Ts, [{table,E}|Es]) ->
 	    ?UPD_TABLE(E, Store, Ts);
 	false -> set_key_env(K, Val, Ts, Es)
     end.
+
+get_name(Name, St) -> get_key(atom_to_binary(Name, latin1), St).
 
 get_key(K, #luerl{tabs=Ts,env=Env}) ->
     get_key_env(K, Ts, Env).
@@ -352,7 +357,7 @@ assign_loop([], _, St) -> St.
 %% set_var(PrefixExp, Val, State) -> State.
 %%  Step down the prefixexp sequence evaluating as we go, stop at the
 %%  end and return a key and a table where to put data. We can reuse
-%%  much of the prefixexp code bt must have our own thing at the end.
+%%  much of the prefixexp code but must have our own thing at the end.
 
 set_var({'.',_,Exp,Rest}, Val, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
@@ -568,6 +573,10 @@ exp(E, St) ->
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, Next, St1);
+%%     case Next of
+%% 	{table,_} -> prefixexp_rest(Rest, Next, St1);
+%% 	_ -> lua_error({illegal_index,Exp})
+%%     end;
 prefixexp(P, St) -> prefixexp_first(P, St).
 
 prefixexp_first({'NAME',_,N}, St) -> {[get_name(N, St)],St};
