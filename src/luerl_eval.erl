@@ -168,6 +168,7 @@ get_table_key(Key, Tab, _) ->
 %% set_local_name(Name, Val, State) -> State.
 %% set_local_key(Key, Value, State) -> State.
 %% set_local_keys(Keys, Values, State) -> State.
+%% get_local_key(Key, State) -> Value | nil.
 %%  Set variable values in the local environment. Variables are not
 %%  cleared when their value is set to 'nil' as this would remove the
 %%  local variable.
@@ -199,12 +200,19 @@ set_local_keys_tab([K|Ks], [], T0) ->
     set_local_keys_tab(Ks, [], T1);
 set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 
+get_local_key(Key, #luerl{tabs=Ts,env=[{table,E}|_]}) ->
+    {Tab,_} = ?GET_TABLE(E, Ts),
+    case orddict:find(Key, Tab) of
+	{ok,Val} -> Val;
+	error -> nil
+    end.
+
 %% set_name(Name, Val, State) -> State.
 %% set_key(Key, Value, State) -> State.
 %% set_key_env(Key, Value, Tables, Env) -> Tables.
 %% get_name(Name, State) -> Val.
-%% get_key(Key, State) -> Value.
-%% get_key_env(Key, Tables, Env) -> Value.
+%% get_key(Key, State) -> Value | nil.
+%% get_key_env(Key, Tables, Env) -> Value | nil.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
 %%  them in the environment stack.
@@ -550,7 +558,11 @@ exp({false,_}, St) -> {[false],St};
 exp({true,_}, St) -> {[true],St};
 exp({'NUMBER',_,N}, St) -> {[N],St};
 exp({'STRING',_,S}, St) -> {[S],St};
-exp({'...',_}, _) -> illegal_val_error('...');
+exp({'...',_}, St) ->				%Get '...', error if undefined
+    case get_local_key('...', St) of
+	nil -> illegal_val_error('...');
+	Val -> {Val,St}
+    end;
 exp({functiondef,L,Ps,B}, St) ->
     {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
@@ -610,7 +622,7 @@ functioncall({function,_,Env,Ps,B}, Args, St0) ->
     St1 = St0#luerl{env=Env},			%Set function's environment
     Do = fun (S0) ->
 		 %% Use local assign to put argument into environment.
-		 S1 = assign_local_loop(Ps, Args, S0),
+		 S1 = assign_par_loop(Ps, Args, S0),
 		 {[],stats(B, S1)}
 	 end,
     {Ret,St2} = function_block(Do, St1),
@@ -625,6 +637,23 @@ functioncall(Func, As, St) ->
 	nil -> badarg_error(Func, As);
 	Meta -> functioncall(Meta, As, St)
     end.
+
+%% assign_par_loop(Names, Vals, State) -> State.
+%% Could probably merge this and assign_local_loop.
+
+assign_par_loop(Ns, Vals, St) ->
+    Ts = assign_par_loop(Ns, Vals, St#luerl.tabs, St#luerl.env),
+    St#luerl{tabs=Ts}.
+
+assign_par_loop([{'NAME',_,V}|Ns], [Val|Vals], Ts0, Env) ->
+    Ts1 = set_local_name_env(V, Val, Ts0, Env),
+    assign_par_loop(Ns, Vals, Ts1, Env);
+assign_par_loop([{'NAME',_,V}|Ns], [], Ts0, Env) ->
+    Ts1 = set_local_name_env(V, nil, Ts0, Env),
+    assign_par_loop(Ns, [], Ts1, Env);
+assign_par_loop([{'...',_}], Vs, Ts, Env) ->
+    set_local_key_env('...', Vs, Ts, Env);
+assign_par_loop([], _, Ts, _) -> Ts.
 
 %% function_block(Do, State) -> {Return,State}.
 %%  The top level block in which to evaluate functions run loops
