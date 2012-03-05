@@ -33,6 +33,8 @@
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
+-compile([bin_opt_info]).			%For when we are optimising
+
 table() ->
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
@@ -125,8 +127,8 @@ lower(As, _) -> lua_error({badarg,lower,As}).
 
 match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
-    case luerl_lib:conv_list(As, [string,string,integer]) of
-	[S,P,I] -> {match(S, length(S), P, I),St};
+    case luerl_lib:conv_list(As, [lstring,string,integer]) of
+	[S,P,I] -> {match(S, byte_size(S), P, I),St};
 	_ -> lua_error({badarg,match,As})
     end.
 
@@ -134,19 +136,23 @@ match(_, L, _, I) when I > L -> [nil];		%Shuffle values
 match(_, L, _, I) when I < -L -> [nil];
 match(S, L, P, I) when I < 0 ->
     match(S, L, P, L+I+1);
-match(S, _, P, I) ->
-    {ok,{Pat,_},[]} = pat(P),			%"Compile" the pattern
-    match_loop(lists:nthtail(I-1, S), Pat, I).
+match(S, L, P, I) ->
+    case pat(P) of				%"Compile" the pattern
+	{ok,{Pat,_},_} -> match_loop(S, L, Pat, I);
+	{error,E} -> lua_error(E)
+    end.
 
-match_loop([], _, _) -> [nil];
-match_loop(S, Pat, I) ->
-    case do_match(S, Pat, I) of
-	nomatch -> match_loop(tl(S), Pat, I+1);
-	{match,[Ca],_} -> [list_to_binary(Ca)];	%Only top level match
+match_loop(_, L, _, I) when I > L -> [nil];	%No more to check
+match_loop(S, L, Pat, I) ->
+    Rest = binary_part(S, I-1, L-I+1),		%The bit we are interested in
+    case do_match(Rest, Pat, I) of
+	nomatch -> match_loop(S, L, Pat, I+1);
+	{match,[{_,F,N}],_} ->			%Only top level match
+	    [binary_part(S, F-1, N-F)];
 	{match,[_|Cas],_} ->			%Have sub matches
-	    [ if is_integer(Ca) -> float(Ca);	%String position
-		 true -> list_to_binary(Ca) end
-	      || Ca <- Cas ]
+	    [ if F =:= N -> float(F);		%String position
+		 true -> binary_part(S, F-1, N-F) end
+	      || {_,F,N} <- Cas ]
     end.
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
@@ -196,79 +202,61 @@ upper([A|_], St) when is_binary(A) ; is_number(A) ->
     {[list_to_binary(string:to_upper(S))],St};
 upper(As, _) -> lua_error({badarg,upper,As}).
 
-%% Patterns.
-%% %a
-%% %d
-%% *
-%% ^$
-%% ()
-%% []
-
-%% This is the pattern grammar used.
+%% This is the pattern grammar used. It may actually be overkill to
+%% first parse the pattern as the pattern is relativey simple and we
+%% should be able to do it in one pass.
 %%
-%% pat -> "^" pat1 "$" : '$1'.
-%% pat1 -> pat1 pat2 : {concat,'$1','$2'}.
-%% pat1 -> pat2 : '$1'.
-%% pat2 -> pat2 "*" : {kclosure,'$1'}.
-%% pat2 -> pat2 "+" : {pclosure,'$1'}.
-%% pat2 -> pat2 "?" : {optional,'$1'}.
-%% pat2 -> pat3 : '$1'.
-%% pat3 -> "(" pat ")" : '$2'.
-%% pat3 -> "%" char : '$2'.
-%% pat3 -> "." : char.
-%% pat3 -> "[" class "]" : {char_class,char_class('$2')}
-%% pat3 -> "[" "^" class "]" : {comp_class,char_class('$3')}
-%% pat3 -> char : '$1'.
-%% pat3 -> empty : epsilon.
-%%  The actual parser is a recursive descent implementation of the grammar.
+%% pat -> seq : '$1'.
+%% seq -> single seq : ['$1'|'$2'].
+%% seq -> single : '$1'.
+%% single -> "(" seq ")" .
+%% single -> "[" class "]" : {char_class,char_class('$2')}
+%% single -> "[" "^" class "]" : {comp_class,char_class('$3')}
+%% single -> char "*" .
+%% single -> char "+" .
+%% single -> char "-" .
+%% single -> char "?" .
+%% single -> char .
+%% char -> "%" class .
+%% char -> "." .
+%% char -> char .
+%%  The actual parser is a recursive descent implementation of the
+%%  grammar. We leave ^ $ as normal characters and handle them
+%%  specially in matching.
 
 pat(Cs0) ->
-    case catch pat1(Cs0, 0) of
-	{P,Cs1,Sc} -> {ok,{P,Sc},Cs1};
-	{error,E} -> {error,E}
+    case catch seq(Cs0, 0, 1, []) of
+	{error,E} -> {error,E};
+	{P,0,Sn} -> {ok,{P,0},Sn};
+	{_,_,_} -> {error,invalid_capture}
     end.
 
-%% pat1(Chars, SubNumber) -> {Pattern,SubNumber,Chars}.
-%% Allow the empty sequence.
+seq([_|_]=Cs, Sd, Sn, P) -> single(Cs, Sd, Sn, P);
+seq([], Sd, Sn, P) -> {lists:reverse(P),Sd,Sn}.
 
-pat1(Cs0, Sn0) -> pat1p(Cs0, Sn0).
+single([$(|Cs], Sd, Sn, P) -> single(Cs, Sd+1, Sn+1, [{'(',Sn}|P]);
+single([$)|_], 0, _, _) -> throw({error,invalid_capture});
+single([$)|Cs], Sd, Sn, P) -> single(Cs, Sd-1, Sn, [')'|P]);
+single([$[|Cs], Sd, Sn, P) -> char_class(Cs, Sd, Sn, P);
+single([$.|Cs], Sd, Sn, P) -> singlep(Cs, Sd, Sn, ['.'|P]);
+single([$%,C|Cs], Sd, Sn, P) -> singlep(Cs, Sd, Sn, [char_class(C)|P]); 
+single([C|Cs], Sd, Sn, P) -> singlep(Cs, Sd, Sn, [C|P]);
+single([], Sd, Sn, P) -> {lists:reverse(P),Sd,Sn}.
 
-pat1p([C|_]=Cs0, Sn0) when C /= $) ->
-    {P,Cs1,Sn1} = pat2(Cs0, Sn0),
-    {Ps,Cs2,Sn2} = pat1p(Cs1, Sn1),
-    {[P|Ps],Cs2,Sn2};
-pat1p(Cs, Sn) -> {[],Cs,Sn}.
+singlep([$*|Cs], Sd, Sn, [Char|P]) -> single(Cs, Sd, Sn, [{kclosure,Char}|P]);
+singlep([$+|Cs], Sd, Sn, [Char|P]) -> single(Cs, Sd, Sn, [{pclosure,Char}|P]);
+singlep([$-|Cs], Sd, Sn, [Char|P]) -> single(Cs, Sd, Sn, [{mclosure,Char}|P]);
+singlep([$?|Cs], Sd, Sn, [Char|P]) -> single(Cs, Sd, Sn, [{optional,Char}|P]);
+singlep(Cs, Sd, Sn, P) -> single(Cs, Sd, Sn, P).
 
-pat2(Cs0, Sn0) ->
-    {L,Cs1,Sn1} = pat3(Cs0, Sn0),
-    pat2p(Cs1, Sn1, L).
+char_class([$^|Cs], Sd, Sn, P) -> char_class(Cs, Sd, Sn, P, comp_class);
+char_class(Cs, Sd, Sn, P) -> char_class(Cs, Sd, Sn, P, char_class).
 
-pat2p([$*|Cs], Sn, L) -> pat2p(Cs, Sn, {kclosure,L});
-pat2p([$+|Cs], Sn, L) -> pat2p(Cs, Sn, {pclosure,L});
-pat2p([$-|Cs], Sn, L) -> pat2p(Cs, Sn, {mclosure,L});
-pat2p([$?|Cs], Sn, L) -> pat2p(Cs, Sn, {optional,L});
-pat2p(Cs, Sn, L) -> {L,Cs,Sn}.
-
-pat3([$(|Cs0], Sn0) ->
-    Sn1 = Sn0 + 1,
-    case pat1(Cs0, Sn1) of
-	{P,[$)|Cs1],Sn2} -> {{sub,Sn1,P},Cs1,Sn2};
-	X -> throw({error,{unterminated,"(",X}})
-    end;
-pat3([$[,$^|Cs0], Sn) ->
+char_class(Cs0, Sd, Sn, P, Tag) ->
     case char_class(Cs0, []) of
-	{Cc,[$]|Cs1]} -> {{comp_class,Cc},Cs1,Sn};
-	_ -> throw({error,{unterminated,"["}})
-    end;
-pat3([$[|Cs0], Sn) ->
-    case char_class(Cs0, []) of
-	{Cc,[$]|Cs1]} -> {{char_class,Cc},Cs1,Sn};
-	_ -> throw({error,{unterminated,"["}})
-    end;
-pat3([$%,C|Cs], Sn) -> {char_class(C),Cs,Sn};
-pat3([$.|Cs], Sn) -> {'.',Cs,Sn};
-pat3([C|Cs], Sn) when C /= $*, C /= $+, C /= $?, C /= $-, C /= $] -> {C,Cs,Sn};
-pat3([], Sn) -> {epsilon,[],Sn}.
+	{Cc,[$]|Cs1]} -> singlep(Cs1, Sd, Sn, [{Tag,Cc}|P]);
+	_ -> throw({error,invalid_class})
+    end.
 
 char_class($a) -> 'a';
 char_class($A) -> 'A';
@@ -287,65 +275,73 @@ char_class($X) -> 'X';
 char_class(C) -> C.
 
 char_class([$%,C|Cs], Cc) -> char_class(Cs, [char_class(C)|Cc]);
-char_class([C1,$-,C2|Cs], Cc) ->
-    if C1 < C2 -> char_class(Cs, [{C1,C2}|Cc]);
-       true -> throw({error,char_class})
-    end;
+char_class([C1,$-,C2|Cs], Cc) -> char_class(Cs, [{C1,C2}|Cc]);
 char_class([C|Cs], Cc) when C /= $] -> char_class(Cs, [C|Cc]);
 char_class(Cs, Cc) -> {Cc,Cs}.
 
 %% do_match(String, Pattern, Index) -> {match,[Capture],Rest} | nomatch.
 
 do_match(S0, P0, I0) ->
-    case do_match(P0, S0, I0, [], []) of
-	{match,S1,_,Ca,Cas} ->			%Ca top level match
-	    {match,[lists:reverse(Ca)|Cas],S1};
+    case do_match(P0, S0, I0, [{0,I0}], []) of
+	{match,S1,_,_,Cas} ->{match,Cas,S1};
 	{nomatch,_,_,_,_,_} -> nomatch
     end.
 
-do_match([$$], [], I, Ca, Cas) -> {match,[],I,Ca,Cas};
-do_match([$^|Ps], Cs, 1, Ca, Cas) ->
-    do_match(Ps, Cs, 2, Ca, Cas);
-%%do_match([{kclosure,P}|Ps]
-do_match([{pclosure,P}|Ps], Cs, I, Ca, Cas) ->
-    do_match([P,{kclosure,P}|Ps], Cs, I, Ca, Cas);
-do_match([{optional,P}|Ps], Cs, I, Ca, Cas) ->
-    case do_match([P|Ps], Cs, I, Ca, Cas) of
+do_match([$$], <<>>, I, Ca, Cas) ->		%Match end of string
+    {match,[],I,Ca,Cas};
+do_match([$^|Ps], Cs, 1, Ca, Cas) ->		%Match beginning of string
+    do_match(Ps, Cs, 1, Ca, Cas);
+do_match([{'(',Sn}|P], Cs, I, Ca, Cas) ->
+    do_match(P, Cs, I, [{Sn,I}|Ca], Cas);
+do_match([')'|P], Cs, I, [{Sn,S}|Ca], Cas) ->
+    do_match(P, Cs, I, Ca, save_cap(Sn, S, I, Cas));
+do_match([{kclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
+    case do_match([P,K|Ps], Cs, I, Ca, Cas) of	%First try with it
 	{match,_,_,_,_}=M -> M;
-	{nomatch,_,_,_,_,_} -> do_match(Ps, Cs, I, Ca, Cas)
+	{nomatch,_,_,_,_,_} ->			%Else try without it
+	    do_match(Ps, Cs, I, Ca, Cas)
     end;
-do_match([{sub,_,[]}|Ps], Cs, I, Ca, Cas) ->
-    do_match(Ps, Cs, I, Ca, Cas ++ [I]);
-do_match([{sub,_,P1}|Ps], Cs0, I0, Ca0, Cas0) ->
-    case do_match(P1, Cs0, I0, [], []) of
-	{match,Cs1,I1,Ca1,Cas1} ->
-	    Ca2 = lists:reverse(Ca1),
-	    do_match(Ps, Cs1, I1, Ca1 ++ Ca0, Cas0 ++ [Ca2] ++ Cas1);
-	{nomatch,_,_,_,_,_}=NM -> NM
+do_match([{pclosure,P}|Ps], Cs, I, Ca, Cas) ->	%The easy way
+    do_match([P,{kclosure,P}|Ps], Cs, I, Ca, Cas);
+do_match([{mclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
+    case do_match(Ps, Cs, I, Ca, Cas) of	%First try without it
+	{match,_,_,_,_}=M -> M;
+	{nomatch,_,_,_,_,_} ->			%Else try with it
+	    do_match([P,K|Ps], Cs, I, Ca, Cas)
     end;
-do_match([{char_class,CC}|Ps]=Ps0, [C|Cs]=Cs0, I, Ca, Cas) ->
+do_match([{optional,P}|Ps], Cs, I, Ca, Cas) ->
+    case do_match([P|Ps], Cs, I, Ca, Cas) of	%First try with it
+	{match,_,_,_,_}=M -> M;
+	{nomatch,_,_,_,_,_} ->			%Else try without it
+	    do_match(Ps, Cs, I, Ca, Cas)
+    end;
+do_match([{char_class,CC}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
     case match_char_class(CC, C) of
-	true -> do_match(Ps, Cs, I+1, [C|Ca], Cas);
+	true -> do_match(Ps, Cs, I+1, Ca, Cas);
 	false -> {nomatch,Ps0,Cs0,I,Ca,Cas}
     end;
-do_match([{comp_class,CC}|Ps]=Ps0, [C|Cs]=Cs0, I, Ca, Cas) ->
+do_match([{comp_class,CC}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
     case match_char_class(CC, C) of
 	true -> {nomatch,Ps0,Cs0,I,Ca,Cas};
-	false -> do_match(Ps, Cs, I+1, [C|Ca], Cas)
+	false -> do_match(Ps, Cs, I+1, Ca, Cas)
     end;
-do_match(['.'|Ps], [C|Cs], I, Ca, Cas) ->
-    do_match(Ps, Cs, I+1, [C|Ca], Cas);
-do_match([A|Ps]=Ps0, [C|Cs]=Cs0, I, Ca, Cas) when is_atom(A) ->
+do_match(['.'|Ps], <<_,Cs/binary>>, I, Ca, Cas) ->	%Matches anything
+    do_match(Ps, Cs, I+1, Ca, Cas);
+do_match([A|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) when is_atom(A) ->
     case match_class(A, C) of
-	true -> do_match(Ps, Cs, I+1, [C|Ca], Cas);
+	true -> do_match(Ps, Cs, I+1, Ca, Cas);
 	false -> {nomatch,Ps0,Cs0,I,Ca,Cas}
     end;
-do_match([C|Ps], [C|Cs], I, Ca, Cas) ->
-    do_match(Ps, Cs, I+1, [C|Ca], Cas);
-do_match([], Cs, I, Ca, Cas) ->
-    {match,Cs,I,Ca,Cas};
+do_match([C|Ps], <<C,Cs/binary>>, I, Ca, Cas) ->
+    do_match(Ps, Cs, I+1, Ca, Cas);
+do_match([], Cs, I, [{Sn,S}|Ca], Cas) ->
+    {match,Cs,I,Ca,[{Sn,S,I}|Cas]};
 do_match(Ps, Cs, I, Ca, Cas) ->
     {nomatch,Ps,Cs,I,Ca,Cas}.
+
+save_cap(N, F, L, [{N1,_,_}=Ca|Cas]) when N > N1 ->
+    [Ca|save_cap(N, F, L, Cas)];
+save_cap(N, F, L, Cas) -> [{N,F,L}|Cas].
 
 match_class('a', C) -> is_a_char(C);
 match_class('A', C) -> not is_a_char(C);
