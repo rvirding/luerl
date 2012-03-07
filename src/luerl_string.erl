@@ -100,12 +100,12 @@ find(_, L, _, I, _) when I > L -> [nil];
 find(S, L, P, I, Pl) when I < -L -> find(S, L, P, 1, Pl);
 find(S, L, P, I, Pl) when I < 0 -> find(S, L, P, L+I+1, Pl);
 find(S, L, P, 0, Pl) ->  find(S, L, P, 1, Pl);
-find(S, L, P, I, true) ->
+find(S, L, P, I, true) ->			%Plain text search string
     case binary:match(S, P, [{scope,{I-1,L-I+1}}]) of
 	{Fs,Fl} -> [Fs+1,Fs+Fl];
 	nomatch -> [nil]
     end;
-find(S, L, P, I, false) ->
+find(S, L, P, I, false) ->			%Pattern search string
     case pat(binary_to_list(P)) of
 	{ok,{Pat,_},_} ->
 	    case find_loop(S, L, Pat, I) of
@@ -179,11 +179,11 @@ build({$g,_,_,_}, [A|As]) ->
 gmatch(As, _) -> lua_error({badarg,gmatch,As}).
 
 gsub(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,lstring,lstring,integer]) of
+    case luerl_lib:conv_list(As, [lstring,lstring,lany,integer]) of
 	[S,P,R,N] when N > 0 ->
-	    {gsub(S, byte_size(S), P, R, N),St};
-	[S,P,R] ->				%all bigger than any number
-	    {gsub(S, byte_size(S), P, R, all),St};
+	    gsub(S, byte_size(S), P, R, N, St);
+	[S,P,R] ->				%'all' bigger than any number
+	    gsub(S, byte_size(S), P, R, all, St);
 	_ -> lua_error({badarg,gsub,As})
     end.
 
@@ -191,15 +191,17 @@ test_gsub(S, P, N) ->
     {ok,{Pat,_},_} = pat(binary_to_list(P)),
     gsub_loop(S, byte_size(S), Pat, 1, 1, N).
 
-gsub(S, L, P, R, N) ->
+gsub(S, L, P, R, N, St0) ->
     case pat(binary_to_list(P)) of
 	{ok,{Pat,_},_} ->
 	    Fs = gsub_loop(S, L, Pat, 1, 1, N),
-	    [iolist_to_binary(gsub_repl(Fs, S, 1, L, R))];
+	    {Ps,St1} = gsub_repl_loop(Fs, S, 1, L, R, St0),
+	    {[iolist_to_binary(Ps),float(length(Fs))],St1};
 	{error,E} -> lua_error(E)
     end.
 
-%% gsub_loop(S, L, Pat, I, C, N) ->
+%% gsub_loop(S, L, Pat, I, C, N) -> [Cas].
+%%  Return the list of Cas's for each match.
 
 gsub_loop(_, _, _, _, C, N) when C > N -> [];
 gsub_loop(<<>>, _, _, _, _, _) -> [];
@@ -212,13 +214,63 @@ gsub_loop(S0, L, Pat, I0, C, N) ->
 	    gsub_loop(S1, L, Pat, I0+1, C, N)
     end.
 
-gsub_repl([[{_,F,Len}|_]=Cas|Fs], S, I, L, R) ->
-    [binary_part(S, I-1, F-I),gsub_repl(Cas, S, R)|
-     gsub_repl(Fs, S, F+Len, L, R)];
-gsub_repl([], S, I, L, _) ->
-    [binary_part(S, I-1, L-I+1)].
+%% gsub_repl_loop([Cas], String, Index, Length, Reply, State) ->
+%%     {iolist,State}.
+%%  Build the return string as an iolist processing each match and
+%%  filling in with the original string.
 
-gsub_repl(Cas, S, Repl) -> Repl.
+gsub_repl_loop([[{_,F,Len}|_]=Cas|Fs], S, I, L, R, St0) ->
+    {Rep,St1} = gsub_repl(Cas, S, R, St0),
+    {Ps,St2} = gsub_repl_loop(Fs, S, F+Len, L, R, St1),
+    {[binary_part(S, I-1, F-I),Rep|Ps],St2};
+gsub_repl_loop([], S, I, L, _, St) ->
+    {[binary_part(S, I-1, L-I+1)],St}.
+
+gsub_repl(Cas, S, {table,N}, #luerl{tabs=Ts}=St) ->
+    Ca = case Cas of				%Get the right capture
+	     [_Ca] -> _Ca;
+	     [_,_Ca|_] -> _Ca
+	 end,
+    Key = match_ca(S, Ca),
+    {Tab,_} = ?GET_TABLE(N, Ts),
+    V = case orddict:find(Key, Tab) of
+	    {ok,Val} -> Val;
+	    error -> nil
+	end,
+    {[gsub_repl_val(S, V, Ca)],St};
+gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
+    Args = case Cas0 of
+	       [Ca] -> [match_ca(S, Ca)];
+	       [Ca|Cas] -> match_cas(S, Cas)
+	   end,
+    {Rs,St1} = luerl_eval:functioncall(Repl, Args, St0),
+    {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
+gsub_repl(Cas, S, Repl, St) ->
+    case luerl_lib:to_list(Repl) of
+	nil -> {[],St};
+	R -> {gsub_repl_str(Cas, S, R),St}
+    end.
+
+gsub_repl_str(Cas, S, [$%,$%|R]) ->
+    [$%|gsub_repl_str(Cas, S, R)];
+gsub_repl_str(Cas, S, [$%,$0|R]) ->
+    [match_ca(S, hd(Cas))|gsub_repl_str(Cas, S, R)];
+gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
+    case lists:keysearch(C-$0, 1, Cas) of
+	{value,Ca} -> [match_ca(S, Ca)|gsub_repl_str(Cas, S, R)];
+	false -> lua_error({illegal_index,capture,C-$0})
+    end;
+gsub_repl_str(Cas, S, [C|R]) ->
+    [C|gsub_repl_str(Cas, S, R)];
+gsub_repl_str(_, _, []) -> [].
+
+%% Return string or original match.
+
+gsub_repl_val(S, Val, Ca) ->
+    case luerl_lib:tostring(Val) of
+	nil -> match_ca(S, Ca);			%Use original match
+	Str -> Str
+    end.
 
 len([A|_], St) when is_binary(A) -> {byte_size(A),St};
 len([A|_], St) when is_number(A) ->
@@ -256,17 +308,18 @@ match_loop(S, L, Pat, I) ->
     Rest = binary_part(S, I-1, L-I+1),		%The bit we are interested in
     case do_match(Rest, Pat, I) of
 	nomatch -> match_loop(S, L, Pat, I+1);
-	{match,[{_,F,N}],_,_} ->		%Only top level match
-	    [binary_part(S, F-1, N-F)];
+	{match,[{_,F,Len}],_,_} ->		%Only top level match
+	    [binary_part(S, F-1, Len)];
 	{match,[_|Cas],_,_} ->			%Have sub matches
 	    match_cas(S, Cas)
     end.
 
-match_cas(S, Cas) ->
-    [ if Len < 0 -> float(F);
-	 Len =:= 0 -> <<>>;		%String position
-	 true -> binary_part(S, F-1, Len) end
-      || {_,F,Len} <- Cas ].
+match_ca(_, {_,F,Len}) when Len < 0 ->		%Capture position
+    float(F);
+match_ca(S, {_,F,Len}) ->			%Capture
+    binary_part(S, F-1, Len).
+
+match_cas(S, Cas) -> [ match_ca(S, Ca) || Ca <- Cas ].
     
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->

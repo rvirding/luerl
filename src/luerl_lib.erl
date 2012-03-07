@@ -166,12 +166,12 @@ conv_list([A|As], [To|Tos], Rs0) ->
 	Rs1 ->
 	    %% Get the right value.
 	    Ret = case To of
-		      any -> A;
 		      %% Erlang types.
 		      list -> to_list(A);
 		      integer -> to_int(A);
 		      string -> to_list(A);
 		      %% Lua types.
+		      lany -> A;
 		      linteger -> tointeger(A);
 		      lnumber -> tonumber(A);
 		      lstring -> tostring(A);

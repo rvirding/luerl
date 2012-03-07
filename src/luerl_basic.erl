@@ -225,16 +225,16 @@ type(_) -> <<"unknown">>.
 
 %% Meta table functions.
 
-getmetatable([{table,T}|_], St) ->
-    {_,M} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+getmetatable([{table,T}|_], #luerl{tabs=Ts}=St) ->
+    {_,M} = ?GET_TABLE(T, Ts),			%Get the table
     {[M],St};
-getmetatable([{userdata,_}|_], St) ->
-    {[(St#luerl.meta)#meta.userdata],St};
-getmetatable(S, St) when is_binary(S) ->
-    {[(St#luerl.meta)#meta.string],St};
-getmetatable(N, St) when is_number(N) ->
-    {[(St#luerl.meta)#meta.string],St};
-getmetatable(_, St) -> {[nil],St}.
+getmetatable([{userdata,_}|_], #luerl{meta=Meta}=St) ->
+    {[Meta#meta.userdata],St};
+getmetatable(S, #luerl{meta=Meta}=St) when is_binary(S) ->
+    {[Meta#meta.string],St};
+getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
+    {[Meta#meta.number],St};
+getmetatable(_, St) -> {[nil],St}.		%Other types have no metatables
 
 setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
     Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
