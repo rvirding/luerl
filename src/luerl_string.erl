@@ -29,16 +29,33 @@
 
 -module(luerl_string).
 
--export([table/0,do_match/3,pat/1]).
+-include("luerl.hrl").
+
+-export([install/1]).
+
+-export([test_gsub/3,test_do_match/3,test_pat/1]).	%Test functions
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
 -compile([bin_opt_info]).			%For when we are optimising
 
-table() ->
+install(St0) ->
+    {T,St1} = luerl_eval:alloc_table(table(), St0),
+    {M,St2} = luerl_eval:alloc_table(metatable(T), St1),
+    Meta0 = St2#luerl.meta,
+    Meta1 = Meta0#meta{string=M},
+    {T,St2#luerl{meta=Meta1}}.
+
+metatable(T) ->					%String type metatable
+    [{<<"__index">>,T}].
+
+table() ->					%String table
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
+     {<<"find">>,{function,fun find/2}},
      {<<"format">>,{function, fun format/2}},
+     {<<"gmatch">>,{function,fun gmatch/2}},
+     {<<"gsub">>,{function,fun gsub/2}},
      {<<"len">>,{function,fun len/2}},
      {<<"lower">>,{function,fun lower/2}},
      {<<"match">>,{function,fun match/2}},
@@ -62,7 +79,51 @@ byte(A1, A2, A3, St) when is_binary(A1), is_number(A2), is_number(A3) ->
     end;
 byte(_, _, _, St) -> {[],St}.
 
-char(Cs, St) -> {list_to_binary(Cs),St}.
+char(As, St) ->
+    case catch list_to_binary(luerl_lib:tointegers(As)) of
+	{'EXIT',_} -> lua_error({badarg,char,As});
+	B -> {[B],St}
+    end.
+
+find([A1,A2], St) -> find([A1,A2,1.0], St);
+find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
+find(As, St) ->
+    case luerl_lib:conv_list(As, [lstring,lstring,integer,lbool]) of
+	nil -> lua_error({badarg,find,As});
+	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St}
+    end.
+
+%% find(String, Length, Pattern, Start, Plain) -> [Return].
+%% Adjust the starting index and find the string.
+
+find(_, L, _, I, _) when I > L -> [nil];
+find(S, L, P, I, Pl) when I < -L -> find(S, L, P, 1, Pl);
+find(S, L, P, I, Pl) when I < 0 -> find(S, L, P, L+I+1, Pl);
+find(S, L, P, 0, Pl) ->  find(S, L, P, 1, Pl);
+find(S, L, P, I, true) ->
+    case binary:match(S, P, [{scope,{I-1,L-I+1}}]) of
+	{Fs,Fl} -> [Fs+1,Fs+Fl];
+	nomatch -> [nil]
+    end;
+find(S, L, P, I, false) ->
+    case pat(binary_to_list(P)) of
+	{ok,{Pat,_},_} ->
+	    case find_loop(S, L, Pat, I) of
+		[{_,F,Len}|Cas] ->
+		    [float(F),float(F+Len-1)|match_cas(S, Cas)];
+		[] -> [nil]
+	    end;
+	{error,E} -> lua_error(E)
+    end.
+
+find_loop(_, L, _, I) when I > L -> [];
+find_loop(S0, L, Pat, I0) ->
+    case do_match(S0, Pat, I0) of
+	{match,Cas,_,_} -> Cas;
+	nomatch ->
+	    S1 = binary_part(S0, 1, L-1),
+	    find_loop(S1, L, Pat, I0+1)
+    end.
 
 %% format([Format,Arg|_], State) -> {String,State}.
 % A VERY primitive format function, barely works.
@@ -115,29 +176,77 @@ build({$g,_,_,_}, [A|As]) ->
     F = luerl_lib:tonumber(A),
     {io_lib:format("~g", [F]),As}.
 
+gmatch(As, _) -> lua_error({badarg,gmatch,As}).
+
+gsub(As, St) ->
+    case luerl_lib:conv_list(As, [lstring,lstring,lstring,integer]) of
+	[S,P,R,N] when N > 0 ->
+	    {gsub(S, byte_size(S), P, R, N),St};
+	[S,P,R] ->				%all bigger than any number
+	    {gsub(S, byte_size(S), P, R, all),St};
+	_ -> lua_error({badarg,gsub,As})
+    end.
+
+test_gsub(S, P, N) ->
+    {ok,{Pat,_},_} = pat(binary_to_list(P)),
+    gsub_loop(S, byte_size(S), Pat, 1, 1, N).
+
+gsub(S, L, P, R, N) ->
+    case pat(binary_to_list(P)) of
+	{ok,{Pat,_},_} ->
+	    Fs = gsub_loop(S, L, Pat, 1, 1, N),
+	    [iolist_to_binary(gsub_repl(Fs, S, 1, L, R))];
+	{error,E} -> lua_error(E)
+    end.
+
+%% gsub_loop(S, L, Pat, I, C, N) ->
+
+gsub_loop(_, _, _, _, C, N) when C > N -> [];
+gsub_loop(<<>>, _, _, _, _, _) -> [];
+gsub_loop(S0, L, Pat, I0, C, N) ->
+    case do_match(S0, Pat, I0) of
+	{match,Cas,S1,I1} ->
+	    [Cas|gsub_loop(S1, L, Pat, I1, C+1, N)];
+	nomatch ->
+	    S1 = binary_part(S0, 1, L-I0),
+	    gsub_loop(S1, L, Pat, I0+1, C, N)
+    end.
+
+gsub_repl([[{_,F,Len}|_]=Cas|Fs], S, I, L, R) ->
+    [binary_part(S, I-1, F-I),gsub_repl(Cas, S, R)|
+     gsub_repl(Fs, S, F+Len, L, R)];
+gsub_repl([], S, I, L, _) ->
+    [binary_part(S, I-1, L-I+1)].
+
+gsub_repl(Cas, S, Repl) -> Repl.
+
 len([A|_], St) when is_binary(A) -> {byte_size(A),St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
 len(As, _) -> lua_error({badarg,len,As}).
 
-lower([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:to_list(A),
-    {[list_to_binary(string:to_lower(S))],St};
-lower(As, _) -> lua_error({badarg,lower,As}).
+lower(As, St) ->
+    case luerl_lib:conv_list(As, [list]) of
+	[S] -> {[list_to_binary(string:to_lower(S))],St};
+	nil -> lua_error({badarg,lower,As})
+    end.
 
 match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,string,integer]) of
+    case luerl_lib:conv_list(As, [lstring,lstring,integer]) of
 	[S,P,I] -> {match(S, byte_size(S), P, I),St};
 	_ -> lua_error({badarg,match,As})
     end.
 
+%% match(String, Length, Pattern, Start) -> [Return].
+%% Adjust the starting index and find the match.
+
 match(_, L, _, I) when I > L -> [nil];		%Shuffle values
-match(_, L, _, I) when I < -L -> [nil];
-match(S, L, P, I) when I < 0 ->
-    match(S, L, P, L+I+1);
+match(S, L, P, I) when I < -L -> match(S, L, P, 1);
+match(S, L, P, I) when I < 0 -> match(S, L, P, L+I+1);
+match(S, L, P, 0) -> match(S, L, P, 1);
 match(S, L, P, I) ->
-    case pat(P) of				%"Compile" the pattern
+    case pat(binary_to_list(P)) of		%"Compile" the pattern
 	{ok,{Pat,_},_} -> match_loop(S, L, Pat, I);
 	{error,E} -> lua_error(E)
     end.
@@ -147,14 +256,18 @@ match_loop(S, L, Pat, I) ->
     Rest = binary_part(S, I-1, L-I+1),		%The bit we are interested in
     case do_match(Rest, Pat, I) of
 	nomatch -> match_loop(S, L, Pat, I+1);
-	{match,[{_,F,N}],_} ->			%Only top level match
+	{match,[{_,F,N}],_,_} ->		%Only top level match
 	    [binary_part(S, F-1, N-F)];
-	{match,[_|Cas],_} ->			%Have sub matches
-	    [ if F =:= N -> float(F);		%String position
-		 true -> binary_part(S, F-1, N-F) end
-	      || {_,F,N} <- Cas ]
+	{match,[_|Cas],_,_} ->			%Have sub matches
+	    match_cas(S, Cas)
     end.
 
+match_cas(S, Cas) ->
+    [ if Len < 0 -> float(F);
+	 Len =:= 0 -> <<>>;		%String position
+	 true -> binary_part(S, F-1, Len) end
+      || {_,F,Len} <- Cas ].
+    
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
     case luerl_lib:conv_list(As, [list,integer,list]) of
@@ -231,6 +344,8 @@ pat(Cs0) ->
 	{_,_,_} -> {error,invalid_capture}
     end.
 
+test_pat(P) -> pat(P).
+
 seq([_|_]=Cs, Sd, Sn, P) -> single(Cs, Sd, Sn, P);
 seq([], Sd, Sn, P) -> {lists:reverse(P),Sd,Sn}.
 
@@ -279,11 +394,17 @@ char_class([C1,$-,C2|Cs], Cc) -> char_class(Cs, [{C1,C2}|Cc]);
 char_class([C|Cs], Cc) when C /= $] -> char_class(Cs, [C|Cc]);
 char_class(Cs, Cc) -> {Cc,Cs}.
 
-%% do_match(String, Pattern, Index) -> {match,[Capture],Rest} | nomatch.
+test_do_match(S, P, I) ->
+    {ok,{Pat,_},_} = pat(P),
+    do_match(S, Pat, I).
+
+%% do_match(String, Pattern, Index) -> {match,[Capture],Rest,Index} | nomatch.
+%%  Try and match the pattern with the string *at the current
+%%  position*. No searching.
 
 do_match(S0, P0, I0) ->
     case do_match(P0, S0, I0, [{0,I0}], []) of
-	{match,S1,_,_,Cas} ->{match,Cas,S1};
+	{match,S1,I1,_,Cas} ->{match,Cas,S1,I1};
 	{nomatch,_,_,_,_,_} -> nomatch
     end.
 
@@ -291,10 +412,12 @@ do_match([$$], <<>>, I, Ca, Cas) ->		%Match end of string
     {match,[],I,Ca,Cas};
 do_match([$^|Ps], Cs, 1, Ca, Cas) ->		%Match beginning of string
     do_match(Ps, Cs, 1, Ca, Cas);
+do_match([{'(',Sn},')'|P], Cs, I, Ca, Cas) ->
+    do_match(P, Cs, I, Ca, save_cap(Sn, I, -1, Cas));
 do_match([{'(',Sn}|P], Cs, I, Ca, Cas) ->
     do_match(P, Cs, I, [{Sn,I}|Ca], Cas);
 do_match([')'|P], Cs, I, [{Sn,S}|Ca], Cas) ->
-    do_match(P, Cs, I, Ca, save_cap(Sn, S, I, Cas));
+    do_match(P, Cs, I, Ca, save_cap(Sn, S, I-S, Cas));
 do_match([{kclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
     case do_match([P,K|Ps], Cs, I, Ca, Cas) of	%First try with it
 	{match,_,_,_,_}=M -> M;
@@ -335,7 +458,7 @@ do_match([A|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) when is_atom(A) ->
 do_match([C|Ps], <<C,Cs/binary>>, I, Ca, Cas) ->
     do_match(Ps, Cs, I+1, Ca, Cas);
 do_match([], Cs, I, [{Sn,S}|Ca], Cas) ->
-    {match,Cs,I,Ca,[{Sn,S,I}|Cas]};
+    {match,Cs,I,Ca,[{Sn,S,I-S}|Cas]};
 do_match(Ps, Cs, I, Ca, Cas) ->
     {nomatch,Ps,Cs,I,Ca,Cas}.
 

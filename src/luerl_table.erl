@@ -35,12 +35,14 @@
 
 -include("luerl.hrl").
 
--export([table/0]).
+-export([install/1,length/2]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
+install(St) ->
+    luerl_eval:alloc_table(table(), St).
+
 %% table() -> [{FuncName,Function}].
-%% Caller will convert this list to the correct format.
 
 table() ->
     [{<<"concat">>,{function,fun concat/2}},
@@ -98,7 +100,7 @@ concat_join([], _) -> <<>>.
 
 
 pack(As, St0) ->
-    T = pack_loop(As, 0),
+    T = pack_loop(As, 0.0),			%Indexes are floats!
     {Tab,St1} = luerl_eval:alloc_table(T, St0),
     {[Tab],St1}.
 
@@ -106,6 +108,7 @@ pack_loop([E|Es], N) ->				%In order for an orddict!
     [{N+1,E}|pack_loop(Es, N+1)];
 pack_loop([], N) -> [{<<"n">>,N}].
 
+unpack([A1], St) -> unpack([A1,1.0], St);
 unpack([{table,N}=T|As], St) ->
     {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:tointegers(As) of
@@ -134,3 +137,22 @@ unpack_loop([{N,V}|Tab], N, J) -> [V|unpack_loop(Tab, N+1, J)];
 unpack_loop([{K,_}|_]=Tab, N, J) when K > N -> [nil|unpack_loop(Tab, N+1, J)];
 unpack_loop([{K,_}|Tab], N, J) when K < N -> unpack_loop(Tab, N, J);
 unpack_loop([], N, J) -> [nil|unpack_loop([], N+1, J)].
+
+%% length(Stable, State) -> {Length,State}.
+%%  The length of a table is the number of numeric keys in sequence
+%%  from 1.0.
+
+length({table,N}=T, St) ->
+    Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
+    if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
+       true ->
+	    Tab = ?GET_TABLE(N, St#luerl.tabs),
+	    {[length_loop(element(1, Tab))],St}
+    end.
+
+length_loop([{1.0,_}|T]) -> length_loop(T, 2.0);
+length_loop([_|T]) -> length_loop(T);
+length_loop([]) -> 0.0.
+
+length_loop([{K,_}|T], K) -> length_loop(T, K+1);
+length_loop(_, N) -> N-1.

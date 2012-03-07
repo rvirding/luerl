@@ -29,9 +29,12 @@
 
 -module(luerl_os).
 
--export([table/0]).
+-export([install/1]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
+
+install(St) ->
+    luerl_eval:alloc_table(table(), St).
 
 table() ->
     [{<<"difftime">>,{function,fun difftime/2}},

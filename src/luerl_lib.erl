@@ -124,7 +124,7 @@ tonumbers(As, Acc) ->
 tointegers(As) -> tointegers(As, []).
 
 tointegers(As, Acc) ->
-    to_loop(As, fun tonumber/1, Acc).
+    to_loop(As, fun tointeger/1, Acc).
 
 number_to_list(N) ->
     I = round(N),
@@ -166,6 +166,7 @@ conv_list([A|As], [To|Tos], Rs0) ->
 	Rs1 ->
 	    %% Get the right value.
 	    Ret = case To of
+		      any -> A;
 		      %% Erlang types.
 		      list -> to_list(A);
 		      integer -> to_int(A);
@@ -173,7 +174,8 @@ conv_list([A|As], [To|Tos], Rs0) ->
 		      %% Lua types.
 		      linteger -> tointeger(A);
 		      lnumber -> tonumber(A);
-		      lstring -> tostring(A)
+		      lstring -> tostring(A);
+		      lbool -> ?IS_TRUE(A)
 		  end,
 	    case Ret of
 		nil -> nil;			%Propagate nil

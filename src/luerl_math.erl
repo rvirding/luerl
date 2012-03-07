@@ -29,9 +29,12 @@
 
 -module(luerl_math).
 
--export([table/0]).
+-export([install/1]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
+
+install(St) ->
+    luerl_eval:alloc_table(table(), St).
 
 table() ->
     [{<<"abs">>,{function,fun abs/2}},

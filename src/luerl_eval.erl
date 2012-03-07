@@ -52,12 +52,11 @@
 %% Initialise the basic state.
 
 init() ->
-    St0 = #luerl{meta=[],env=[],locf=false,tag=make_ref()},
+    St0 = #luerl{meta=#meta{},env=[],locf=false,tag=make_ref()},
     %% Initialise the table handling.
     St1 = St0#luerl{tabs=?MAKE_TABLE(),free=[],next=0},
     %% Allocate the _G table and initialise the environment
-    Basic = orddict:from_list(luerl_basic:table()),
-    {_G,St2} = alloc_env(Basic, St1),		%Allocate base environment
+    {_G,St2} = luerl_basic:install(St1),	%Allocate base environment
     St3 = push_env(_G, St2),
     St4 = set_local_name('_G', _G, St3),	%Set _G to itself
     %% Add the other standard libraries.
@@ -74,8 +73,7 @@ init() ->
 
 alloc_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, St0) ->
-		  D = orddict:from_list(Mod:table()), %To be safe
-		  {T,St1} = alloc_table(D, St0),
+		  {T,St1} = Mod:install(St0),
 		  set_local_key(Key, T, St1)
 	  end,
     lists:foldl(Fun, St, Libs).
@@ -159,11 +157,19 @@ get_table_key(Key, {table,N}=T, #luerl{tabs=Ts}=St) ->
 		Meth when element(1, Meth) =:= function ->
 		    {Vs,St1} = functioncall(Meth, [T,Key], St),
 		    {first_value(Vs),St1};	%Only one value
-		Meth -> get_table_key(Key, Meth, St)
+		Meth ->				%Recurse down the metatable
+		    get_table_key(Key, Meth, St)
 	    end
     end;
-get_table_key(Key, Tab, _) ->
-    lua_error({illegal_index,Tab,Key}).
+get_table_key(Key, Tab, St) ->			%Just find the metamethod
+    case getmetamethod(Tab, <<"__index">>, St) of
+	nil -> lua_error({illegal_index,Tab,Key});
+	Meth when element(1, Meth) =:= function ->
+	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
+	    {first_value(Vs),St1};		%Only one value
+	Meth ->					%Recurse down the metatable
+	    get_table_key(Key, Meth, St)
+    end.
 
 %% set_local_name(Name, Val, State) -> State.
 %% set_local_key(Key, Value, State) -> State.
@@ -585,10 +591,6 @@ exp(E, St) ->
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, Next, St1);
-%%     case Next of
-%% 	{table,_} -> prefixexp_rest(Rest, Next, St1);
-%% 	_ -> lua_error({illegal_index,Exp})
-%%     end;
 prefixexp(P, St) -> prefixexp_first(P, St).
 
 prefixexp_first({'NAME',_,N}, St) -> {[get_name(N, St)],St};
@@ -722,7 +724,7 @@ op('not', nil, St) -> {[true],St};
 op('not', _, St) -> {[false],St};		%Everything else is false
 op('#', B, St) when is_binary(B) -> {[byte_size(B)],St};
 op('#', {table,_}=T, St) ->
-    table_length(T, St);
+    luerl_table:length(T, St);
 op(Op, A, _) -> badarg_error(Op, [A]).
 
 %% Numeric operators.
@@ -836,25 +838,6 @@ le_op(_, O1, O2, St0) ->
 	    {[not is_true(Ret)],St1}
     end.
 
-%% table_length(Stable, State) -> {Length,State}.
-%%  The length of a table is the number of numeric keys in sequence
-%%  from 1.0.
-
-table_length({table,N}=T, St) ->
-    Meta = getmetamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meta) -> functioncall(Meta, [T], St);
-       true ->
-	    Tab = ?GET_TABLE(N, St#luerl.tabs),
-	    {[length_loop(element(1, Tab))],St}
-    end.
-
-length_loop([{1.0,_}|T]) -> length_loop(T, 2.0);
-length_loop([_|T]) -> length_loop(T);
-length_loop([]) -> 0.
-
-length_loop([{K,_}|T], K) -> length_loop(T, K+1);
-length_loop(_, N) -> N-1.
-
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
 %% getmetamethod(Object, Event, State) -> Method | nil.
 %% Get the metamethod for object(s).
@@ -868,6 +851,12 @@ getmetamethod(O1, O2, E, St) ->
 getmetamethod({table,N}, E, #luerl{tabs=Ts}) ->
     {_,Meta} = ?GET_TABLE(N, Ts),
     getmetamethod_tab(Meta, E, Ts);
+getmetamethod({userdata,_}, E, #luerl{tabs=Ts,meta=Meta}) ->
+    getmetamethod_tab(Meta#meta.userdata, E, Ts);
+getmetamethod(S, E, #luerl{tabs=Ts,meta=Meta}) when is_binary(S) ->
+    getmetamethod_tab(Meta#meta.string, E, Ts);
+getmetamethod(N, E, #luerl{tabs=Ts,meta=Meta}) when is_number(N) ->
+    getmetamethod_tab(Meta#meta.number, E, Ts);
 getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab({table,M}, E, Ts) ->
@@ -900,8 +889,9 @@ illegal_val_error(Val) ->
 %% tables which it has seen. All unseen tables are then freed and
 %% their index added to the free list.
 
-gc(#luerl{tabs=Ts0,free=Free0,env=Env}=St) ->
-    Seen = mark(Env, [], [], Ts0),
+gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
+    Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata|Env],
+    Seen = mark(Root, [], [], Ts0),
     %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
     Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),

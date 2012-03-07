@@ -31,9 +31,12 @@
 
 -include("luerl.hrl").
 
--export([table/0]).
+-export([install/1]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
+
+install(St) ->
+    luerl_eval:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 %% Caller will convert this list to the correct format.
@@ -222,9 +225,15 @@ type(_) -> <<"unknown">>.
 
 %% Meta table functions.
 
-getmetatable([{table,T}|_], St) ->		%Only tables have metatables
+getmetatable([{table,T}|_], St) ->
     {_,M} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     {[M],St};
+getmetatable([{userdata,_}|_], St) ->
+    {[(St#luerl.meta)#meta.userdata],St};
+getmetatable(S, St) when is_binary(S) ->
+    {[(St#luerl.meta)#meta.string],St};
+getmetatable(N, St) when is_number(N) ->
+    {[(St#luerl.meta)#meta.string],St};
 getmetatable(_, St) -> {[nil],St}.
 
 setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
