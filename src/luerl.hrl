@@ -53,7 +53,7 @@
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Set which table store to use.
--define(USE_ORDDICT, true).
+-define(USE_ARRAY, true).
 
 -ifdef(USE_ORDDICT).
 %% Using orddict to handle tables.

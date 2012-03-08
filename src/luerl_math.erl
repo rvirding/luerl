@@ -49,6 +49,7 @@ table() ->
      {<<"exp">>,{function,fun exp/2}},
      {<<"floor">>,{function,fun floor/2}},
      {<<"log">>,{function,fun log/2}},
+     {<<"log10">>,{function,fun log10/2}},	%For 5.1 backwards compatibility
      {<<"max">>,{function,fun max/2}},
      {<<"min">>,{function,fun min/2}},
      {<<"pi">>,math:pi()},
@@ -132,9 +133,17 @@ floor(As, St) ->
 log(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N] -> {[math:log(N)],St};
+	[N,10.0|_] -> {[math:log10(N)],St};	%Seeing it is builtin
 	[N1,N2|_] ->
 	    {[math:log(N1)/math:log(N2)],St};
 	_ -> lua_error({badarg,log,As})
+    end.
+
+log10(As, St) ->				%For 5.1 backwards compatibility
+    case luerl_lib:tonumbers(As) of
+	[0.0|_] -> {[-500.0],St};		%Bit hacky
+	[N|_] -> {[math:log10(N)],St};
+	_ -> lua_error({badarg,log10,As})
     end.
 
 max(As, St) ->

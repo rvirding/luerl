@@ -66,6 +66,7 @@ init() ->
 %% 		      {<<"os">>,luerl_os},
 %% 		      {<<"table">>,luerl_table}], St4),
     St5 = alloc_libs([{<<"math">>,luerl_math},
+		      {<<"io">>,luerl_io},
 		      {<<"os">>,luerl_os},
 		      {<<"string">>,luerl_string},
 		      {<<"table">>,luerl_table}], St4),
@@ -124,9 +125,10 @@ set_table_key(Key, Val, {table,N}, #luerl{tabs=Ts0}=St) ->
     {Tab0,Meta} = ?GET_TABLE(N, Ts0),		%Get the table
     case orddict:find(Key, Tab0) of
 	{ok,_} ->
-	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
-		      true -> orddict:store(Key, Val, Tab0)
-		   end,
+%% 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
+%% 		      true -> orddict:store(Key, Val, Tab0)
+%% 		   end,
+	    Tab1 = orddict:store(Key, Val, Tab0),
 	    Ts1 = ?SET_TABLE(N, {Tab1,Meta}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->
@@ -350,6 +352,7 @@ stat({for,Line,V,I,L,B}, St) ->
 stat({for,Line,Ns,Gen,B}, St) ->
     do_genfor(Line, Ns, Gen, B, St);
 stat({local,Decl}, St) ->
+    %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
 stat(P, St0) ->
     %% These are just function calls here.
@@ -450,6 +453,7 @@ loop_block(Do, St) ->
 %% do_if(Tests, Else, State) -> State.
 
 do_if(Tests, Else, St0) ->
+    %% io:format("di: ~p\n", [{Tests,Else}]),
     if_tests(Tests, Else, St0).
 
 if_tests([{Exp,Block}|Ts], Else, St0) ->
@@ -490,7 +494,7 @@ numfor_loop(Name, I, L, S, B, St0)
     %% Create a local block for each iteration of the loop.
     St2 = block(B, St1),
     numfor_loop(Name, I+S, L, S, B, St2);
-numfor_loop(_, _, _, _, _, St) -> St.		%We're done
+numfor_loop(_, _, _, _, _, St) -> {[],St}.	%We're done
 
 %% do_genfor(Line, Names, Exps, Block, State) -> State.
 
@@ -551,6 +555,7 @@ assign_local_loop([], _, Ts, _) -> Ts.
 
 explist([E], St) -> exp(E, St);			%Appended values to output
 explist([E|Es], St0) ->
+    %% io:format("el: ~p\n", [E]),
     {[Val|_],St1} = exp(E, St0),		%Only take the first value
     {Vals,St2} = explist(Es, St1),
     {[Val|Vals],St2};
@@ -575,6 +580,22 @@ exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
     {[T],St2};
+%% 'and' and 'or' short-circuit so need special handling.
+exp({op,_,'and',L0,R0}, St0) ->
+    {[L1|_],St1} = exp(L0, St0),
+    if ?IS_TRUE(L1) ->
+	    {[R1|_],St2} = exp(R0, St1),
+	    {[R1],St2};
+       true -> {[L1],St1}
+    end;
+exp({op,_,'or',L0,R0}, St0) ->
+    {[L1|_],St1} = exp(L0, St0),
+    if ?IS_TRUE(L1) -> {[L1],St1};
+	true ->
+	    {[R1|_],St2} = exp(R0, St1),
+	    {[R1],St2}
+    end;
+%% All the other operators are strict.
 exp({op,_,Op,L0,R0}, St0) ->
     {[L1|_],St1} = exp(L0, St0),
     {[R1|_],St2} = exp(R0, St1),
@@ -591,10 +612,20 @@ exp(E, St) ->
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, Next, St1);
+%%     io:format("p: ~p\n", [{Exp,Rest}]),
+%%     case catch begin {[Next|_],St1} = prefixexp_first(Exp, St0),
+%% 		     prefixexp_rest(Rest, Next, St1)
+%% 	       end of
+%% 	{'EXIT',Err} ->
+%% 	    io:format("p> ~p\n", [{'EXIT',Err}]),
+%% 	    error(Err);
+%% 	Yeah -> Yeah
+%%     end;
 prefixexp(P, St) -> prefixexp_first(P, St).
 
 prefixexp_first({'NAME',_,N}, St) -> {[get_name(N, St)],St};
 prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
+    %% io:format("pf: ~p\n", [E]),
     {[R|_],St1} = exp(E, St0),
     {[R],St1}.
 
@@ -635,6 +666,7 @@ functioncall({function,Fun}, Args, St) when is_function(Fun) ->
 functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
+    %% io:format("fc: ~p\n", [{Func,As}]),
     case getmetamethod(Func, <<"__call">>, St) of
 	nil -> badarg_error(Func, As);
 	Meta -> functioncall(Meta, As, St)
@@ -719,10 +751,11 @@ tableconstructor(Fs, St0) ->
 
 op('-', A, St) ->
     numeric_op('-', A, <<"__unm">>, fun (N) -> -N end, St);
-op('not', false, St) -> {[true],St};
-op('not', nil, St) -> {[true],St};
-op('not', _, St) -> {[false],St};		%Everything else is false
-op('#', B, St) when is_binary(B) -> {[byte_size(B)],St};
+op('not', A, St) -> {[not ?IS_TRUE(A)],St};
+%% op('not', false, St) -> {[true],St};
+%% op('not', nil, St) -> {[true],St};
+%% op('not', _, St) -> {[false],St};		%Everything else is false
+op('#', B, St) when is_binary(B) -> {[float(byte_size(B))],St};
 op('#', {table,_}=T, St) ->
     luerl_table:length(T, St);
 op(Op, A, _) -> badarg_error(Op, [A]).
@@ -751,12 +784,12 @@ op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
 op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
 op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 %% Logical operators, handle truthy/falsey first arguments.
-op('and', nil, _, St) -> {[nil],St};
-op('and', false, _, St) -> {[false],St};
-op('and', _, A2, St) -> {[A2],St};			%A1 is "true"
-op('or', nil, A2, St) -> {[A2],St};
-op('or', false, A2, St) -> {[A2],St};
-op('or', A1, _, St) -> {[A1],St};			%A1 is "true"
+%% op('and', nil, _, St) -> {[nil],St};
+%% op('and', false, _, St) -> {[false],St};
+%% op('and', _, A2, St) -> {[A2],St};			%A1 is "true"
+%% op('or', nil, A2, St) -> {[A2],St};
+%% op('or', false, A2, St) -> {[A2],St};
+%% op('or', A1, _, St) -> {[A1],St};			%A1 is "true"
 %% String operator.
 op('..', A1, A2, St) ->
     B1 = luerl_lib:tostring(A1),
@@ -777,7 +810,7 @@ op(Op, A1, A2, _) -> badarg_error(Op, [A1,A2]).
 %% le_op(Op, Arg, Arg, State) -> {[Ret],State}.
 %%  Straigt out of the reference manual.
 
-numeric_op(_, O, E, Raw, St0) ->
+numeric_op(_Op, O, E, Raw, St0) ->
     N = luerl_lib:tonumber(O),
     if is_number(N) -> {[Raw(N)],St0};
        true ->
@@ -786,7 +819,7 @@ numeric_op(_, O, E, Raw, St0) ->
 	    {[is_true(Ret)],St1}
     end.
 
-numeric_op(_, O1, O2, E, Raw, St0) ->
+numeric_op(_Op, O1, O2, E, Raw, St0) ->
     N1 = luerl_lib:tonumber(O1),
     N2 = luerl_lib:tonumber(O2),
     if is_number(N1), is_number(N2) -> {[Raw(N1, N2)],St0};
@@ -796,13 +829,13 @@ numeric_op(_, O1, O2, E, Raw, St0) ->
 	    {[is_true(Ret)],St1}
     end.
 
-eq_op(_, O1, O2, St) when O1 =:= O2 -> {[true],St};
-eq_op(_, O1, O2, St0) ->
+eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[true],St};
+eq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
     {[is_true(Ret)],St1}.
 
-neq_op(_, O1, O2, St) when O1 =:= O2 -> {[false],St};
-neq_op(_, O1, O2, St0) ->
+neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[false],St};
+neq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
     {[not is_true(Ret)],St1}.
 
@@ -817,16 +850,16 @@ eq_meta(O1, O2, St0) ->
 	    end
     end.
 
-lt_op(_, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 < O2],St};
-lt_op(_, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 < O2],St};
-lt_op(_, O1, O2, St0) ->
+lt_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 < O2],St};
+lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 < O2],St};
+lt_op(_Op, O1, O2, St0) ->
     Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
     {Ret,St1} = functioncall(Meta, [O1,O2], St0),
     {[is_true(Ret)],St1}.
 
-le_op(_, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
-le_op(_, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
-le_op(_, O1, O2, St0) ->
+le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
+le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
+le_op(_Op, O1, O2, St0) ->
     case getmetamethod(O1, O2, <<"__le">>, St0) of
 	Meta when Meta =/= nil ->
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
@@ -907,6 +940,9 @@ gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
+mark([{in_table,_}=T|Todo], More, Seen, Ts) ->
+    %%io:format("gc: ~p\n", [T]),
+    mark(Todo, More, Seen, Ts);
 mark([{table,T}|Todo], More, Seen0, Ts) ->
     case ordsets:is_element(T, Seen0) of
 	true ->					%Already done
@@ -916,7 +952,7 @@ mark([{table,T}|Todo], More, Seen0, Ts) ->
 	    {Tab,Meta} = ?GET_TABLE(T, Ts),
 	    %% Have to be careful where add Tab and Meta as Tab is a
 	    %% [{Key,Val}] and Meta is a nil|{table,M}. We want lists.
-	    mark([Meta|Todo], [Tab|More], Seen1, Ts)
+	    mark([Meta|Todo], [[{in_table,T}],Tab,[{in_table,-T}]|More], Seen1, Ts)
     end;
 mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
     mark(Todo, [Env|More], Seen, Ts);
@@ -928,6 +964,7 @@ mark([{thread,_}|Todo], More, Seen, Ts) ->
 mark([{userdata,_}|Todo], More, Seen, Ts) ->
     mark(Todo, More, Seen, Ts);
 mark([{K,V}|Todo], More, Seen, Ts) ->		%Table key-value pair
+    %%io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, Seen, Ts);
 mark([_|Todo], More, Seen, Ts) ->		%Can ignore everything else
     mark(Todo, More, Seen, Ts);

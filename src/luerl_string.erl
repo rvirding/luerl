@@ -121,7 +121,7 @@ find_loop(S0, L, Pat, I0) ->
     case do_match(S0, Pat, I0) of
 	{match,Cas,_,_} -> Cas;
 	nomatch ->
-	    S1 = binary_part(S0, 1, L-1),
+	    S1 = binary_part(S0, 1, L-I0),
 	    find_loop(S1, L, Pat, I0+1)
     end.
 
@@ -151,8 +151,8 @@ collect(F0) ->
 
 collect_loop(<<D,F/binary>>) when D >= $0, D =< $9 ->
     collect_loop(F);
-collect_loop(<<$.,F/binary>>) ->
-    collect_loop(F);
+collect_loop(<<$.,F/binary>>) -> collect_loop(F);
+collect_loop(<<$-,F/binary>>) -> collect_loop(F);
 collect_loop(<<C,F/binary>>) -> {C,F}.
 
 %% build({C,F,Ad,P}, Args) -> {Out,Args}.
@@ -272,7 +272,7 @@ gsub_repl_val(S, Val, Ca) ->
 	Str -> Str
     end.
 
-len([A|_], St) when is_binary(A) -> {byte_size(A),St};
+len([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
 len(As, _) -> lua_error({badarg,len,As}).

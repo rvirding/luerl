@@ -42,7 +42,8 @@ install(St) ->
 %% Caller will convert this list to the correct format.
 
 table() ->
-    [{<<"assert">>,{function,fun assert/2}},
+    [{<<"_VERSION">>,<<"Lua 5.2">>},		%We are optimistic
+     {<<"assert">>,{function,fun assert/2}},
      {<<"collectgarbage">>,{function,fun collectgarbage/2}},
      {<<"dofile">>,{function,fun dofile/2}},
      {<<"eprint">>,{function,fun eprint/2}},
@@ -62,8 +63,7 @@ table() ->
      {<<"setmetatable">>,{function,fun setmetatable/2}},
      {<<"tonumber">>,{function,fun tonumber/2}},
      {<<"tostring">>,{function,fun tostring/2}},
-     {<<"type">>,{function,fun type/2}},
-     {<<"_VERSION">>,<<"Lua 5.2">>}		%We are optimistic
+     {<<"type">>,{function,fun type/2}}
     ].
 
 assert(As, St) ->
@@ -79,12 +79,17 @@ assert(As, St) ->
 
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
-    {[],luerl_eval:gc(St)};
+    {[],St};					%No-op for the moment
+%%    {[],luerl_eval:gc(St)};
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
 eprint(Args, St) ->
-    lists:foreach(fun (A) -> io:format("~w ", [A]) end, Args),
+    lists:foreach(fun ({table,N}) ->
+			  {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
+			  io:format("~w ", [Tab]);
+		      (A) -> io:format("~w ", [A])
+		  end, Args),
     io:nl(),
     {[],St}.
 
@@ -149,7 +154,7 @@ rawget([{table,N},K|_], St) ->
     end;
 rawget(As, _) -> lua_error({badarg,rawget,As}).
 
-rawlen([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
+rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 rawlen([{table,N}|_], St) ->
     Tab = ?GET_TABLE(N, St#luerl.tabs),
     {length(element(1, Tab)),St};
@@ -281,12 +286,14 @@ do_load(S, St) ->
 	    {[nil,Msg],St}
     end.
 
-dofile([A1|_], St0) when is_number(A1) ; is_binary(A1) ->
-    File = luerl_lib:tostring(A1),
-    {ok,Bin} = file:read_file(File),
-    {ok,C} = parse_string(binary_to_list(Bin)),
-    luerl_eval:chunk(C, St0);
-dofile(As, _) -> lua_error({badarg,dofile,As}).
+dofile(As, St) ->
+    case luerl_lib:tostrings(As) of
+	[File|_] ->
+	    {ok,Bin} = file:read_file(File),
+	    {ok,C} = parse_string(binary_to_list(Bin)),
+	    luerl_eval:chunk(C, St);
+	_ -> lua_error({badarg,dofile,As})
+    end.
 
 parse_string(S) ->
     case luerl_scan:string(S) of
