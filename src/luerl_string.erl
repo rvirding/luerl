@@ -283,6 +283,8 @@ lower(As, St) ->
 	nil -> lua_error({badarg,lower,As})
     end.
 
+%% match(Args, State) -> {[Match],State}.
+
 match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
     case luerl_lib:conv_list(As, [lstring,lstring,integer]) of
@@ -334,10 +336,14 @@ rep([_,_,_|_]=As, St) ->
     end;
 rep(As, _) -> lua_error({badarg,rep,As}).
 
+%% reverse(Args, State) -> {[Res],St}.
+
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
 reverse(As, _) -> lua_error({badarg,reverse,As}).
+
+%% sub(Args, State) -> {[Res],State}.
 
 sub([A1|As], St) ->
     case luerl_lib:conv_list([A1|As], [lstring,integer,integer]) of

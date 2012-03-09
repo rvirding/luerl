@@ -60,11 +60,6 @@ init() ->
     St3 = push_env(_G, St2),
     St4 = set_local_name('_G', _G, St3),	%Set _G to itself
     %% Add the other standard libraries.
-%%     St5 = alloc_libs([{<<"os">>,luerl_os},
-%% 		      {<<"table">>,luerl_table}], St4),
-%%     St5 = alloc_libs([{<<"math">>,luerl_math},
-%% 		      {<<"os">>,luerl_os},
-%% 		      {<<"table">>,luerl_table}], St4),
     St5 = alloc_libs([{<<"math">>,luerl_math},
 		      {<<"io">>,luerl_io},
 		      {<<"os">>,luerl_os},
@@ -612,15 +607,6 @@ exp(E, St) ->
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, Next, St1);
-%%     io:format("p: ~p\n", [{Exp,Rest}]),
-%%     case catch begin {[Next|_],St1} = prefixexp_first(Exp, St0),
-%% 		     prefixexp_rest(Rest, Next, St1)
-%% 	       end of
-%% 	{'EXIT',Err} ->
-%% 	    io:format("p> ~p\n", [{'EXIT',Err}]),
-%% 	    error(Err);
-%% 	Yeah -> Yeah
-%%     end;
 prefixexp(P, St) -> prefixexp_first(P, St).
 
 prefixexp_first({'NAME',_,N}, St) -> {[get_name(N, St)],St};
@@ -783,13 +769,6 @@ op('<=', A1, A2, St) -> le_op('<=', A1, A2, St);
 op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
 op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
 op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
-%% Logical operators, handle truthy/falsey first arguments.
-%% op('and', nil, _, St) -> {[nil],St};
-%% op('and', false, _, St) -> {[false],St};
-%% op('and', _, A2, St) -> {[A2],St};			%A1 is "true"
-%% op('or', nil, A2, St) -> {[A2],St};
-%% op('or', false, A2, St) -> {[A2],St};
-%% op('or', A1, _, St) -> {[A1],St};			%A1 is "true"
 %% String operator.
 op('..', A1, A2, St) ->
     B1 = luerl_lib:tostring(A1),

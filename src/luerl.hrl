@@ -53,7 +53,7 @@
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Set which table store to use.
--define(USE_ARRAY, true).
+-define(USE_ORDDICT, true).
 
 -ifdef(USE_ORDDICT).
 %% Using orddict to handle tables.
@@ -76,13 +76,13 @@
 -define(DEL_TABLE(N, Ar), array:reset(N, Ar)).
 -define(FILTER_TABLES(Pred, Ar),
 	((fun (___Def) ->
-		  Fil = fun (___K, ___V) ->
-				case Pred(___K, ___V) of
-				    true -> ___V;
-				    false -> ___Def
-				end
-			end,
-		  array:sparse_map(Fil, Ar)
+		  ___Fil = fun (___K, ___V) ->
+				   case Pred(___K, ___V) of
+				       true -> ___V;
+				       false -> ___Def
+				   end
+			   end,
+		  array:sparse_map(___Fil, Ar)
 	  end)(array:default(Ar)))).
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
 -endif.
