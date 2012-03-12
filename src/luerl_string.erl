@@ -110,7 +110,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 	{ok,{Pat,_},_} ->
 	    case find_loop(S, L, Pat, I) of
 		[{_,F,Len}|Cas] ->
-		    [float(F),float(F+Len-1)|match_cas(S, Cas)];
+		    [float(F),float(F+Len-1)|match_cas(Cas, S)];
 		[] -> [nil]
 	    end;
 	{error,E} -> lua_error(E)
@@ -231,7 +231,7 @@ gsub_repl(Cas, S, {table,N}, #luerl{tabs=Ts}=St) ->
 	     [_Ca] -> _Ca;
 	     [_,_Ca|_] -> _Ca
 	 end,
-    Key = match_ca(S, Ca),
+    Key = match_ca(Ca, S),
     {Tab,_} = ?GET_TABLE(N, Ts),
     V = case orddict:find(Key, Tab) of
 	    {ok,Val} -> Val;
@@ -240,8 +240,8 @@ gsub_repl(Cas, S, {table,N}, #luerl{tabs=Ts}=St) ->
     {[gsub_repl_val(S, V, Ca)],St};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     Args = case Cas0 of
-	       [Ca] -> [match_ca(S, Ca)];
-	       [Ca|Cas] -> match_cas(S, Cas)
+	       [Ca] -> [match_ca(Ca, S)];
+	       [Ca|Cas] -> match_cas(Cas, S)
 	   end,
     {Rs,St1} = luerl_eval:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
@@ -254,10 +254,10 @@ gsub_repl(Cas, S, Repl, St) ->
 gsub_repl_str(Cas, S, [$%,$%|R]) ->
     [$%|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,$0|R]) ->
-    [match_ca(S, hd(Cas))|gsub_repl_str(Cas, S, R)];
+    [match_ca(hd(Cas), S)|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
     case lists:keysearch(C-$0, 1, Cas) of
-	{value,Ca} -> [match_ca(S, Ca)|gsub_repl_str(Cas, S, R)];
+	{value,Ca} -> [match_ca(Ca, S)|gsub_repl_str(Cas, S, R)];
 	false -> lua_error({illegal_index,capture,C-$0})
     end;
 gsub_repl_str(Cas, S, [C|R]) ->
@@ -268,7 +268,7 @@ gsub_repl_str(_, _, []) -> [].
 
 gsub_repl_val(S, Val, Ca) ->
     case luerl_lib:tostring(Val) of
-	nil -> match_ca(S, Ca);			%Use original match
+	nil -> match_ca(Ca, S);			%Use original match
 	Str -> Str
     end.
 
@@ -282,6 +282,8 @@ lower(As, St) ->
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
 	nil -> lua_error({badarg,lower,As})
     end.
+
+%% match(Args, State) -> {[Match],State}.
 
 match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
@@ -311,15 +313,15 @@ match_loop(S, L, Pat, I) ->
 	{match,[{_,F,Len}],_,_} ->		%Only top level match
 	    [binary_part(S, F-1, Len)];
 	{match,[_|Cas],_,_} ->			%Have sub matches
-	    match_cas(S, Cas)
+	    match_cas(Cas, S)
     end.
 
-match_ca(_, {_,F,Len}) when Len < 0 ->		%Capture position
+match_ca({_,F,Len}, _) when Len < 0 ->		%Capture position
     float(F);
-match_ca(S, {_,F,Len}) ->			%Capture
+match_ca({_,F,Len}, S) ->			%Capture
     binary_part(S, F-1, Len).
 
-match_cas(S, Cas) -> [ match_ca(S, Ca) || Ca <- Cas ].
+match_cas(Cas, S) -> [ match_ca(Ca, S) || Ca <- Cas ].
     
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
@@ -334,10 +336,14 @@ rep([_,_,_|_]=As, St) ->
     end;
 rep(As, _) -> lua_error({badarg,rep,As}).
 
+%% reverse(Args, State) -> {[Res],St}.
+
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
 reverse(As, _) -> lua_error({badarg,reverse,As}).
+
+%% sub(Args, State) -> {[Res],State}.
 
 sub([A1|As], St) ->
     case luerl_lib:conv_list([A1|As], [lstring,integer,integer]) of
