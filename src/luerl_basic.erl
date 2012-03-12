@@ -85,8 +85,8 @@ collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
 eprint(Args, St) ->
-    lists:foreach(fun ({table,N}) ->
-			  {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
+    lists:foreach(fun (#tref{i=N}) ->
+			  #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
 			  io:format("~w ", [Tab]);
 		      (A) -> io:format("~w ", [A])
 		  end, Args),
@@ -96,13 +96,13 @@ eprint(Args, St) ->
 error([M|_], _) -> lua_error(M);		%Never returns!
 error(As, _) -> lua_error({badarg,error,As}).
 
-ipairs([{table,_}=T|_], St) ->
+ipairs([#tref{}=T|_], St) ->
     {[{function,fun ipairs_next/2},T,0],St};
 ipairs(As, _) -> lua_error({badarg,ipairs,As}).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
-ipairs_next([{table,T},I|_], St) ->
-    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+ipairs_next([#tref{i=T},I|_], St) ->
+    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     Next = I + 1.0,				%Ensure float!
     case orddict:find(Next, Tab) of
 	{ok,V} -> {[Next,V],St};
@@ -110,8 +110,8 @@ ipairs_next([{table,T},I|_], St) ->
     end.
 
 next([A], St) -> next([A,nil], St);
-next([{table,T},K|_], St) ->
-    {Tab,_} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+next([#tref{i=T},K|_], St) ->
+    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     if K == nil ->
 	    case Tab of
 		[{F,V}|_] -> {[F,V],St};
@@ -130,7 +130,7 @@ next_loop(K, [{K,_}|Tab]) -> Tab;
 next_loop(K, [_|Tab]) -> next_loop(K, Tab);
 next_loop(_, []) ->  error.
 
-pairs([{table,_}=T|_], St) ->
+pairs([#tref{}=T|_], St) ->
     {[{function,fun next/2},T,nil],St};
 pairs(As, _) -> lua_error({badarg,pairs,As}).
 
@@ -146,8 +146,8 @@ print(Args, St0) ->
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
 rawequal(As, _) -> lua_error({badarg,rawequal,As}).
 
-rawget([{table,N},K|_], St) ->
-    {T,_} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+rawget([#tref{i=N},K|_], St) ->
+    #table{t=T} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
     case orddict:find(K, T) of
 	{ok,Val} -> Val;
 	error -> nil				%Default value
@@ -155,14 +155,18 @@ rawget([{table,N},K|_], St) ->
 rawget(As, _) -> lua_error({badarg,rawget,As}).
 
 rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
-rawlen([{table,N}|_], St) ->
-    Tab = ?GET_TABLE(N, St#luerl.tabs),
-    {length(element(1, Tab)),St};
+rawlen([#tref{i=N}|_], St) ->
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+    {length(Tab),St};
 rawlen(As, _) -> lua_error({badarg,rawlen,As}).
 
-rawset([{table,N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
-    Upd = if Val =:= nil -> fun ({T,M}) -> {orddict:erase(Key, T),M} end;
-	     true -> fun ({T,M}) -> {orddict:store(Key, Val, T),M} end
+rawset([#tref{i=N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
+    Upd = if Val =:= nil ->
+		  fun (#table{t=T}=Tab) ->
+			  Tab#table{t=orddict:erase(Key, T)} end;
+	     true ->
+		  fun (#table{t=T}=Tab) ->
+			  Tab#table{t=orddict:store(Key, Val, T)} end
 	  end,
     Ts1 = ?UPD_TABLE(N, Upd, Ts0),
     St#luerl{tabs=Ts1};
@@ -208,11 +212,11 @@ tostring(N) when is_number(N) ->
 	end,
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
-tostring({table,_}=T) -> iolist_to_binary(io_lib:write(T));
+tostring(#tref{}=T) -> iolist_to_binary(io_lib:write(T));
 tostring({function,_,_,_,_}) -> iolist_to_binary(io_lib:write(function));
 tostring({function,_}) -> iolist_to_binary(io_lib:write(function));
-tostring({thread,_}) -> iolist_to_binary(io_lib:write(thread));
-tostring({userdata,_}) -> <<"userdata">>;
+tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
+tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
 
 type([Arg|_], St) -> {[type(Arg)],St}.		%Only one return value!
@@ -221,17 +225,17 @@ type(nil) -> <<"nil">>;
 type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
-type({table,_}) -> <<"table">>;
+type(#tref{}) -> <<"table">>;
 type({function,_,_,_,_}) -> <<"function">>;	%Functions defined in Lua
 type({function,_}) -> <<"function">>;		%Internal functions
-type({thread,_}) -> <<"thread">>;
-type({userdata,_}) -> <<"userdata">>;
+type(#thread{}) -> <<"thread">>;
+type(#userdata{}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
 
 %% Meta table functions.
 
-getmetatable([{table,T}|_], #luerl{tabs=Ts}=St) ->
-    {_,M} = ?GET_TABLE(T, Ts),			%Get the table
+getmetatable([#tref{i=T}|_], #luerl{tabs=Ts}=St) ->
+    #table{m=M} = ?GET_TABLE(T, Ts),		%Get the table
     {[M],St};
 getmetatable([{userdata,_}|_], #luerl{meta=Meta}=St) ->
     {[Meta#meta.userdata],St};
@@ -241,11 +245,11 @@ getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
     {[Meta#meta.number],St};
 getmetatable(_, St) -> {[nil],St}.		%Other types have no metatables
 
-setmetatable([{table,N}=A1,{table,_}=A2|_], St) ->
-    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,A2} end, St#luerl.tabs),
+setmetatable([#tref{i=N}=A1,#tref{}=A2|_], St) ->
+    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=A2} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
-setmetatable([{table,N}=A1,nil|_], St) ->
-    Ts = ?UPD_TABLE(N, fun ({T,_}) -> {T,nil} end, St#luerl.tabs),
+setmetatable([#tref{i=N}=A1,nil|_], St) ->
+    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=nil} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
 setmetatable(As, _) -> lua_error({badarg,setmetatable,As}).
 

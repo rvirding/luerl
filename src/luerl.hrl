@@ -49,7 +49,15 @@
 	       string=nil,
 	       userdata=nil}).
 
+%% Data types.
+
+-record(tref, {i}).				%Table reference, index
+-record(table, {t=[],m=nil}).			%Table type, tab and meta
+-record(userdata, {d,m=nil}).			%Userdata type, data and meta
+-record(thread, {}).				%Thread type
+
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
+-define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Set which table store to use.

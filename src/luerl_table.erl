@@ -50,13 +50,13 @@ table() ->
      {<<"unpack">>,{function,fun unpack/2}}
     ].
 
-concat([{table,_}=T], St) -> concat(T, <<>>, [1.0], St);
-concat([{table,_}=T,A2], St) -> concat(T, A2, [1.0], St);
-concat([{table,_}=T,A2|As], St) -> concat(T, A2, As, St);
+concat([#tref{}=T], St) -> concat(T, <<>>, [1.0], St);
+concat([#tref{}=T,A2], St) -> concat(T, A2, [1.0], St);
+concat([#tref{}=T,A2|As], St) -> concat(T, A2, As, St);
 concat(As, _) -> lua_error({badarg,concat,As}).
 
-concat({table,N}=T, A2, As, St) ->
-    {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
+concat(#tref{i=N}=T, A2, As, St) ->
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:tostrings([A2], luerl_lib:tointegers(As)) of
 	[Sep|Is] -> {[concat(Tab, Sep, Is)],St};
 	_ -> lua_error({badarg,concat,[T,A2|As]})
@@ -109,8 +109,8 @@ pack_loop([E|Es], N) ->				%In order for an orddict!
 pack_loop([], N) -> [{<<"n">>,N}].
 
 unpack([A1], St) -> unpack([A1,1.0], St);
-unpack([{table,N}=T|As], St) ->
-    {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
+unpack([#tref{i=N}=T|As], St) ->
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:tointegers(As) of
 	[I] ->
 	    Start = skip_until(Tab, I),
@@ -142,12 +142,12 @@ unpack_loop([], N, J) -> [nil|unpack_loop([], N+1, J)].
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1.0.
 
-length({table,N}=T, St) ->
+length(#tref{i=N}=T, St) ->
     Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
     if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
        true ->
-	    Tab = ?GET_TABLE(N, St#luerl.tabs),
-	    {[length_loop(element(1, Tab))],St}
+	    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+	    {[length_loop(Tab)],St}
     end.
 
 length_loop([{1.0,_}|T]) -> length_loop(T, 2.0);

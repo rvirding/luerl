@@ -226,13 +226,13 @@ gsub_repl_loop([[{_,F,Len}|_]=Cas|Fs], S, I, L, R, St0) ->
 gsub_repl_loop([], S, I, L, _, St) ->
     {[binary_part(S, I-1, L-I+1)],St}.
 
-gsub_repl(Cas, S, {table,N}, #luerl{tabs=Ts}=St) ->
+gsub_repl(Cas, S, #tref{i=N}, #luerl{tabs=Ts}=St) ->
     Ca = case Cas of				%Get the right capture
 	     [_Ca] -> _Ca;
 	     [_,_Ca|_] -> _Ca
 	 end,
     Key = match_ca(Ca, S),
-    {Tab,_} = ?GET_TABLE(N, Ts),
+    #table{t=Tab} = ?GET_TABLE(N, Ts),
     V = case orddict:find(Key, Tab) of
 	    {ok,Val} -> Val;
 	    error -> nil

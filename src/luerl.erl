@@ -167,7 +167,7 @@ decode(B, _) when is_binary(B) -> B;
 decode(N, _) when is_number(N) -> N;
 decode(B, _) when is_boolean(B) -> B;
 decode(nil, _) -> nil;
-decode({table,N}, St) ->
-    {Tab,_} = ?GET_TABLE(N, St#luerl.tabs),
+decode(#tref{i=N}, St) ->
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     lists:map(fun ({K,V}) -> {decode(K, St),decode(V, St)} end, Tab);
 decode({function,Fun}, _) -> {function,Fun}.
