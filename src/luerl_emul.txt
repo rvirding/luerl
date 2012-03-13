@@ -1,0 +1,41 @@
+{push,X}		rest			--> [x|rest]
+pop			[_|rest]		--> rest
+{pop,N}			[s1,s2,...,sn|rest]	--> rest
+{copy,N}		[s1,s2,...,sn|rest]	--> [sn,s1,s2,...,sn|rest]
+{drop,N}		[s1,s2,...,sn|rest]	--> [s1,s2,...|rest]
+get_env			[name|rest]		--> [val|rest]
+get_key			[key,table|rest]	--> [val|rest]
+set_key			[key,table,value|rest]	--> rest
+get_local		[name|rest]		--> [value|rest]
+set_local		[name,value|rest]	--> rest
+call			[func,args|rest]	--> [vals|rest]
+{build_args,N}		[a1,a2,a3,...|rest]	--> [args|rest]
+{build_vals,N}		[v1,v2,v3,...|rest]	--> [vals|rest]
+push_env
+
+
+local x = 5
+
+{push,5},
+{push,<<"x">>},
+set_local
+
+x.s = 5
+
+{push,5},
+{push,<<"x">>},
+get_local
+{push,<<"s">>},
+set_key
+
+x.y.z(e)
+
+{push,<<"e">>},
+{build_args,1},
+get_env,
+{push,<<"x">>},
+get_local,
+{push,<<"y">>},
+get_key,
+{push,<<"z">>},
+
