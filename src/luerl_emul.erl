@@ -962,16 +962,19 @@ emul([pop|Code], [_|Sp], St) ->
     emul(Code, Sp, St);
 emul([swap|Code], [S1,S2|Sp], St) ->
     emul(Code, [S2,S1|Sp], St);
+emul([dup|Code], [X|_]=Sp, St) ->
+    emul(Code, [X|Sp], St);
 %% Accessing tables/environment.
 emul([get_env|Code], [Key|Sp], St) ->
     io:format("ge: ~p\n", [[Key|Sp]]),
     Val = get_key(Key, St),
     emul(Code, [Val|Sp], St);
-emul([set_env|Code], [Key,Val|Sp], St) ->
+emul([set_env|Code], [Key,Val|Sp], St0) ->
     io:format("se: ~p\n", [[Key,Val|Sp]]),
-    Val = set_key(Key, Val, St),
-    emul(Code, [Val|Sp], St);
+    St1 = set_key(Key, Val, St0),
+    emul(Code, Sp, St1);
 emul([get_key|Code], [Key,Tab|Sp], St0) ->
+    io:format("gk: ~p\n", [[Key,Tab|Sp]]),
     {Val,St1} = get_table_key(Key, Tab, St0),
     emul(Code, [Val|Sp], St1);
 emul([set_key|Code], [Key,Tab,Val|Sp], St0) ->
@@ -989,17 +992,9 @@ emul([{build_tab,0}|Code], Sp, St0) ->
     {Tab,St1} = alloc_table([], St0),
     emul(Code, [Tab|Sp], St1);
 %% Function calls/return values.
-emul([{build_args,0}|Code], Sp, St) ->
-    emul(Code, [[]|Sp], St);
-emul([{build_args,1}|Code], [A1|Sp], St) ->
-    emul(Code, [[A1]|Sp], St);
-emul([{build_args,2}|Code], [A2,A1|Sp], St) ->
-    emul(Code, [[A1,A2]|Sp], St);
-emul([{build_args,3}|Code], [A3,A2,A1|Sp], St) ->
-    emul(Code, [[A1,A2,A3]|Sp], St);
 emul([{build_args,N}|Code], Sp0, St) ->
-    {As,Sp1} = revn(N, Sp0),
-    emul(Code, [As|Sp1], St);
+    Sp1 = build_args(N, Sp0),
+    emul(Code, Sp1, St);
 emul([call|Code], [As,Func|Sp], St0) ->
     io:format("ca: ~p\n", [[As,Func|Sp]]),
     {Ret,St1} = functioncall(Func, As, St0),
@@ -1019,7 +1014,12 @@ emul([pop_env_free|Code], [T|Sp], St0) ->
     emul(Code, Sp, St1);
 emul([], Sp, St) -> {Sp,St}.
 
-revn(N, L) -> revn(N, L, []).
+build_args(0, Sp) -> [[]|Sp];
+build_args(N, [[_|_]=Last|Sp]) -> build_args(N-1, Sp, Last);
+build_args(N, [Last|Sp]) -> build_args(N-1, Sp, [Last]).
 
-revn(0, Es, Acc) -> {Acc,Es};
-revn(N, [E|Es], Acc) -> revn(N-1, Es, [E|Acc]).
+build_args(0, Sp, Args) -> [Args|Sp];
+build_args(N, [[F|_]|Sp], Args) ->
+    build_args(N-1, Sp, [F|Args]);
+build_args(N, [A|Sp], Args) ->
+    build_args(N-1, Sp, [A|Args]).
