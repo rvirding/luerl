@@ -34,7 +34,7 @@
 %% Basic interface.
 -export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
 
--export([emul/3]).
+-export([emul/3,pack_vals/2,unpack_vals/2,unpack_args/2]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
@@ -992,8 +992,11 @@ emul([{build_tab,0}|Code], Sp, St0) ->
     {Tab,St1} = alloc_table([], St0),
     emul(Code, [Tab|Sp], St1);
 %% Function calls/return values.
-emul([{build_args,N}|Code], Sp0, St) ->
-    Sp1 = build_args(N, Sp0),
+emul([{pack_vals,N}|Code], Sp0, St) ->
+    Sp1 = pack_vals(N, Sp0),
+    emul(Code, Sp1, St);
+emul([{unpack_vals,N}|Code], Sp0, St) ->
+    Sp1 = unpack_vals(N, Sp0),
     emul(Code, Sp1, St);
 emul([call|Code], [As,Func|Sp], St0) ->
     io:format("ca: ~p\n", [[As,Func|Sp]]),
@@ -1014,12 +1017,36 @@ emul([pop_env_free|Code], [T|Sp], St0) ->
     emul(Code, Sp, St1);
 emul([], Sp, St) -> {Sp,St}.
 
-build_args(0, Sp) -> [[]|Sp];
-build_args(N, [[_|_]=Last|Sp]) -> build_args(N-1, Sp, Last);
-build_args(N, [Last|Sp]) -> build_args(N-1, Sp, [Last]).
+%% pack_vals(Count, Stack) -> [[Val]|Stack].
+%% unpack_vals(Count, Stack) -> Stack.
+%%  These KNOW that last argument is at top of stack.
 
-build_args(0, Sp, Args) -> [Args|Sp];
-build_args(N, [[F|_]|Sp], Args) ->
-    build_args(N-1, Sp, [F|Args]);
-build_args(N, [A|Sp], Args) ->
-    build_args(N-1, Sp, [A|Args]).
+pack_vals(0, Sp) -> [[]|Sp];
+pack_vals(N, [[_|_]=Last|Sp]) -> pack_vals(N-1, Sp, Last);
+pack_vals(N, [Last|Sp]) -> pack_vals(N-1, Sp, [Last]).
+
+pack_vals(0, Sp, Args) -> [Args|Sp];
+pack_vals(N, [[F|_]|Sp], Args) ->
+    pack_vals(N-1, Sp, [F|Args]);
+pack_vals(N, [A|Sp], Args) ->
+    pack_vals(N-1, Sp, [A|Args]).
+
+unpack_vals(0, [_|Sp]) -> Sp;			%Just throw them away
+unpack_vals(N, [[_|_]=Args|Sp]) -> unpack_vals(N, Args, Sp);
+unpack_vals(N, [A|Sp]) -> unpack_vals(N, [A], Sp).
+
+unpack_vals(0, _, Sp) -> Sp;			%Throw away the rest
+unpack_vals(N, [A|As], Sp) ->
+    unpack_vals(N-1, As, [A|Sp]);
+unpack_vals(N, [], Sp) ->
+    unpack_vals(N-1, [], [nil|Sp]).
+
+unpack_args(0, [_|Sp]) -> Sp;			%Just throw them away
+unpack_args(N, [[_|_]=Args|Sp]) -> unpack_args(N, Args, Sp);
+unpack_args(N, [A|Sp]) -> unpack_args(N, [A], Sp).
+
+unpack_args(0, As, Sp) -> [As|Sp];		%Save the rest for '...'
+unpack_args(N, [A|As], Sp) ->
+    unpack_args(N-1, As, [A|Sp]);
+unpack_args(N, [], Sp) ->
+    unpack_args(N-1, [], [nil|Sp]).
