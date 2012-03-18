@@ -34,7 +34,7 @@
 %% Basic interface.
 -export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
 
--export([emul/4,pack_vals/2,unpack_vals/2,unpack_args/2]).
+-export([emul/4,pack_vals/2,unpack_vals/3,unpack_args/2]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
@@ -959,113 +959,132 @@ mark([], [], Seen, _) -> Seen.
 
 %% emul(Code, Stack, Frames, State) -> {Stack,Frames,State}.
 
+emul([], Sp, Fp, St) -> emul1([], Sp, Fp, St);
+emul(Code, Sp, Fp, St) ->
+    io:format("emul: ~p ~p\n", [hd(Code),Sp]),
+    emul1(Code, Sp, Fp, St).
+
 %% Stack fiddling.
-emul([{push,X}|Code], Sp, Fp, St) ->
+emul1([{push,X}|Code], Sp, Fp, St) ->
     emul(Code, [X|Sp], Fp, St);
-emul([push_nil|Code], Sp, Fp, St) ->
+emul1([push_nil|Code], Sp, Fp, St) ->
     emul(Code, [nil|Sp], Fp, St);
-emul([pop|Code], [_|Sp], Fp, St) ->
+emul1([pop|Code], [_|Sp], Fp, St) ->
     emul(Code, Sp, Fp, St);
-emul([{pop,N}|Code], Sp, Fp, St) ->
+emul1([{pop,N}|Code], Sp, Fp, St) ->
     emul(Code, lists:nthtail(N, Sp), Fp, St);
-emul([swap|Code], [S1,S2|Sp], Fp, St) ->
+emul1([swap|Code], [S1,S2|Sp], Fp, St) ->
     emul(Code, [S2,S1|Sp], Fp, St);
-emul([dup|Code], [X|_]=Sp, Fp, St) ->
+emul1([dup|Code], [X|_]=Sp, Fp, St) ->
     emul(Code, [X|Sp], Fp, St);
 %% Accessing tables/environment.
-emul([get_env|Code], [Key|Sp], Fp, St) ->
+emul1([get_env|Code], [Key|Sp], Fp, St) ->
     %%io:format("ge: ~p\n", [[Key|Sp]]),
     Val = get_key(Key, St),
     emul(Code, [Val|Sp], Fp, St);
-emul([{get_env,Key}|Code], Sp, Fp, St) ->
+emul1([{get_env,Key}|Code], Sp, Fp, St) ->
     %%io:format("ge: ~p\n", [[Key|Sp]]),
     Val = get_key(Key, St),
     emul(Code, [Val|Sp], Fp, St);
-emul([set_env|Code], [Key,Val|Sp], Fp, St0) ->
+emul1([set_env|Code], [Key,Val|Sp], Fp, St0) ->
     %%io:format("se: ~p\n", [[Key,Val|Sp]]),
     St1 = set_key(Key, Val, St0),
     emul(Code, Sp, Fp, St1);
-emul([{set_env,Key}|Code], [Val|Sp], Fp, St0) ->
+emul1([{set_env,Key}|Code], [Val|Sp], Fp, St0) ->
     %%io:format("se: ~p\n", [[Key,Val|Sp]]),
     St1 = set_key(Key, Val, St0),
     emul(Code, Sp, Fp, St1);
-emul([get_key|Code], [Key,Tab|Sp], Fp, St0) ->
+emul1([get_key|Code], [Key,Tab|Sp], Fp, St0) ->
     %%io:format("gk: ~p\n", [[Key,Tab|Sp]]),
     {Val,St1} = get_table_key(Key, Tab, St0),
     emul(Code, [Val|Sp], Fp, St1);
-emul([{get_key,Key}|Code], [Tab|Sp], Fp, St0) ->
+emul1([{get_key,Key}|Code], [Tab|Sp], Fp, St0) ->
     %%io:format("gk: ~p\n", [[Key,Tab|Sp]]),
     {Val,St1} = get_table_key(Key, Tab, St0),
     emul(Code, [Val|Sp], Fp, St1);
-emul([set_key|Code], [Key,Tab,Val|Sp], Fp, St0) ->
+emul1([set_key|Code], [Key,Tab,Val|Sp], Fp, St0) ->
     %%io:format("sk: ~p\n", [[Key,Tab,Val|Sp]]),
     St1 = set_table_key(Key, Val, Tab, St0),
     emul(Code, Sp, Fp, St1);
-emul([{set_key,Key}|Code], [Tab,Val|Sp], Fp, St0) ->
+emul1([{set_key,Key}|Code], [Tab,Val|Sp], Fp, St0) ->
     %%io:format("sk: ~p\n", [[Key,Tab,Val|Sp]]),
     St1 = set_table_key(Key, Val, Tab, St0),
     emul(Code, Sp, Fp, St1);
-emul([get_local|Code], [Key|Sp], Fp, St) ->
+emul1([get_local|Code], [Key|Sp], Fp, St) ->
     Val = get_local_key(Key, St),
     emul(Code, [Val|Sp], Fp, St);
-emul([{get_local,Key}|Code], Sp, Fp, St) ->
+emul1([{get_local,Key}|Code], Sp, Fp, St) ->
     Val = get_local_key(Key, St),
     emul(Code, [Val|Sp], Fp, St);
-emul([set_local|Code], [Key,Val|Sp], Fp, St0) ->
+emul1([set_local|Code], [Key,Val|Sp], Fp, St0) ->
     St1 = set_local_key(Key, Val, St0),
     emul(Code, Sp, Fp, St1);
-emul([{set_local,Key}|Code], [Val|Sp], Fp, St0) ->
+emul1([{set_local,Key}|Code], [Val|Sp], Fp, St0) ->
     St1 = set_local_key(Key, Val, St0),
     emul(Code, Sp, Fp, St1);
 %% Expressions
-emul([{build_tab,0}|Code], Sp, Fp, St0) ->
+emul1([{build_tab,0}|Code], Sp, Fp, St0) ->	%Special case the easies
     {Tab,St1} = alloc_table([], St0),
     emul(Code, [Tab|Sp], Fp, St1);
-emul([{op2,Op}|Code], [A2,A1|Sp], Fp, St0) ->
+emul1([{build_tab,1}|Code], [Val,Key|Sp], Fp, St0) ->
+    {Tab,St1} = alloc_table([{Key,Val}], St0),
+    emul(Code, [Tab|Sp], Fp, St1);
+emul1([{build_tab,N}|Code], Sp0, Fp, St0) ->	%The general case
+    {Itab,Sp1} = build_tab(N, Sp0),
+    {Tab,St1} = alloc_table(Itab, St0),
+    emul(Code, [Tab|Sp1], Fp, St1);
+emul1([{op2,Op}|Code], [A2,A1|Sp], Fp, St0) ->
     {Res,St1} = op(Op, A1, A2, St0),
     emul(Code, [Res|Sp], Fp, St1);
-emul([{op1,Op}|Code], [A|Sp], Fp, St0) ->
+emul1([{op1,Op}|Code], [A|Sp], Fp, St0) ->
     {Res,St1} = op(Op, A, St0),
     emul(Code, [Res|Sp], Fp, St1);
 %% Function calls/return values.
-emul([{pack_vals,N}|Code], Sp0, Fp, St) ->
+emul1([{pack_vals,N}|Code], Sp0, Fp, St) ->
     Sp1 = pack_vals(N, Sp0),
-    io:format("pv: ~p\n", [{N,Sp0,Sp1}]),
+    %%io:format("pv: ~p\n", [{N,Sp0,Sp1}]),
     emul(Code, Sp1, Fp, St);
-emul([{unpack_vals,N}|Code], Sp0, Fp, St) ->
-    Sp1 = unpack_vals(N, Sp0),
-    io:format("uv: ~p\n", [{N,Sp0,Sp1}]),
+emul1([{unpack_vals,N,M}|Code], Sp0, Fp, St) ->
+    Sp1 = unpack_vals(N, M, Sp0),
+    %%io:format("uv: ~p\n", [{N,Sp0,Sp1}]),
     emul(Code, Sp1, Fp, St);
-emul([{unpack_args,N}|Code], Sp0, Fp, St) ->
+emul1([{unpack_args,N}|Code], Sp0, Fp, St) ->
     Sp1 = unpack_args(N, Sp0),
-    io:format("ua: ~p\n", [{N,Sp0,Sp1}]),
+    %%io:format("ua: ~p\n", [{N,Sp0,Sp1}]),
     emul(Code, Sp1, Fp, St);
-emul([{build_func,Locv,Locf,Is}|Code], Sp, Fp, St) ->
+emul1([{build_func,Locv,Locf,Is}|Code], Sp, Fp, St) ->
     emul(Code, [{function,Locv,Locf,St#luerl.env,Is}|Sp], Fp, St);
-emul([call|Code], Sp, Fp, St) ->
-    io:format("ca: ~p\n", [{Sp,Fp}]),
+emul1([call|Code], Sp, Fp, St) ->
+    %%io:format("ca: ~p\n", [{Sp,Fp}]),
     functioncall(Code, Sp, Fp, St);
-emul([return|Code], Sp, Fp, St) ->
-    io:format("re: ~p\n", [{Sp,Fp}]),
+emul1([return|Code], Sp, Fp, St) ->
+    %%io:format("re: ~p\n", [{Sp,Fp}]),
     return(Code, Sp, Fp, St);
-emul([first_value|Code], [[V|_]|Sp], Fp, St) ->
+emul1([first_value|Code], [[V|_]|Sp], Fp, St) ->
     emul(Code, [V|Sp], Fp, St);
+emul1([first_value|Code], [_|_]=Sp, Fp, St) ->	%No need to do anything!
+    emul(Code, Sp, Fp, St);
+%% Shuffling the PC.
+emul1([push_pc|Code], Sp, Fp, St) ->
+    emul(Code, [Code|Sp], Fp, St);
+emul1([pop_pc|_], [Code|Sp], Fp, St) ->
+    emul(Code, Sp, Fp, St);
 %% Local environment shuffling.
-emul([push_env|Code], Sp, Fp, St0) ->
+emul1([push_env|Code], Sp, Fp, St0) ->
     {T,St1} = alloc_env(St0),
     St2 = push_env(T, St1),
     emul(Code, [T|Sp], Fp, St2);
-emul([pop_env|Code], [_|Sp], Fp, St0) ->
+emul1([pop_env|Code], [_|Sp], Fp, St0) ->
     St1 = pop_env(St0),
     emul(Code, Sp, Fp, St1);
-emul([pop_env_free|Code], [T|Sp], Fp, St0) ->
-    io:format("pef: ~p\n", [{[T|Sp]}]),
+emul1([pop_env_free|Code], [T|Sp], Fp, St0) ->
+    %%io:format("pef: ~p\n", [{[T|Sp]}]),
     St1 = pop_env(free_table(T, St0)),
     emul(Code, Sp, Fp, St1);
-emul([], Sp, Fp, St) -> {Sp,Fp,St}.
+emul1([], Sp, Fp, St) -> {Sp,Fp,St}.
 
 %% pack_vals(Count, Stack) -> [[Val]|Stack].
-%% unpack_vals(Count, Stack) -> Stack.
+%% unpack_vals(Count, StackN, Stack) -> Stack.
 %% unpack_args(Count, Stack) -> Stack.
 %%  These KNOW that last argument is at top of stack.
 
@@ -1080,16 +1099,29 @@ pack_vals(N, [[F|_]|Sp], Args) ->
 pack_vals(N, [A|Sp], Args) ->
     pack_vals(N-1, Sp, [A|Args]).
 
-unpack_vals(0, [_|Sp]) -> Sp;			%Just throw them away
-unpack_vals(N, [[_|_]=Args|Sp]) -> unpack_vals(N, Args, Sp);
-unpack_vals(N, [[]|Sp]) -> unpack_vals(N, [], Sp);
-unpack_vals(N, [A|Sp]) -> unpack_vals(N, [A], Sp).
+%% Unpack_vals is a little tricky as data is in many stack positions
+%% in both single and lists.
 
-unpack_vals(0, _, Sp) -> Sp;			%Throw away the rest
-unpack_vals(N, [A|As], Sp) ->
-    unpack_vals(N-1, As, [A|Sp]);
-unpack_vals(N, [], Sp) ->
-    unpack_vals(N-1, [], [nil|Sp]).
+unpack_vals(N, M, Sp) when N =< M ->
+    unpack_down(N, M, Sp, []);
+unpack_vals(N, M, [[_|_]=As|Sp]) ->		%N > M
+    unpack_down(N, M-1, Sp, As);
+unpack_vals(N, M, Sp) ->
+    unpack_down(N, M, Sp, []).
+
+unpack_down(N, 0, Sp, Acc) ->
+    %%io:format("ud: ~p\n", [Acc]),
+    unpack_up(N, Sp, Acc);
+unpack_down(N, M, [A|Sp], Acc) ->
+    unpack_down(N, M-1, Sp, [A|Acc]).
+
+unpack_up(0, Sp, _) -> Sp;			%Throw away excess
+unpack_up(N, Sp, [[A|_]|Acc]) ->		%Onlt take first one
+    unpack_up(N-1, [A|Sp], Acc);
+unpack_up(N, Sp, [A|Acc]) ->
+    unpack_up(N-1, [A|Sp], Acc);
+unpack_up(N, Sp, []) ->				%Pad
+    unpack_up(N-1, [nil|Sp], []).
 
 unpack_args(0, [_|Sp]) -> Sp;			%Just throw them away
 unpack_args(N, [[_|_]=Args|Sp]) -> unpack_args(N, Args, Sp);
@@ -1140,3 +1172,14 @@ unwind_env_loop([#tref{i=N}|From], Top, Ts0, Ns) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
     %% io:format("us: ~p\n", [N]),
     unwind_env_loop(From, Top, Ts1, [N|Ns]).
+
+%% build_tab(N, Sp) -> {InitialTab,Sp}.
+%%  Build it backwards as we assume people will in general order the
+%%  elements, or the compiler will do it.
+
+build_tab(N, Sp) ->
+    build_tab(N, Sp, orddict:new()).
+
+build_tab(0, Sp, Itab) -> {Itab,Sp};
+build_tab(N, [V,K|Sp], Itab) ->
+    build_tab(N-1, Sp, orddict:store(K, V, Itab)).

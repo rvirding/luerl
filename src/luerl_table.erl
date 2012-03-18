@@ -53,7 +53,7 @@ table() ->
 concat([#tref{}=T], St) -> concat(T, <<>>, [1.0], St);
 concat([#tref{}=T,A2], St) -> concat(T, A2, [1.0], St);
 concat([#tref{}=T,A2|As], St) -> concat(T, A2, As, St);
-concat(As, _) -> lua_error({badarg,concat,As}).
+concat(As, _) -> lua_error({badarg,[table,concat],As}).
 
 concat(#tref{i=N}=T, A2, As, St) ->
     #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
@@ -63,7 +63,7 @@ concat(#tref{i=N}=T, A2, As, St) ->
     end.
 
 concat(_, _, [I|_]) when I < 1.0 ->
-    lua_error({illegal_val,concat,I});
+    lua_error({illegal_val,[table,concat],I});
 concat(Tab, Sep, [I]) ->
     Rest = skip_until(Tab, I),
     Conc = concat_loop(Rest, I),
@@ -75,7 +75,7 @@ concat(Tab, Sep, [I,J|_]) ->
 
 concat_loop([{N,V}|Tab], N) ->			%An interesting element
     case luerl_lib:to_list(V) of		%Check if right type
-	nil -> lua_error({illegal_val,concat,V});
+	nil -> lua_error({illegal_val,[table,concat],V});
 	S -> [S|concat_loop(Tab, N+1)]
     end;
 concat_loop([{K,_}|Tab], N) when K < N ->	%Skip intermediates
@@ -85,13 +85,13 @@ concat_loop(_, _) -> [].			%No more interesting elements
 concat_loop(_, N, J) when N > J -> [];		%Done
 concat_loop([{N,V}|Tab], N, J) ->		%An interesting element
     case luerl_lib:to_list(V) of		%Check if right type
-	nil -> lua_error({illegal_val,concat,V});
+	nil -> lua_error({illegal_val,[table,concat],V});
 	S -> [S|concat_loop(Tab, N+1, J)]
     end;
 concat_loop([{K,_}|Tab], N, J) when K < N ->	%Skip intermediates
     concat_loop(Tab, N, J);
 concat_loop(_, _, J) ->				%No more interesting elements
-    lua_error({illegal_val,concat,J}).
+    lua_error({illegal_val,[table,concat],J}).
 
 concat_join([E], _) -> list_to_binary(E);
 concat_join([E1|Es], Sep) ->
@@ -118,8 +118,9 @@ unpack([#tref{i=N}=T|As], St) ->
 	[I,J|_] ->
 	    Start = skip_until(Tab, I),
 	    {unpack_loop(Start, I, J),St};
-	_ -> lua_error({badarg,unpack,[T|As]})
-    end.
+	_ -> lua_error({badarg,[table,unpack],[T|As]})
+    end;
+unpack(As, _) -> lua_error({badarg,[table,unpack],As}).
 
 skip_until([{K,_}|_]=Tab, I) when K >= I -> Tab;
 skip_until([_|Tab], I) -> skip_until(Tab, I);
