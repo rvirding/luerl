@@ -53,8 +53,9 @@ string(S) ->
 
 chunk(Code) ->
     St0 = #comp{},
+    %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
     {Is,_} = block(Code, St0),
-    Is.
+    list_to_tuple(Is).
 
 block(Stats, St0) ->
     Locf0 = St0#comp.locf,			%"Global" locf
@@ -161,7 +162,7 @@ functiondef(Fname0, Ps0, B, St0) ->
 
 functiondef(Ps, B, St0) ->
     {{Locv,Locf,Is},St1} = function_block(Ps, B, St0),
-    {[{build_func,Locv,Locf,Is}],St1}.
+    {[{build_func,Locv,Locf,list_to_tuple(Is)}],St1}.
 
 is_method({'NAME',_,_}) -> no;
 is_method({'.',L,N,Rest0}) ->
@@ -261,7 +262,8 @@ prefixexp_element({key_field,_,Exp}, St0) ->
 prefixexp_element({functioncall,_,Args}, St0) ->
     {Ias,St1} = explist(Args, St0),
     %% [an,...,a1,func|_] -> [as,func|_]
-    {Ias ++ [{pack_vals,length(Args)},call],St1};
+    {Ias ++ [{pack_vals,length(Args)},call],St1}; %Unoptimised for now
+%%    {Ias ++ [{call,length(Args)}],St1};		%Optimisation!
 prefixexp_element({method,_,{'NAME',_,N},Args}, St0) ->
     %% [meth|_] -> [meth,meth|_] -> [func,meth|_] -> [meth,func|_]
     Im = [dup,name_op(get_key, N),swap],
@@ -269,27 +271,33 @@ prefixexp_element({method,_,{'NAME',_,N},Args}, St0) ->
     {Ias,St1} = explist(Args, St0),
     %% [an,..,a1,meth,func|_] -> [as,func|_]
     {Im ++ Ias ++ [{pack_vals,length(Args)+1},call],St1}.
+%%    {Im ++ Ias ++ [{call,length(Args)+1}],St1}.	%Optimisation!
 
 function_block(Pars, Stats, St0)->
     Args = Pars =/= [],				%Do we have pars?
     Locf0 = St0#comp.locf,			%"Global" locf
     St1 = St0#comp{locv=false,lvs=[],locf=false,bd=0},
-    if Args ->					%Export Ipre, St2
+    %% Add instrs for unpacking args or popping unused args.
+    if Args ->					%Export Ipre0, St2
 	    Iup = case lists:last(Pars) of
 		      {'...',_} -> {unpack_args,length(Pars)};
 		      _ -> {unpack_vals,length(Pars),1}
 		  end,
 	    {Iass,St2} = assign_pars_loop(Pars, St1),
-	    Ipre = [Iup] ++ Iass;
-       true -> Ipre = [],
+	    Ipre0 = [Iup] ++ Iass;
+       true -> Ipre0 = [pop],
 	       St2 = St1
     end,
     {Iss,St3} = stats(Stats, St2),
     Locv1 = St3#comp.locv,			%"Local" locv and locf
     Locf1 = St3#comp.locf,
+    %% Do we need an enviroment here for this function?
+    Ipre1 = if Args or Locf1 -> [push_env,swap] ++ Ipre0;
+	       true -> Ipre0
+	    end,
     Ipost = [{push,[]},return],
     St4 = St0#comp{locf=Locf0 or Locf1},	%Use the original
-    {{Args or Locv1,Locf1,Ipre ++ Iss ++ Ipost},St4}.
+    {{Args or Locv1,Locf1,Ipre1 ++ Iss ++ Ipost},St4}.
 
 %% function_block() ->
 %%     {Ipre,Ipost} = if Pars =:= [] -> {[],[]};
