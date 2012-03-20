@@ -55,8 +55,9 @@ string(S) ->
 chunk(Code) ->
     St0 = #comp{},
     %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
-    {Is,_} = block(Code, St0),
-    list_to_tuple(Is).
+    {Is0,_} = block(Code, St0),
+    Is1 = fix_labels(Is0),
+    list_to_tuple(Is1).
 
 block(Stats, St0) ->
     Locf0 = St0#comp.locf,			%"Global" locf
@@ -77,6 +78,7 @@ stats([S|Ss], St0) ->
     {Is ++ Iss,St2};
 stats([], St) -> {[],St}.
 
+stat({';',_}, St) -> {[],St};			%No-op
 stat({assign,_,Vs,Es}, St0) ->
     {Ias,St1} = assign(Vs, Es, St0),
     {Ias,St1};
@@ -96,9 +98,12 @@ stat({'repeat',_,Body,Exp}, St) ->
     do_repeat(Body, Exp, St);
 stat({'if',_,Tests,Else}, St) ->
     do_if(Tests, Else, St);
+stat({for,_,V,I,L,S,B}, St) ->
+    numeric_for(V, I, L, S, B, St);
+stat({for,Line,V,I,L,B}, St) ->			%Default step of 1.0
+    numeric_for(V, I, L, {'NUMBER',Line,1.0}, B, St);
 stat({local,Local}, St0) ->
-    {Ils,St1} = local(Local, St0),
-    {Ils,St1};
+    local(Local, St0);
 stat(Exp, St0) ->
     {Ies,St1} = exp(Exp, false, St0),		%It will be dropped anyway
     {Ies ++ [pop],St1}.				%Drop value
@@ -217,6 +222,18 @@ do_if_tests([{Exp,B}|Ts], End, St0) ->
     Its = Ies ++ [{br_false,Next}] ++ Ibs ++ [{br,End}],
     {Its ++ [{label,Next}] ++ Ifs,St4};
 do_if_tests([], _, St) -> {[],St}.
+
+%% numeric_for(Var, Init, Limit, Step, Block, State) -> {Instrs,State}.
+
+numeric_for({'NAME',_,N}, I, L, S, B, St0) ->
+    Nb = atom_to_binary(N, latin1),
+    {Is,St1} = exp(I, true, St0),
+    {Ls,St2} = exp(L, true, St1),
+    {Ss,St3} = exp(S, true, St2),
+    %% Initialse the values: [Limit,Init|_] -> [Init,Limit|_] ->
+    %% [Step,Init,Limit|_] -> [Init,Step,Limit|_]
+    Iss = Is ++ Ls ++ [swap] ++ Ss ++ [swap],
+    {Iss,St3}.
 
 local({assign,_,Vs,Es}, St) ->
     assign_local_loop(Vs, 0, Es, 0, St#comp{locv=true});

@@ -980,6 +980,12 @@ emul(swap, Pc, [S1,S2|Sp], Fp, St, Code) ->
     emul(Code, Pc, [S2,S1|Sp], Fp, St);
 emul(dup, Pc, [X|_]=Sp, Fp, St, Code) ->
     emul(Code, Pc, [X|Sp], Fp, St);
+emul({dup,1}, Pc, [X|_]=Sp, Fp, St, Code) ->
+    emul(Code, Pc, [X|Sp], Fp, St);
+emul({dup,2}, Pc, [_,X|_]=Sp, Fp, St, Code) ->
+    emul(Code, Pc, [X|Sp], Fp, St);
+emul({dup,N}, Pc, Sp, Fp, St, Code) ->		%Duplicate nth stack element
+    emul(Code, Pc, [lists:nth(N, Pc)|Sp], Fp, St);
 %% Accessing tables/environment.
 emul(get_env, Pc, [Key|Sp], Fp, St, Code) ->
     %%io:format("ge: ~p\n", [[Key|Sp]]),
