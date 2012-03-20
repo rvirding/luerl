@@ -1042,6 +1042,15 @@ emul({op2,Op}, Pc, [A2,A1|Sp], Fp, St0, Code) ->
 emul({op1,Op}, Pc, [A|Sp], Fp, St0, Code) ->
     {Res,St1} = op(Op, A, St0),
     emul(Code, Pc, [Res|Sp], Fp, St1);
+emul(first_value, Pc, [A|Sp], Fp, St, Code) ->
+    emul(Code, Pc, [first_value(A)|Sp], Fp, St);
+%% Control instructions.
+emul(tst, Pc, [Bool|Sp], Fp, St, Code) ->
+    if ?IS_TRUE(Bool) -> emul(Code, Pc+1, Sp, Fp, St);
+       true -> emul(Code, Pc, Sp, Fp, St)
+    end;
+emul({goto,Off}, Pc, Sp, Fp, St, Code) ->
+    emul(Code, Pc+Off, Sp, Fp, St);		%Pc has been incremented!
 %% Function calls/return values.
 emul({pack_vals,N}, Pc, Sp0, Fp, St, Code) ->
     Sp1 = pack_vals(N, Sp0),
@@ -1062,18 +1071,11 @@ emul(call, Pc, Sp, Fp, St, Code) ->
     functioncall(Code, Pc, Sp, Fp, St);
 %% emul({call,Pc,N}, Pc, Sp, Fp, St, Code) ->
 %%     functioncall(Code, Pc, N, Sp, Fp, St);
+emul(tailcall, Pc, Sp, Fp, St, Code) ->
+    tailcall(Code, Pc, Sp, Fp, St);
 emul(return, Pc, Sp, Fp, St, Code) ->
     %%io:format("re: ~p\n", [{Sp,Fp}]),
     return(Code, Pc, Sp, Fp, St);
-emul(first_value, Pc, [[V|_]|Sp], Fp, St, Code) ->
-    emul(Code, Pc, [V|Sp], Fp, St);
-emul(first_value, Pc, [_|_]=Sp, Fp, St, Code) ->	%No need to do anything!
-    emul(Code, Pc, Sp, Fp, St);
-%% Shuffling the PC.
-%% emul(push_pc, Pc, Sp, Fp, St, Code) ->
-%%     emul(Code, Pc, [Code|Sp], Fp, St);
-%% emul(pop_pc, [Code|Sp], Fp, St) ->
-%%     emul(Code, Sp, Fp, St);
 %% Local environment shuffling.
 emul(push_env, Pc, Sp, Fp, St0, Code) ->
     {T,St1} = alloc_env(St0),
@@ -1090,37 +1092,31 @@ emul(pop_env_free, Pc, [T|Sp], Fp, St0, Code) ->
 %% pack_vals(Count, Stack) -> [[Val]|Stack].
 %% unpack_vals(Count, StackN, Stack) -> Stack.
 %% unpack_args(Count, Stack) -> Stack.
-%%  These KNOW that last argument is at top of stack.
+%%  These KNOW that last value is at top of stack and only the last
+%%  value can be a list!
 
 pack_vals(0, Sp) -> [[]|Sp];
 pack_vals(N, [Last|Sp]) when is_list(Last) -> pack_vals(N-1, Sp, Last);
 pack_vals(N, [Last|Sp]) -> pack_vals(N-1, Sp, [Last]).
 
 pack_vals(0, Sp, Args) -> [Args|Sp];
-pack_vals(N, [[F|_]|Sp], Args) ->
-    pack_vals(N-1, Sp, [F|Args]);
 pack_vals(N, [A|Sp], Args) ->
     pack_vals(N-1, Sp, [A|Args]).
 
 %% Unpack_vals is a little tricky as data is in many stack positions
-%% in both single and lists.
+%% in both single and lists. We know that N >= M.
 
-unpack_vals(N, M, Sp) when N =< M ->		%N =< M
-    unpack_down(N, M, Sp, []);
-unpack_vals(N, M, [[_|_]=As|Sp]) ->		%N > M
+unpack_vals(N, M, [As|Sp]) when is_list(As) ->
     unpack_down(N, M-1, Sp, As);
 unpack_vals(N, M, Sp) ->
     unpack_down(N, M, Sp, []).
 
 unpack_down(N, 0, Sp, Acc) ->
-    %%io:format("ud: ~p\n", [Acc]),
     unpack_up(N, Sp, Acc);
 unpack_down(N, M, [A|Sp], Acc) ->
     unpack_down(N, M-1, Sp, [A|Acc]).
 
 unpack_up(0, Sp, _) -> Sp;			%Throw away excess
-unpack_up(N, Sp, [[F|_]|Acc]) ->		%Onlt take first one
-    unpack_up(N-1, [F|Sp], Acc);
 unpack_up(N, Sp, [A|Acc]) ->
     unpack_up(N-1, [A|Sp], Acc);
 unpack_up(N, Sp, []) ->				%Pad
@@ -1131,13 +1127,13 @@ unpack_up(N, Sp, []) ->				%Pad
 %% list!
 
 unpack_args(N, [Args|Sp]) when is_list(Args) ->
-    unpack_args(N, Args, Sp);
-unpack_args(N, [A|Sp]) -> unpack_args(N, [A], Sp).
+    unpack_args(N, Args, Sp).
+%%unpack_args(N, [A|Sp]) -> unpack_args(N, [A], Sp).
 
 unpack_args(1, As, Sp) -> [As|Sp];		%Save the rest for '...'
 unpack_args(N, [A|As], Sp) ->
     unpack_args(N-1, As, [A|Sp]);
-unpack_args(N, [], Sp) ->
+unpack_args(N, [], Sp) ->			%Pad with nil
     unpack_args(N-1, [], [nil|Sp]).
 
 %% functioncall(Code, ArgCount, Stack, Frames, State)
@@ -1163,6 +1159,17 @@ functioncall(Code, Pc, [As,{function,Locv,Locf,Fenv,Fcode}|Sp], Fp, St0) ->
 %% 	  end,
     St3 = St1,
     emul(Fcode, 1, [As|Sp], [Fr|Fp], St3).
+
+tailcall(Code, Pc, [As,{function,Func}|Sp], Fp, St0)
+  when is_function(Func) ->
+    %% Must do normal call then return here.
+    {Ret,St1} = Func(As, St0),
+    return(Code, Pc, [Ret|Sp], Fp, St1);
+tailcall(_, _, [As,{function,Locv,Locf,Fenv,Fcode}|Sp], [Fr0|Fp], St0) ->
+    %% Patch frame with where we are going.
+    Fr1 = Fr0#frame{se=Fenv,locv=Locv,locf=Locf},
+    St1 = St0#luerl{env=Fenv},
+    emul(Fcode, 1, [As|Sp], [Fr1|Fp], St1).
 
 return(_, _, [Ret|_],
        [#frame{code=Code,pc=Pc,sp=Sp,e=Old,se=Senv,locf=Locf}|Fp], St0) ->

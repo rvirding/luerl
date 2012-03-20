@@ -306,5 +306,5 @@ parse_string(S) ->
 		{ok,C} -> {ok,C};
 		{error,E} -> {error,E}
 	    end;
-	{error,E} -> {error,E}
+	{error,E,_} -> {error,E}
     end.

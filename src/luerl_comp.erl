@@ -31,7 +31,7 @@
 
 -include("luerl.hrl").
 
--export([string/1]).
+-export([string/1,fix_labels/1]).
 
 -export([chunk/1]).
 
@@ -48,6 +48,7 @@ string(S) ->
 	       locf=false,			%Local functions
 	       ups=[],				%Upvalues, free variables
 	       bd=0,				%Current block depth
+	       lab=0,				%Label index
 	       lint=#lint{}			%Lint data
 	      }).
 
@@ -95,35 +96,38 @@ stat({local,Local}, St0) ->
     {Ils,St1} = local(Local, St0),
     {Ils,St1};
 stat(Exp, St0) ->
-    {Ies,St1} = exp(Exp, St0),
+    {Ies,St1} = exp(Exp, false, St0),		%It will be dropped anyway
     {Ies ++ [pop],St1}.				%Drop value
 
 assign(Vs, Es, St0) ->
-    assign_loop(Vs, length(Vs), Es, length(Es), St0).
+    assign_loop(Vs, 0, Es, 0, St0).
 
 %% Not quite left-to-right, we evaluate the exps left-to-right but
 %% before all the vars which we do right to left. Should split set_var
 %% into two parts: everything but the last and the last.
 
+assign_loop([V|Vs], Vc, [E], Ec, St0) ->
+    {Ies,St1} = exp(E, false, St0),
+    {Iass,St2} = assign_loop(Vs, Vc+1, [], Ec+1, St1),
+    {Ivs,St3} = set_var(V, St2),
+    {Ies ++ Iass ++ Ivs,St3};
 assign_loop([V|Vs], Vc, [E|Es], Ec, St0) ->
-    {Ies,St1} = exp(E, St0),
-    {Iass,St2} = assign_loop(Vs, Vc, Es, Ec, St1),
+    {Ies,St1} = exp(E, true, St0),
+    {Iass,St2} = assign_loop(Vs, Vc+1, Es, Ec+1, St1),
     {Ivs,St3} = set_var(V, St2),
     {Ies ++ Iass ++ Ivs,St3};
 assign_loop([V|Vs], Vc, [], Ec, St0) ->
-    {Ivs,St1} = set_var(V, St0),
-    {Iass,St2} = assign_loop(Vs, Vc, [], Ec, St1),
+    {Iass,St1} = assign_loop(Vs, Vc+1, [], Ec, St0),
+    {Ivs,St2} = set_var(V, St1),
     {Iass ++ Ivs,St2};				%unpack_vals will give nil's
 assign_loop([], Vc, [E|Es], Ec, St0) ->		%No more variables
-    {Ies,St1} = exp(E, St0),
+    {Ies,St1} = exp(E, false, St0),		%It will be dropped anyway
     {Iass,St2} = assign_loop([], Vc, Es, Ec, St1),
-    {Ies ++ Iass,St2};				%unpack_vals will pop this
-
-%%     {Ies ++ [pop] ++ Iass,St2};			%Drop value of this
+    {Ies ++ [pop] ++ Iass,St2};
 assign_loop([], Vc, [], Ec, St) -> {[{unpack_vals,Vc,Ec}],St}.
 
 set_var({'.',_,Exp,Rest}, St0) ->
-    {Ies,St1} = prefixexp_first(Exp, St0),
+    {Ies,St1} = prefixexp_first(Exp, true, St0),
     {Irs,St2} = var_rest(Rest, St1),
     {Ies ++ Irs,St2};
 set_var({'NAME',_,N}, St) ->
@@ -134,7 +138,7 @@ set_var({'NAME',_,N}, St) ->
     {[name_op(Set, N)],St}.
 
 var_rest({'.',_,Exp,Rest}, St0) ->
-    {Ies,St1} = prefixexp_element(Exp, St0),
+    {Ies,St1} = prefixexp_element(Exp, true, St0),
     {Irs,St2} = var_rest(Rest, St1),
     {Ies ++ Irs,St2};
 var_rest(Exp, St) ->
@@ -143,7 +147,7 @@ var_rest(Exp, St) ->
 var_last({'NAME',_,N}, St) ->
     {[name_op(set_key, N)],St};
 var_last({key_field,_,Exp}, St0) ->
-    {Is,St1} = exp(Exp, St0),
+    {Is,St1} = exp(Exp, true, St0),
     {Is ++ [set_key],St1};
 var_last({method,_,{'NAME',_,N}}, St0) ->
     %% Must fix function definition here!
@@ -174,104 +178,128 @@ is_method({method,_,{'NAME',_,_}=N}) -> {yes,N}.
 
 %% do_if(Tests, Else, State) -> {Instrs,State}.
 
-do_if(Tests, Else, St) -> {[],St}.
+do_if(Tests, Else, St0) ->
+    {End,St1} = new_label(St0),
+    {Ifs,St2} = do_if_tests(Tests, End, St1),
+    {Ies,St3} = block(Else, St2),
+    {Ifs ++ Ies ++ [{label,End}],St3}.
+
+do_if_tests([{Exp,B}|Ts], End, St0) ->
+    {Ies,St1} = exp(Exp, true, St0),
+    {Ibs,St2} = block(B, St1),
+    {Ifs,St3} = do_if_tests(Ts, End, St2),
+    {Next,St4} = new_label(St3),
+    {Ies ++ [tst,{goto,Next}] ++ Ibs ++ [{goto,End}] ++ [{label,Next}] ++ Ifs,St4};
+do_if_tests([], _, St) -> {[],St}.
 
 local({assign,_,Vs,Es}, St) ->
-    assign_local_loop(Vs, length(Vs), Es, length(Es), St#comp{locv=true});
+    assign_local_loop(Vs, 0, Es, 0, St#comp{locv=true});
 local({functiondef,_,{'NAME',_,N},Ps,B}, St0) ->
     In = name_op(set_local, N),
     {Ifs,St1} = functiondef(Ps, B, St0),
     {[push_nil,In] ++ Ifs ++ [In],
      St1#comp{locv=true,lvs=[N|St0#comp.lvs],locf=true}}.
 
+assign_local_loop([{'NAME',_,N}|Vs], Vc, [E], Ec, St0) ->
+    {Ies,St1} = exp(E, false, St0),
+    {Iass,St2} = assign_local_loop(Vs, Vc+1, [], Ec+1, St1),
+    St3 = St2#comp{lvs=[N|St2#comp.lvs]},
+    {Ies ++ Iass ++ [name_op(set_local, N)],St3};
 assign_local_loop([{'NAME',_,N}|Vs], Vc, [E|Es], Ec, St0) ->
-    {Ies,St1} = exp(E, St0),
-    {Iass,St2} = assign_local_loop(Vs, Vc, Es, Ec, St1),
+    {Ies,St1} = exp(E, true, St0),
+    {Iass,St2} = assign_local_loop(Vs, Vc+1, Es, Ec+1, St1),
     St3 = St2#comp{lvs=[N|St2#comp.lvs]},
     {Ies ++ Iass ++ [name_op(set_local, N)],St3};
 assign_local_loop([{'NAME',_,N}|Vs], Vc, [], Ec, St0) ->
-    {Iass,St1} = assign_local_loop(Vs, Vc, [], Ec, St0),
+    {Iass,St1} = assign_local_loop(Vs, Vc+1, [], Ec, St0),
     St2 = St1#comp{lvs=[N|St1#comp.lvs]},
     {Iass ++ [name_op(set_local, N)],St2};
 assign_local_loop([], Vc, [E|Es], Ec, St0) ->	%No more variables
-    {Ies,St1} = exp(E, St0),
+    {Ies,St1} = exp(E, false, St0),		%It will be dropped anyway
     {Iass,St2} = assign_local_loop([], Vc, Es, Ec, St1),
-    {Ies ++ Iass,St2};				%unpack_vals will pop this
-%%     {Ies ++ [pop] ++ Iass,St2};
+    {Ies ++ [pop] ++ Iass,St2};
 assign_local_loop([], Vc, [], Ec, St) -> {[{unpack_vals,Vc,Ec}],St}.
 
-explist([E], St) -> exp(E, St);			%Append values to output
+explist([E], St) -> exp(E, false, St);		%Append values to output
 explist([E|Es], St0) ->
-    {Ies,St1} = exp(E, St0),
+    {Ies,St1} = exp(E, true, St0),
     {Iess,St2} = explist(Es, St1),
     {Ies ++ Iess,St2};
-%%     {Ies ++ [first_value] ++ Iess,St2};
 explist([], St) -> {[],St}.
 
-exp({nil,_}, St) -> {[push_nil],St};
-exp({false,_}, St) -> {[{push,false}],St};
-exp({true,_}, St) -> {[{push,true}],St};
-exp({'NUMBER',_,N}, St) -> {[{push,N}],St};
-exp({'STRING',_,S}, St) -> {[{push,S}],St};
-exp({'...',_}, St) ->
-    {[{get_local,'...'}],St};
-exp({functiondef,_,Ps,B}, St0) ->
+%% exp(Expression, Single, State) -> {Ins,State}.
+%%  Single determines if we are to only return the first value of a
+%%  list of values. Single false does not make us a return a list.
+
+exp({nil,_}, _, St) -> {[push_nil],St};
+exp({false,_}, _, St) -> {[{push,false}],St};
+exp({true,_}, _, St) -> {[{push,true}],St};
+exp({'NUMBER',_,N}, _, St) -> {[{push,N}],St};
+exp({'STRING',_,S}, _, St) -> {[{push,S}],St};
+exp({'...',_}, S, St) ->
+    {first_value(S, [{get_local,'...'}]),St};
+exp({functiondef,_,Ps,B}, _, St0) ->
     {Ifs,St1} = functiondef(Ps, B, St0),
     {Ifs,St1#comp{locf=true}};
-exp({table,_,Fs}, St0) ->
+exp({table,_,Fs}, _, St0) ->
     {Ifs,St1} = tableconstructor(Fs, St0),
     {Ifs ++ [{build_tab,length(Fs)}],St1};
-exp({op,_,Op,A1,A2}, St0) ->
-    {Ia1s,St1} = exp(A1, St0),
-    {Ia2s,St2} = exp(A2, St1),
-    {Ia1s ++ Ia2s ++ [{op2,Op}],St2};
-exp({op,_,Op,A}, St0) ->
-    {Ias,St1} = exp(A, St0),
-    {Ias ++ [{op1,Op}],St1};
-exp(E, St) ->
-    prefixexp(E, St).
+exp({op,_,Op,A1,A2}, S, St0) ->
+    {Ia1s,St1} = exp(A1, true, St0),
+    {Ia2s,St2} = exp(A2, true, St1),
+    {Ia1s ++ Ia2s ++ first_value(S, [{op2,Op}]),St2};
+exp({op,_,Op,A}, S, St0) ->
+    {Ias,St1} = exp(A, true, St0),
+    {Ias ++ first_value(S, [{op1,Op}]),St1};
+exp(E, S, St) ->
+    prefixexp(E, S, St).
 
-prefixexp({'.',_,Exp,Rest}, St0) ->
-    {Ies,St1} = prefixexp_first(Exp, St0),
-    {Irs,St2} = prefixexp_rest(Rest, St1),
+first_value(true, Is) -> Is ++ [first_value];
+first_value(false, Is) -> Is.
+
+prefixexp({'.',_,Exp,Rest}, S, St0) ->
+    {Ies,St1} = prefixexp_first(Exp, true, St0),
+    {Irs,St2} = prefixexp_rest(Rest, S, St1),
     {Ies ++ Irs,St2};
-prefixexp(P, St) -> prefixexp_first(P, St).
+prefixexp(P, S, St) -> prefixexp_first(P, S, St).
 
-prefixexp_first({'NAME',_,N}, St) ->
+prefixexp_first({'NAME',_,N}, _, St) ->
     Get = case lists:member(N, St#comp.lvs) of	%Is it a local variable?
 	      true -> get_local;
 	      false -> get_env
 	  end,
     {[name_op(Get, N)],St};
-prefixexp_first({single,_,E}, St0) ->
-    {Is,St1} = exp(E, St0),
+prefixexp_first({single,_,E}, _, St0) ->
+    {Is,St1} = exp(E, true, St0),
     {Is,St1}.
 
-prefixexp_rest({'.',_,Exp,Rest}, St0) ->
-    {Ies,St1} = prefixexp_element(Exp, St0),
-    {Irs,St2} = prefixexp_rest(Rest, St1),
+prefixexp_rest({'.',_,Exp,Rest}, S, St0) ->
+    {Ies,St1} = prefixexp_element(Exp, true, St0),
+    {Irs,St2} = prefixexp_rest(Rest, S, St1),
     {Ies ++ Irs,St2};
-prefixexp_rest(Exp, St) ->
-    prefixexp_element(Exp, St).
+prefixexp_rest(Exp, S, St) ->
+    prefixexp_element(Exp, S, St).
 
-prefixexp_element({'NAME',_,N}, St) ->
+prefixexp_element({'NAME',_,N}, _, St) ->
     {[name_op(get_key, N)],St};
-prefixexp_element({key_field,_,Exp}, St0) ->
-    {Is,St1} = exp(Exp, St0),
+prefixexp_element({key_field,_,Exp}, _, St0) ->
+    {Is,St1} = exp(Exp, true, St0),
     {Is ++ [get_key],St1};
-prefixexp_element({functioncall,_,Args}, St0) ->
+prefixexp_element({functioncall,_,Args}, S, St0) ->
     {Ias,St1} = explist(Args, St0),
     %% [an,...,a1,func|_] -> [as,func|_]
-    {Ias ++ [{pack_vals,length(Args)},call],St1}; %Unoptimised for now
-%%    {Ias ++ [{call,length(Args)}],St1};		%Optimisation!
-prefixexp_element({method,_,{'NAME',_,N},Args}, St0) ->
+    Ics = Ias ++ [{pack_vals,length(Args)},call],
+    %%Ics = Ias ++ [{call,length(Args)}],		%Optimisation!
+    {first_value(S, Ics),St1};
+prefixexp_element({method,_,{'NAME',_,N},Args}, S, St0) ->
     %% [meth|_] -> [meth,meth|_] -> [func,meth|_] -> [meth,func|_]
     Im = [dup,name_op(get_key, N),swap],
     %% [meth,func|_] -> [an,..,a1,meth,func|_]
     {Ias,St1} = explist(Args, St0),
     %% [an,..,a1,meth,func|_] -> [as,func|_]
-    {Im ++ Ias ++ [{pack_vals,length(Args)+1},call],St1}.
-%%    {Im ++ Ias ++ [{call,length(Args)+1}],St1}.	%Optimisation!
+    Ims = Im ++ Ias ++ [{pack_vals,length(Args)+1},call],
+    %% Ims = Im ++ Ias ++ [{call,length(Args)+1}],	%Optimisation!
+    {first_value(S, Ims),St1}.
 
 function_block(Pars, Stats, St0)->
     Args = Pars =/= [],				%Do we have pars?
@@ -288,7 +316,8 @@ function_block(Pars, Stats, St0)->
        true -> Ipre0 = [pop],
 	       St2 = St1
     end,
-    {Iss,St3} = stats(Stats, St2),
+    {Iss0,St3} = stats(Stats, St2),
+    Iss1 = fix_labels(Iss0),
     Locv1 = St3#comp.locv,			%"Local" locv and locf
     Locf1 = St3#comp.locf,
     %% Do we need an enviroment here for this function?
@@ -297,33 +326,7 @@ function_block(Pars, Stats, St0)->
 	    end,
     Ipost = [{push,[]},return],
     St4 = St0#comp{locf=Locf0 or Locf1},	%Use the original
-    {{Args or Locv1,Locf1,Ipre1 ++ Iss ++ Ipost},St4}.
-
-%% function_block() ->
-%%     {Ipre,Ipost} = if Pars =:= [] -> {[],[]};
-%% 		      true ->
-%% 			   Iup = case lists:last(Pars) of
-%% 				     {'...',_} -> {unpack_args,length(Pars)};
-%% 				     _ -> {unpack_vals,length(Pars)}
-%% 				 end,
-%% 			   {[push_env,swap,Iup],[pop_env]}
-%% 		   end,
-%%     {Iass,St1} = assign_pars_loop(Pars, St0),
-%%     {Ibs,St2} = block(B, St1),
-%%     {{function,Ipre ++ Iass ++ Ibs ++ Ipost},St2}.
-
-%%     Locv0 = St0#comp.locv,			%"Global" locv and locf
-%%     Locf0 = St0#comp.locf,
-%%     {Is0,St1} = stats(Stats, St0#comp{locv=false,locf=false}),
-%%     %% #comp{locv=Locv1,locf=Locf1} = St1,
-%%     Locv1 = St1#comp.locv,			%"Local" locv and locf
-%%     Locf1 = St1#comp.locf,
-%%     Is1  = case {Locv1,Locf1} of
-%% 	       {true,false} -> [push_env|Is0 ++ [pop_env_free]];
-%% 	       {true,true} -> [push_env|Is0 ++ [pop_env]];
-%% 	       {false,_} -> Is0
-%% 	   end,
-%%     {Is1,St1#comp{locv=Locv0,locf=Locf0 or Locf1}}.
+    {{Args or Locv1,Locf1,Ipre1 ++ Iss1 ++ Ipost},St4}.
 
 assign_pars_loop([{'NAME',_,N}|Vs], St0) ->
     {Iass,St1} = assign_pars_loop(Vs, St0),
@@ -332,6 +335,25 @@ assign_pars_loop([{'NAME',_,N}|Vs], St0) ->
 assign_pars_loop([{'...',_}], St) ->		%Vararg
     {[{push,'...'},set_local],St};
 assign_pars_loop([], St) -> {[],St}.
+
+fix_labels(Is) ->
+    Ls = get_labels(Is, 1, []),
+    insert_offs(Is, 1, Ls).
+
+get_labels([{label,L}|Is], O, Ls) -> get_labels(Is, O, [{L,O}|Ls]);
+get_labels([_|Is], O, Ls) -> get_labels(Is, O+1, Ls);
+get_labels([], _, Ls) -> Ls.
+
+insert_offs([{goto,L}|Is], O, Ls) ->
+    {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
+    %% Pc incremented before adding offset!
+    [{goto,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];
+insert_offs([{label,_}|Is], O, Ls) -> insert_offs(Is, O, Ls);
+insert_offs([I|Is], O, Ls) -> [I|insert_offs(Is, O+1, Ls)];
+insert_offs([], _, _) -> [].
+
+new_label(#comp{lab=L}=St) ->
+    {L,St#comp{lab=L+1}}.
 
 %% tableconstrutor(Fields, State) -> {Instrs,State}.
 %%  Build the instructions to construct a table. We could be smarter
@@ -342,15 +364,15 @@ assign_pars_loop([], St) -> {[],St}.
 tableconstructor(Fs, St0) ->
     %% N.B. this fun is for a FOLDL!!
     Fun = fun ({exp_field,_,Ve}, {Ifs,I,S0}) ->
-		  {Ivs,S1} = exp(Ve, S0),	%Value
-		  {Ifs ++ [{push,I}] ++ Ivs ++ [first_value],I+1,S1};
+		  {Ivs,S1} = exp(Ve, true, S0),	%Value
+		  {Ifs ++ [{push,I}] ++ Ivs,I+1,S1};
 	      ({name_field,_,{'NAME',_,N},Ve}, {Ifs,I,S0}) ->
-		  {Ivs,S1} = exp(Ve, S0),	%Value
-		  {Ifs ++ [name_op(push, N)] ++ Ivs ++ [first_value],I,S1};
+		  {Ivs,S1} = exp(Ve, true, S0),	%Value
+		  {Ifs ++ [name_op(push, N)] ++ Ivs,I,S1};
 	      ({key_field,_,Ke,Ve}, {Ifs,I,S0}) ->
-		  {Iks,S1} = exp(Ke, S0),	%Key
-		  {Ivs,S2} = exp(Ve, S1),	%Value
-		  {Ifs ++ Iks ++ [first_value] ++ Ivs ++ [first_value],I,S2}
+		  {Iks,S1} = exp(Ke, true, S0),	%Key
+		  {Ivs,S2} = exp(Ve, true, S1),	%Value
+		  {Ifs ++ Iks ++ Ivs,I,S2}
 	  end,
     {Its,_,St1} = lists:foldl(Fun, {[],1.0,St0}, Fs),
     {Its,St1}.
