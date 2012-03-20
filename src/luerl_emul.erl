@@ -1044,13 +1044,27 @@ emul({op1,Op}, Pc, [A|Sp], Fp, St0, Code) ->
     emul(Code, Pc, [Res|Sp], Fp, St1);
 emul(first_value, Pc, [A|Sp], Fp, St, Code) ->
     emul(Code, Pc, [first_value(A)|Sp], Fp, St);
-%% Control instructions.
-emul(tst, Pc, [Bool|Sp], Fp, St, Code) ->
-    if ?IS_TRUE(Bool) -> emul(Code, Pc+1, Sp, Fp, St);
+%% Control instructions. Br are relative, jmp are absolute.
+emul({br_true,Off}, Pc, [Bool|Sp], Fp, St, Code) ->
+    if ?IS_TRUE(Bool) -> emul(Code, Pc+Off, Sp, Fp, St);
        true -> emul(Code, Pc, Sp, Fp, St)
     end;
-emul({goto,Off}, Pc, Sp, Fp, St, Code) ->
+emul({br_false,Off}, Pc, [Bool|Sp], Fp, St, Code) ->
+    if ?IS_TRUE(Bool) -> emul(Code, Pc, Sp, Fp, St);
+       true -> emul(Code, Pc+Off, Sp, Fp, St)	%Pc has been incremented!
+    end;
+emul({br,Off}, Pc, Sp, Fp, St, Code) ->
     emul(Code, Pc+Off, Sp, Fp, St);		%Pc has been incremented!
+emul({jmp_true,Jpc}, Pc, [Bool|Sp], Fp, St, Code) ->
+    if ?IS_TRUE(Bool) -> emul(Code, Jpc, Sp, Fp, St);
+       true -> emul(Code, Pc, Sp, Fp, St)
+    end;
+emul({jmp_false,Jpc}, Pc, [Bool|Sp], Fp, St, Code) ->
+    if ?IS_TRUE(Bool) -> emul(Code, Pc, Sp, Fp, St);
+       true -> emul(Code, Jpc, Sp, Fp, St)
+    end;
+emul({jmp,Pc}, _, Sp, Fp, St, Code) ->
+    emul(Code, Pc, Sp, Fp, St);
 %% Function calls/return values.
 emul({pack_vals,N}, Pc, Sp0, Fp, St, Code) ->
     Sp1 = pack_vals(N, Sp0),

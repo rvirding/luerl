@@ -90,6 +90,10 @@ stat({block,_,B}, St0) ->
     {Ibs,St1};
 stat({functiondef,_,Fname,Ps,B}, St) ->
     functiondef(Fname, Ps, B, St);
+stat({'while',_,Exp,Body}, St) ->
+    do_while(Exp, Body, St);
+stat({'repeat',_,Body,Exp}, St) ->
+    do_repeat(Body, Exp, St);
 stat({'if',_,Tests,Else}, St) ->
     do_if(Tests, Else, St);
 stat({local,Local}, St0) ->
@@ -176,6 +180,27 @@ is_method({'.',L,N,Rest0}) ->
     end;
 is_method({method,_,{'NAME',_,_}=N}) -> {yes,N}.
 
+%% do_while(Test, Body, State) -> {Instrs,State}.
+
+do_while(Exp, B, St0) ->
+    {Start,St1} = new_label(St0),		%The beginning
+    {End,St2} = new_label(St1),			%The end
+    {Ies,St3} = exp(Exp, true, St2),
+    {Ibs,St4} = block(B, St3),
+    Is = [{label,Start}] ++ Ies ++ [{br_false,End}] ++
+	Ibs ++ [{br,Start},{label,End}],
+    {Is,St4}.
+
+%% do_repeat(Body, Test, State) -> {Instrs,State}.
+
+do_repeat(B, Exp, St0) ->
+    {Start,St1} = new_label(St0),		%The beginning
+    {End,St2} = new_label(St1),			%The end
+    {Ibs,St3} = block(B, St2),
+    {Ies,St4} = exp(Exp, true, St3),
+    Is = [{label,Start}] ++ Ibs ++ Ies ++ [{br_false,Start},{label,End}],
+    {Is,St4}.
+
 %% do_if(Tests, Else, State) -> {Instrs,State}.
 
 do_if(Tests, Else, St0) ->
@@ -189,7 +214,8 @@ do_if_tests([{Exp,B}|Ts], End, St0) ->
     {Ibs,St2} = block(B, St1),
     {Ifs,St3} = do_if_tests(Ts, End, St2),
     {Next,St4} = new_label(St3),
-    {Ies ++ [tst,{goto,Next}] ++ Ibs ++ [{goto,End}] ++ [{label,Next}] ++ Ifs,St4};
+    Its = Ies ++ [{br_false,Next}] ++ Ibs ++ [{br,End}],
+    {Its ++ [{label,Next}] ++ Ifs,St4};
 do_if_tests([], _, St) -> {[],St}.
 
 local({assign,_,Vs,Es}, St) ->
@@ -270,8 +296,7 @@ prefixexp_first({'NAME',_,N}, _, St) ->
 	  end,
     {[name_op(Get, N)],St};
 prefixexp_first({single,_,E}, _, St0) ->
-    {Is,St1} = exp(E, true, St0),
-    {Is,St1}.
+    exp(E, true, St0).
 
 prefixexp_rest({'.',_,Exp,Rest}, S, St0) ->
     {Ies,St1} = prefixexp_element(Exp, true, St0),
@@ -320,7 +345,7 @@ function_block(Pars, Stats, St0)->
     Iss1 = fix_labels(Iss0),
     Locv1 = St3#comp.locv,			%"Local" locv and locf
     Locf1 = St3#comp.locf,
-    %% Do we need an enviroment here for this function?
+    %% Do we need an environment here for this function?
     Ipre1 = if Args or Locf1 -> [push_env,swap] ++ Ipre0;
 	       true -> Ipre0
 	    end,
@@ -344,10 +369,15 @@ get_labels([{label,L}|Is], O, Ls) -> get_labels(Is, O, [{L,O}|Ls]);
 get_labels([_|Is], O, Ls) -> get_labels(Is, O+1, Ls);
 get_labels([], _, Ls) -> Ls.
 
-insert_offs([{goto,L}|Is], O, Ls) ->
+insert_offs([{Br,L}|Is], O, Ls)
+  when Br =:= br; Br =:= br_true; Br =:= br_false ->
     {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
     %% Pc incremented before adding offset!
-    [{goto,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];
+    [{Br,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];
+insert_offs([{Jmp,L}|Is], O, Ls)		%Not used yet!
+  when Jmp =:= jmp; Jmp =:= jmp_true; Jmp =:= jmp_false ->
+    {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
+    [{Jmp,Lo}|insert_offs(Is, O+1, Ls)];	%Just jump
 insert_offs([{label,_}|Is], O, Ls) -> insert_offs(Is, O, Ls);
 insert_offs([I|Is], O, Ls) -> [I|insert_offs(Is, O+1, Ls)];
 insert_offs([], _, _) -> [].
