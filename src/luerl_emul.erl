@@ -987,21 +987,21 @@ emul({dup,2}, Pc, [_,X|_]=Sp, Fp, St, Code) ->
 emul({dup,N}, Pc, Sp, Fp, St, Code) ->		%Duplicate nth stack element
     emul(Code, Pc, [lists:nth(N, Pc)|Sp], Fp, St);
 %% Accessing tables/environment.
-emul(get_env, Pc, [Key|Sp], Fp, St, Code) ->
+emul(get_env, Pc, [Name|Sp], Fp, St, Code) ->
     %%io:format("ge: ~p\n", [[Key|Sp]]),
-    Val = get_key(Key, St),
+    Val = get_key(Name, St),
     emul(Code, Pc, [Val|Sp], Fp, St);
-emul({get_env,Key}, Pc, Sp, Fp, St, Code) ->
+emul({get_env,Name}, Pc, Sp, Fp, St, Code) ->
     %%io:format("ge: ~p\n", [[Key|Sp]]),
-    Val = get_key(Key, St),
+    Val = get_key(Name, St),
     emul(Code, Pc, [Val|Sp], Fp, St);
-emul(set_env, Pc, [Key,Val|Sp], Fp, St0, Code) ->
+emul(set_env, Pc, [Name,Val|Sp], Fp, St0, Code) ->
     %%io:format("se: ~p\n", [[Key,Val|Sp]]),
-    St1 = set_key(Key, Val, St0),
+    St1 = set_key(Name, Val, St0),
     emul(Code, Pc, Sp, Fp, St1);
-emul({set_env,Key}, Pc, [Val|Sp], Fp, St0, Code) ->
+emul({set_env,Name}, Pc, [Val|Sp], Fp, St0, Code) ->
     %%io:format("se: ~p\n", [[Key,Val|Sp]]),
-    St1 = set_key(Key, Val, St0),
+    St1 = set_key(Name, Val, St0),
     emul(Code, Pc, Sp, Fp, St1);
 emul(get_key, Pc, [Key,Tab|Sp], Fp, St0, Code) ->
     %%io:format("gk: ~p\n", [[Key,Tab|Sp]]),
@@ -1057,7 +1057,7 @@ emul({br_true,Off}, Pc, [Bool|Sp], Fp, St, Code) ->
     end;
 emul({br_false,Off}, Pc, [Bool|Sp], Fp, St, Code) ->
     if ?IS_TRUE(Bool) -> emul(Code, Pc, Sp, Fp, St);
-       true -> emul(Code, Pc+Off, Sp, Fp, St)	%Pc has been incremented!
+       true -> emul(Code, Pc+Off, Sp, Fp, St)
     end;
 emul({br,Off}, Pc, Sp, Fp, St, Code) ->
     emul(Code, Pc+Off, Sp, Fp, St);		%Pc has been incremented!
@@ -1071,6 +1071,10 @@ emul({jmp_false,Jpc}, Pc, [Bool|Sp], Fp, St, Code) ->
     end;
 emul({jmp,Pc}, _, Sp, Fp, St, Code) ->
     emul(Code, Pc, Sp, Fp, St);
+emul(forprep, Pc, Sp, Fp, St, Code) ->
+    forprep(Code, Pc, Sp, Fp, St);
+emul({forloop,Off}, Pc, Sp, Fp, St, Code) ->
+    forloop(Code, Pc, Sp, Fp, St, Off);
 %% Function calls/return values.
 emul({pack_vals,N}, Pc, Sp0, Fp, St, Code) ->
     Sp1 = pack_vals(N, Sp0),
@@ -1155,6 +1159,33 @@ unpack_args(N, [A|As], Sp) ->
     unpack_args(N-1, As, [A|Sp]);
 unpack_args(N, [], Sp) ->			%Pad with nil
     unpack_args(N-1, [], [nil|Sp]).
+
+%% forprep(Code, Pc, Stack, Frames, Fp, St)
+%%  Stack in is [Step,Limit,Init|_], check values and return stack
+%%  [Init,Limit,Step|_].
+
+forprep(Code, Pc, [S0,L0,I0|Sp], Fp, St) ->
+    case luerl_lib:tonumbers([S0,L0,I0]) of
+	[S1,L1,I1] ->
+	    %% Preset loop var back one step.
+	    emul(Code, Pc, [I1-S1,L1,S1|Sp], Fp, St);
+	nil -> badarg_error(loop, [S0,L0,I0])
+    end.
+
+%% forloop(Code, Pc, Stack, Frames, State, EndOff).
+%%  Stack is [LoopVar,Limit,Step|Stack]. We must leave an extra copy
+%%  of current value on stack for for-variable. N.B. Limit and Step
+%%  don't change so we don't have them on top.
+
+forloop(Code, Pc, [V0|[L,S|_]=Sp]=Sp0, Fp, St, Off) ->
+    V1 = V0 + S,
+    if S < 0.0, V1 >= L->			%Keep going
+	    emul(Code, Pc+Off, [V1,V1|Sp], Fp, St);
+       S > 0.0, V1 =< L ->			%Keep going
+	    emul(Code, Pc+Off, [V1,V1|Sp], Fp, St);
+       true ->
+	    emul(Code, Pc, Sp0, Fp, St)
+    end.
 
 %% functioncall(Code, ArgCount, Stack, Frames, State)
 %% functioncall(Code, Pc, Stack, Frames, State)

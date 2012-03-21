@@ -224,16 +224,24 @@ do_if_tests([{Exp,B}|Ts], End, St0) ->
 do_if_tests([], _, St) -> {[],St}.
 
 %% numeric_for(Var, Init, Limit, Step, Block, State) -> {Instrs,State}.
+%%  This is more or less how the Lua machine does it, but I don't
+%%  really like it.
 
 numeric_for({'NAME',_,N}, I, L, S, B, St0) ->
-    Nb = atom_to_binary(N, latin1),
-    {Is,St1} = exp(I, true, St0),
-    {Ls,St2} = exp(L, true, St1),
-    {Ss,St3} = exp(S, true, St2),
-    %% Initialse the values: [Limit,Init|_] -> [Init,Limit|_] ->
-    %% [Step,Init,Limit|_] -> [Init,Step,Limit|_]
-    Iss = Is ++ Ls ++ [swap] ++ Ss ++ [swap],
-    {Iss,St3}.
+    {Start,St1} = new_label(St0),		%Labels
+    {End,St2} = new_label(St1),
+    {Is,St3} = exp(I, true, St2),
+    {Ls,St4} = exp(L, true, St3),
+    {Ss,St5} = exp(S, true, St4),
+    %% Initialse the values: 
+    %% [Step,Limit,Init|_] -> forprep -> [Init,Limit,Step|_]
+    Ipre = [push_env] ++ Is ++ Ls ++ Ss ++ [forprep,{br,End}] ++ 
+	[{label,Start},name_op(set_local,N)],
+    {Ibs,St6} = block(B, St5),
+    Ipost = [{label,End},{forloop,Start},{pop,3}|if St6#comp.locf -> [pop_env];
+						    true -> [pop_env_free]
+						 end],
+    {Ipre ++ Ibs ++ Ipost,St6}.
 
 local({assign,_,Vs,Es}, St) ->
     assign_local_loop(Vs, 0, Es, 0, St#comp{locv=true});
@@ -386,6 +394,9 @@ get_labels([{label,L}|Is], O, Ls) -> get_labels(Is, O, [{L,O}|Ls]);
 get_labels([_|Is], O, Ls) -> get_labels(Is, O+1, Ls);
 get_labels([], _, Ls) -> Ls.
 
+insert_offs([{forloop,L}|Is], O, Ls) ->
+    {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
+    [{forloop,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];	%Just jump
 insert_offs([{Br,L}|Is], O, Ls)
   when Br =:= br; Br =:= br_true; Br =:= br_false ->
     {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function

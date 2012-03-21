@@ -1,8 +1,13 @@
+%% Stakc fiddling.
 {push,X}		rest			--> [x|rest]
+push_nil		rest			--> [nil|rest]
 pop			[_|rest]		--> rest
-{pop,N}			[s1,s2,...,sn|rest]	--> rest
+{pop,N}			[sn,...,s1|rest]	--> rest
 dup			[s1|rest]		--> [s1,s1|rest]
 swap			[s1,s2|rest]		--> [s2,s1|rest]
+dup			[v|rest]		--> [v,v|rest]
+{dup,N}			[s1,...,sn|rest]	--> [sn,s1,...,sn|rest]
+%% Accessing tables/environment.
 get_env			[name|rest]		--> [val|rest]
 {get_env,Key}		rest			--> [val|rest]
 set_env			[name,val|rest]		--> rest
@@ -15,10 +20,35 @@ get_local		[name|rest]		--> [val|rest]
 {get_local,Name}	rest			--> [val|rest]
 set_local		[name,value|rest]	--> rest
 {set_local,Name}	[value|rest]		--> rest
-call			[func,args|rest]	--> [vals|rest]
-{build_args,N}		[a1,a2,a3,...|rest]	--> [args|rest]
-{build_vals,N}		[v1,v2,v3,...|rest]	--> [vals|rest]
-push_env
+%% Expressions.
+{build_tab,N}		[vn,kn,...,v1,k1|rest]	--> [tab|rest]
+{op2,Op}		[a2,a1|rest]		--> [res|rest]
+{op1,Op}		[a|rest]		--> [res|rest]
+{op1,Op}		a			--> res
+first_value		val			--> val
+%% Control instructions, br are relative, jmp are absolute.
+{br_true,Off}		value			--> 
+{br_true,Off}		[value|rest]		--> rest
+{br_false,Off}		[value|rest]		--> rest
+{br,Off}		rest			--> rest
+{jmp_true,Adr}		[value|rest]		--> rest
+{jmp_false,Adr}		[value|rest]		--> rest
+{jmp,Adr}		rest			--> rest
+forprep			[step,limit,init|rest]	--> [init,limit,step|rest]
+{forloop,start}		[val,limit,step|rest]	--> [val,val,limit,step|rest]
+%% Function calls.
+{pack_vals,N}		[an,...,a1|rest]	--> [vals|rest]
+{unpack_vals,N,M}	[am,...,a1|rest]	--> [vn,...,v1|rest]
+{unpack_args,N}		[as|rest]		--> [an,...,a1|rest]
+{build_func,Locv,Locf,Instrs}
+			rest			--> [function|rest]
+call			[args,func|rest]	--> [args|rest]
+tailcall		[args,func|rest]	--> [args|rest]
+return			[vals|rest]		--> [vals|oldrest]
+%% Local environment shuffling.
+push_env		rest			--> [env|rest]
+pop_env			[env|rest]		--> rest
+pop_env_free		[env|rest]		--> rest
 
 
 local x = 5
