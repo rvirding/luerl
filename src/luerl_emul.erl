@@ -964,7 +964,8 @@ emul(Code, Sp, Fp, St) -> emul(Code, 1, Sp, Fp, St).
 
 emul(Code, Pc, Sp, Fp, St) when Pc > tuple_size(Code) -> {Sp,Fp,St};
 emul(Code, Pc, Sp, Fp, St) ->
-    io:format("emul: ~p ~p\n", [element(Pc, Code),Sp]),
+    %%io:format("emul: ~p ~p\n", [element(Pc, Code),Sp]),
+    %%io:get_line(">"),
     emul(element(Pc, Code), Pc+1, Sp, Fp, St, Code).
 
 %% Stack fiddling.
@@ -1075,6 +1076,10 @@ emul(forprep, Pc, Sp, Fp, St, Code) ->
     forprep(Code, Pc, Sp, Fp, St);
 emul({forloop,Off}, Pc, Sp, Fp, St, Code) ->
     forloop(Code, Pc, Sp, Fp, St, Off);
+emul(tforcall, Pc, Sp, Fp, St, Code) ->
+    tforcall(Code, Pc, Sp, Fp, St);
+emul({tforloop,Off}, Pc, Sp, Fp, St, Code) ->
+    tforloop(Code, Pc, Sp, Fp, St, Off);
 %% Function calls/return values.
 emul({pack_vals,N}, Pc, Sp0, Fp, St, Code) ->
     Sp1 = pack_vals(N, Sp0),
@@ -1091,7 +1096,7 @@ emul({unpack_args,N}, Pc, Sp0, Fp, St, Code) ->
 emul({build_func,Locv,Locf,Is}, Pc, Sp, Fp, St, Code) ->
     emul(Code, Pc, [{function,Locv,Locf,St#luerl.env,Is}|Sp], Fp, St);
 emul(call, Pc, Sp, Fp, St, Code) ->
-    %%io:format("ca: ~p\n", [{Sp,Fp}]),
+    %%io:format("ca: ~p\n", [{Sp}]),
     functioncall(Code, Pc, Sp, Fp, St);
 %% emul({call,Pc,N}, Pc, Sp, Fp, St, Code) ->
 %%     functioncall(Code, Pc, N, Sp, Fp, St);
@@ -1185,6 +1190,15 @@ forloop(Code, Pc, [V0|[L,S|_]=Sp]=Sp0, Fp, St, Off) ->
 	    emul(Code, Pc+Off, [V1,V1|Sp], Fp, St);
        true ->
 	    emul(Code, Pc, Sp0, Fp, St)
+    end.
+
+tforcall(Code, Pc, [Val,State,Func|_]=Sp, Fp, St) ->
+    %% Shuffle the stack and call the function.
+    functioncall(Code, Pc, [[State,Val],Func|Sp], Fp, St).
+
+tforloop(Code, Pc, [[A1|_]=As,V|Sp], Fp, St, Off) ->
+    if A1 =:= nil -> emul(Code, Pc, [V|Sp], Fp, St);
+       true -> emul(Code, Pc+Off, [As,A1|Sp], Fp, St)
     end.
 
 %% functioncall(Code, ArgCount, Stack, Frames, State)

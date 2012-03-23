@@ -59,10 +59,10 @@ chunk(Code) ->
     Is1 = fix_labels(Is0),
     list_to_tuple(Is1).
 
-block(Stats, St0) ->
+with_block(Do, St0) ->
     Locf0 = St0#comp.locf,			%"Global" locf
     Bd0 = St0#comp.bd,				%Block depth
-    {Is0,St1} = stats(Stats, St0#comp{locv=false,lvs=[],locf=false,bd=Bd0+1}),
+    {Is0,St1} = Do(St0#comp{locv=false,lvs=[],locf=false,bd=Bd0+1}),
     Locv1 = St1#comp.locv,			%"Local" locv and locf
     Locf1 = St1#comp.locf,
     Is1  = case {Locv1,Locf1} of
@@ -70,7 +70,12 @@ block(Stats, St0) ->
 	       {true,true} -> [push_env|Is0 ++ [pop_env]];
 	       {false,_} -> Is0
 	   end,
-    {Is1,St0#comp{locf=Locf0 or Locf1}}.	%Use the original
+    %% Use the original
+    {Is1,St0#comp{locf=Locf0 or Locf1,lab=St1#comp.lab}}.
+
+block(Stats, St) ->
+    Do = fun (S) -> stats(Stats, S) end,
+    with_block(Do, St).
 
 stats([S|Ss], St0) ->
     {Is,St1} = stat(S, St0),
@@ -102,6 +107,8 @@ stat({for,_,V,I,L,S,B}, St) ->
     numeric_for(V, I, L, S, B, St);
 stat({for,Line,V,I,L,B}, St) ->			%Default step of 1.0
     numeric_for(V, I, L, {'NUMBER',Line,1.0}, B, St);
+stat({for,_,Ns,Gen,B}, St) ->
+    generic_for(Ns, Gen, B, St);
 stat({local,Local}, St0) ->
     local(Local, St0);
 stat(Exp, St0) ->
@@ -227,21 +234,41 @@ do_if_tests([], _, St) -> {[],St}.
 %%  This is more or less how the Lua machine does it, but I don't
 %%  really like it.
 
-numeric_for({'NAME',_,N}, I, L, S, B, St0) ->
-    {Start,St1} = new_label(St0),		%Labels
-    {End,St2} = new_label(St1),
-    {Is,St3} = exp(I, true, St2),
-    {Ls,St4} = exp(L, true, St3),
-    {Ss,St5} = exp(S, true, St4),
-    %% Initialse the values: 
-    %% [Step,Limit,Init|_] -> forprep -> [Init,Limit,Step|_]
-    Ipre = [push_env] ++ Is ++ Ls ++ Ss ++ [forprep,{br,End}] ++ 
-	[{label,Start},name_op(set_local,N)],
-    {Ibs,St6} = block(B, St5),
-    Ipost = [{label,End},{forloop,Start},{pop,3}|if St6#comp.locf -> [pop_env];
-						    true -> [pop_env_free]
-						 end],
-    {Ipre ++ Ibs ++ Ipost,St6}.
+numeric_for({'NAME',_,N}, I, L, S, B, St) ->
+    Do = fun (St0) ->
+		 {Start,St1} = new_label(St0),	%Labels
+		 {End,St2} = new_label(St1),
+		 {Ies,St3} = explist([I,L,S], true, St2),
+		 %% Initialse the values:
+		 %% [Step,Limit,Init|_] -> forprep -> [Init,Limit,Step|_]
+		 Ipre = Ies ++ [forprep,{br,End}] ++ [{label,Start}],
+		 %% Only one so do this directly by hand.
+		 Ivs = [name_op(set_local, N)],
+		 St4 = St3#comp{locv=true,lvs=[N]},
+		 {Ibs,St5} = block(B, St4),
+		 Ipost = [{label,End},{forloop,Start},{pop,3}],
+		 {Ipre ++ Ivs ++ Ibs ++ Ipost,St5}
+	 end,
+    with_block(Do, St).
+
+%% generic_for(Names, Exps, Block, State) -> {Instrs,State}.
+
+generic_for(Ns, Es, B, St) ->
+    Do = fun (St0) ->
+		 {Start,St1} = new_label(St0),		%Labels
+		 {End,St2} = new_label(St1),
+		 {Ies,St3} = explist(Es, false, St2),
+		 %% [Func,State,Var|_]
+		 Ipre = Ies ++ [{unpack_vals,3,length(Es)},{br,End},
+				{label,Start}],
+		 {Ivs,St4} = assign_local_loop(Ns, 0, [], 1, St3#comp{locv=true}),
+		 {Ibs,St5} = block(B, St4),
+		 Ipost = [{label,End},tforcall,{tforloop,Start},{pop,3}],
+		 {Ipre ++ Ivs ++ Ibs ++ Ipost,St5}
+	 end,
+    with_block(Do, St).
+
+%% local(Local, State) -> {Instrs,State}.
 
 local({assign,_,Vs,Es}, St) ->
     assign_local_loop(Vs, 0, Es, 0, St#comp{locv=true});
@@ -253,7 +280,7 @@ local({functiondef,_,{'NAME',_,N},Ps,B}, St0) ->
 
 assign_local_loop([{'NAME',_,N}|Vs], Vc, [E], Ec, St0) ->
     {Ies,St1} = exp(E, false, St0),
-    {Iass,St2} = assign_local_loop(Vs, Vc+1, [], Ec+1, St1),
+     {Iass,St2} = assign_local_loop(Vs, Vc+1, [], Ec+1, St1),
     St3 = St2#comp{lvs=[N|St2#comp.lvs]},
     {Ies ++ Iass ++ [name_op(set_local, N)],St3};
 assign_local_loop([{'NAME',_,N}|Vs], Vc, [E|Es], Ec, St0) ->
@@ -271,12 +298,14 @@ assign_local_loop([], Vc, [E|Es], Ec, St0) ->	%No more variables
     {Ies ++ [pop] ++ Iass,St2};
 assign_local_loop([], Vc, [], Ec, St) -> {[{unpack_vals,Vc,Ec}],St}.
 
-explist([E], St) -> exp(E, false, St);		%Append values to output
-explist([E|Es], St0) ->
+explist(Es, St) -> explist(Es, false, St).	%The default last case
+
+explist([E], Last, St) -> exp(E, Last, St);	%Append values to output?
+explist([E|Es], Last, St0) ->
     {Ies,St1} = exp(E, true, St0),
-    {Iess,St2} = explist(Es, St1),
+    {Iess,St2} = explist(Es, Last, St1),
     {Ies ++ Iess,St2};
-explist([], St) -> {[],St}.
+explist([], _, St) -> {[],St}.			%No expressions at all
 
 %% exp(Expression, Single, State) -> {Ins,State}.
 %%  Single determines if we are to only return the first value of a
@@ -295,6 +324,20 @@ exp({functiondef,_,Ps,B}, _, St0) ->
 exp({table,_,Fs}, _, St0) ->
     {Ifs,St1} = tableconstructor(Fs, St0),
     {Ifs ++ [{build_tab,length(Fs)}],St1};
+%% 'and' and 'or' short-circuit so need special handling.
+exp({op,_,'and',A1,A2}, S, St0) ->
+    {After,St1} = new_label(St0),
+    {Ia1s,St2} = exp(A1, true, St1),
+    {Ia2s,St3} = exp(A2, S, St2),
+    %% A bit convoluted with the stack here.
+    {Ia1s ++ [dup,{br_false,After},pop] ++ Ia2s ++ [{label,After}], St3};
+exp({op,_,'or',A1,A2}, S, St0) ->
+    {After,St1} = new_label(St0),
+    {Ia1s,St2} = exp(A1, true, St1),
+    {Ia2s,St3} = exp(A2, S, St2),
+    %% A bit convoluted with the stack here.
+    {Ia1s ++ [dup,{br_true,After},pop] ++ Ia2s ++ [{label,After}], St3};
+%% All the other operators are strict.
 exp({op,_,Op,A1,A2}, S, St0) ->
     {Ia1s,St1} = exp(A1, true, St0),
     {Ia2s,St2} = exp(A2, true, St1),
@@ -367,6 +410,7 @@ function_block(Pars, Stats, St0)->
 	       St2 = St1
     end,
     {Iss0,St3} = stats(Stats, St2),
+    %% io:format("~p\n", [Iss0]),
     Iss1 = fix_labels(Iss0),
     Locv1 = St3#comp.locv,			%"Local" locv and locf
     Locf1 = St3#comp.locf,
@@ -397,6 +441,9 @@ get_labels([], _, Ls) -> Ls.
 insert_offs([{forloop,L}|Is], O, Ls) ->
     {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
     [{forloop,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];	%Just jump
+insert_offs([{tforloop,L}|Is], O, Ls) ->
+    {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
+    [{tforloop,Lo-(O+1)}|insert_offs(Is, O+1, Ls)];	%Just jump
 insert_offs([{Br,L}|Is], O, Ls)
   when Br =:= br; Br =:= br_true; Br =:= br_false ->
     {_,Lo} = lists:keyfind(L, 1, Ls),		%Stupid function
