@@ -41,7 +41,8 @@
 -export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
--export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,set_name_env/4]).
+-export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
+	 set_env_name_env/4]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -106,17 +107,17 @@ free_table(#tref{i=N}, #luerl{tabs=Ts0,free=Ns}=St) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{tabs=Ts1,free=[N|Ns]}.
 
-%% set_table_name(Name, Value, Tref, State) -> State.
-%% set_table_key(Key, Value, Tref, State) -> State.
-%% get_table_name(Name, Tref, State) -> {Val,State}.
-%% get_table_key(Key, Tref, State) -> {Val,State}.
+%% set_table_name(Tref, Name, Value, State) -> State.
+%% set_table_key(Tref, Key, Value, State) -> State.
+%% get_table_name(Tref, Name, State) -> {Val,State}.
+%% get_table_key(Tref, Key, State) -> {Val,State}.
 %%  Access tables, as opposed to the environment (which are also
 %%  tables). Setting a value to 'nil' will clear it from the table.
 
-set_table_name(Name, Val, Tab, St) ->
-    set_table_key(atom_to_binary(Name, latin1), Val, Tab, St).
+set_table_name(Tab, Name, Val, St) ->
+    set_table_key(Tab, atom_to_binary(Name, latin1), Val, St).
 
-set_table_key(Key, Val, #tref{i=N}, #luerl{tabs=Ts0}=St) ->
+set_table_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
     #table{t=Tab0,m=Meta} = ?GET_TABLE(N, Ts0),	%Get the table
     case orddict:find(Key, Tab0) of
 	{ok,_} ->
@@ -134,16 +135,16 @@ set_table_key(Key, Val, #tref{i=N}, #luerl{tabs=Ts0}=St) ->
 		    St#luerl{tabs=Ts1};
 		Meth when element(1, Meth) =:= function ->
 		    functioncall(Meth, [Key,Val], St);
-		Meth -> set_table_key(Key, Val, Meth, St)
+		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
     end;
-set_table_key(Key, _, Tab, _) ->
+set_table_key(Tab, Key, _, _) ->
     lua_error({illegal_index,Tab,Key}).
 
-get_table_name(Name, Tab, St) ->
-    get_table_key(atom_to_binary(Name, latin1), Tab, St).
+get_table_name(Tab, Name, St) ->
+    get_table_key(Tab, atom_to_binary(Name, latin1), St).
 
-get_table_key(Key, #tref{i=N}=T, #luerl{tabs=Ts}=St) ->
+get_table_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
     case orddict:find(Key, Tab) of
 	{ok,Val} -> {Val,St};
@@ -155,17 +156,17 @@ get_table_key(Key, #tref{i=N}=T, #luerl{tabs=Ts}=St) ->
 		    {Vs,St1} = functioncall(Meth, [T,Key], St),
 		    {first_value(Vs),St1};	%Only one value
 		Meth ->				%Recurse down the metatable
-		    get_table_key(Key, Meth, St)
+		    get_table_key(Meth, Key, St)
 	    end
     end;
-get_table_key(Key, Tab, St) ->			%Just find the metamethod
+get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key});
 	Meth when element(1, Meth) =:= function ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {first_value(Vs),St1};		%Only one value
 	Meth ->					%Recurse down the metatable
-	    get_table_key(Key, Meth, St)
+	    get_table_key(Meth, Key, St)
     end.
 
 %% set_local_name(Name, Val, State) -> State.
@@ -211,52 +212,52 @@ get_local_key(Key, #luerl{tabs=Ts,env=[#tref{i=E}|_]}) ->
 	error -> nil
     end.
 
-%% set_name(Name, Val, State) -> State.
-%% set_key(Key, Value, State) -> State.
-%% set_key_env(Key, Value, Tables, Env) -> Tables.
-%% get_name(Name, State) -> Val.
-%% get_key(Key, State) -> Value | nil.
-%% get_key_env(Key, Tables, Env) -> Value | nil.
+%% set_env_name(Name, Val, State) -> State.
+%% set_env_key(Key, Value, State) -> State.
+%% set_env_key_env(Key, Value, Tables, Env) -> Tables.
+%% get_env_name(Name, State) -> Val.
+%% get_env_key(Key, State) -> Value | nil.
+%% get_env_key_env(Key, Tables, Env) -> Value | nil.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
 %%  them in the environment stack.
 
-set_name(Name, Val, St) ->
-    set_key(atom_to_binary(Name, latin1), Val, St).
+set_env_name(Name, Val, St) ->
+    set_env_key(atom_to_binary(Name, latin1), Val, St).
 
-set_name_env(Name, Val, Ts, Env) ->
-    set_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
+set_env_name_env(Name, Val, Ts, Env) ->
+    set_env_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
-set_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
-    Ts1 = set_key_env(K, Val, Ts0, Env),
+set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
+    Ts1 = set_env_key_env(K, Val, Ts0, Env),
     St#luerl{tabs=Ts1}.
 
-set_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
+set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
     Store = fun (#table{t=T}=Tab) ->
 		    Tab#table{t=orddict:store(K, Val, T)} end,
     ?UPD_TABLE(_G, Store, Ts);
-set_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
+set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
     case orddict:is_key(K, Tab) of
 	true ->
 	    Store = fun (#table{t=T}=Tab0) ->
 			    Tab0#table{t=orddict:store(K, Val, T)} end,
 	    ?UPD_TABLE(E, Store, Ts);
-	false -> set_key_env(K, Val, Ts, Es)
+	false -> set_env_key_env(K, Val, Ts, Es)
     end.
 
-get_name(Name, St) -> get_key(atom_to_binary(Name, latin1), St).
+get_env_name(Name, St) -> get_env_key(atom_to_binary(Name, latin1), St).
 
-get_key(K, #luerl{tabs=Ts,env=Env}) ->
-    get_key_env(K, Ts, Env).
+get_env_key(K, #luerl{tabs=Ts,env=Env}) ->
+    get_env_key_env(K, Ts, Env).
 
-get_key_env(K, Ts, [#tref{i=E}|Es]) ->
+get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Get environment table
     case orddict:find(K, Tab) of		%Check if variable in the env
 	{ok,Val} -> Val;
-	error -> get_key_env(K, Ts, Es)
+	error -> get_env_key_env(K, Ts, Es)
     end;
-get_key_env(_, _, []) -> nil.			%The default value
+get_env_key_env(_, _, []) -> nil.		%The default value
 
 %% chunk(Stats, State) -> {Return,State}.
 
@@ -378,7 +379,7 @@ set_var({'.',_,Exp,Rest}, Val, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     var_rest(Rest, Val, Next, St1);
 set_var({'NAME',_,Name}, Val, St) ->
-    set_name(Name, Val, St).
+    set_env_name(Name, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
     {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
@@ -387,14 +388,13 @@ var_rest(Exp, Val, SoFar, St) ->
     var_last(Exp, Val, SoFar, St).
 
 var_last({'NAME',_,N}, Val, SoFar, St) ->
-    set_table_name(N, Val, SoFar, St);
+    set_table_name(SoFar, N, Val, St);
 var_last({key_field,_,Exp}, Val, SoFar, St0) ->
     {[Key|_],St1} = exp(Exp, St0),
-    set_table_key(Key, Val, SoFar, St1);
+    set_table_key(SoFar, Key, Val, St1);
 var_last({method,_,{'NAME',_,N}}, {function,L,Env,Pars,B}, SoFar, St) ->
     %% Method a function, make a "method" by adding self parameter.
-    set_table_name(N, {function,L,Env,[{'NAME',L,self}|Pars],B},
-		   SoFar, St).
+    set_table_name(SoFar, N, {function,L,Env,[{'NAME',L,self}|Pars],B}, St).
 
 %% do_while(TestExp, Body, State) -> State.
 
@@ -612,7 +612,7 @@ prefixexp({'.',_,Exp,Rest}, St0) ->
     prefixexp_rest(Rest, Next, St1);
 prefixexp(P, St) -> prefixexp_first(P, St).
 
-prefixexp_first({'NAME',_,N}, St) -> {[get_name(N, St)],St};
+prefixexp_first({'NAME',_,N}, St) -> {[get_env_name(N, St)],St};
 prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
     %% io:format("pf: ~p\n", [E]),
     {[R|_],St1} = exp(E, St0),
@@ -628,14 +628,14 @@ prefixexp_element({functioncall,_,Args0}, SoFar, St0) ->
     {Args1,St1} = explist(Args0, St0),
     functioncall(SoFar, Args1, St1);
 prefixexp_element({'NAME',_,N}, SoFar, St0) ->
-    {V,St1} = get_table_name(N, SoFar, St0),
+    {V,St1} = get_table_name(SoFar, N, St0),
     {[V],St1};
 prefixexp_element({key_field,_,Exp}, SoFar, St0) ->
     {[Key|_],St1} = exp(Exp, St0),
-    {V,St2} = get_table_key(Key, SoFar, St1),
+    {V,St2} = get_table_key(SoFar, Key, St1),
     {[V],St2};
 prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
-    {Func,St1} = get_table_name(N, SoFar, St0),
+    {Func,St1} = get_table_name(SoFar, N, St0),
     {Args1,St2} = explist(Args0, St1),
     functioncall(Func, [SoFar|Args1], St2).
 
