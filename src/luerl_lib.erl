@@ -35,11 +35,13 @@
 
 -include("luerl.hrl").
 
--export([is_true/1,first_value/1,number_to_list/1,
+-export([lua_error/1,is_true/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
+
+lua_error(E) -> error({lua_error,E}).
 
 %% is_true(Rets) -> boolean()>
 
@@ -122,7 +124,7 @@ tonumbers(As, Acc) ->
 tointegers(As) -> tointegers(As, []).
 
 tointegers(As, Acc) ->
-    to_loop(As, fun tonumber/1, Acc).
+    to_loop(As, fun tointeger/1, Acc).
 
 number_to_list(N) ->
     I = round(N),
@@ -169,9 +171,11 @@ conv_list([A|As], [To|Tos], Rs0) ->
 		      integer -> to_int(A);
 		      string -> to_list(A);
 		      %% Lua types.
+		      lany -> A;
 		      linteger -> tointeger(A);
 		      lnumber -> tonumber(A);
-		      lstring -> tostring(A)
+		      lstring -> tostring(A);
+		      lbool -> ?IS_TRUE(A)
 		  end,
 	    case Ret of
 		nil -> nil;			%Propagate nil

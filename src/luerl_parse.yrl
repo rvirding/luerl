@@ -34,7 +34,7 @@
 %% unnecessarily complex and all that was needed was to change one
 %% rule for statements.
 
-Expect 2. %Suppress shift/reduce warning
+Expect 2.					%Suppress shift/reduce warning
 
 Nonterminals
 chunk block stats stat semi retstat label_stat
@@ -143,7 +143,7 @@ varlist -> varlist ',' var : '$1' ++ ['$3'] .
 
 var -> NAME : '$1' .
 var -> prefixexp '[' exp ']' :
-		dot_append(line('$2'), '$1', {key_field,line('$2'),'$3'}) .
+	   dot_append(line('$2'), '$1', {key_field,line('$2'),'$3'}) .
 var -> prefixexp '.' NAME : dot_append(line('$2'), '$1', '$3') . 
 
 namelist -> NAME : ['$1'] .
@@ -169,14 +169,14 @@ prefixexp -> functioncall : '$1' .
 prefixexp -> '(' exp ')' : {single,line('$1'),'$2'} .
 
 functioncall -> prefixexp args :
-		dot_append(line('$1'), '$1', {functioncall,line('$1'), '$2'}) .
+		    dot_append(line('$1'), '$1', {functioncall,line('$1'), '$2'}) .
 functioncall -> prefixexp ':' NAME args :
-		dot_append(line('$2'), '$1', {method,line('$2'),'$3','$4'}) .
+		    dot_append(line('$2'), '$1', {method,line('$2'),'$3','$4'}) .
 
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
-args -> tableconstructor : ['$1'] .	%Syntactic sugar
-args -> STRING : ['$1'] .		%Syntactic sugar
+args -> tableconstructor : ['$1'] .		%Syntactic sugar
+args -> STRING : ['$1'] .			%Syntactic sugar
 
 functiondef -> 'function' funcbody : functiondef(line('$1'), '$2').
 
@@ -233,15 +233,15 @@ Erlang code.
 
 -export([chunk/1,code/1]).
 
-chunk(Ts) -> 
-    case F = parse(Ts) of
-        {error,{Line,luerl_parse,MsgList}} ->
-            io:format("~nLuerl parse error in line ~p: ~p~n", [Line, lists:flatten(MsgList)]),
-            F;
-        {ok,{functiondef,_,_,_}} -> F;
-        {ok,{functiondef,_,_,_,_}} -> F;
-        {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[],Body}}
-    end.        
+chunk(Ts) -> parse(Ts).
+%%     case F = parse(Ts) of
+%%         {error,{Line,luerl_parse,MsgList}} ->
+%%             io:format("~nLuerl parse error in line ~p: ~p~n", [Line, lists:flatten(MsgList)]),
+%%             F;
+%%         {ok,{functiondef,_,_,_}} -> F;
+%%         {ok,{functiondef,_,_,_,_}} -> F;
+%%         {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[],Body}}
+%%     end.        
 
 code(Ts) -> parse(Ts).
 
@@ -254,7 +254,7 @@ numeric_for(Line, Var, [Init,Limit], Block) ->
     {for,Line,Var,Init,Limit,Block};
 numeric_for(Line, Var, [Init,Limit,Step], Block) ->
     {for,Line,Var,Init,Limit,Step,Block};
-numeric_for(Line, _, _, _) ->		%Wrong number of expressions
+numeric_for(Line, _, _, _) ->			%Wrong number of expressions
     return_error(Line, "illegal for").
 
 %% generic_for(Line, Names, ExpList, Block).

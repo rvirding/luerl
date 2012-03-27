@@ -29,7 +29,12 @@
 
 -module(luerl_math).
 
--export([table/0]).
+-export([install/1]).
+
+-import(luerl_lib, [lua_error/1]).		%Shorten this
+
+install(St) ->
+    luerl_eval:alloc_table(table(), St).
 
 table() ->
     [{<<"abs">>,{function,fun abs/2}},
@@ -44,6 +49,7 @@ table() ->
      {<<"exp">>,{function,fun exp/2}},
      {<<"floor">>,{function,fun floor/2}},
      {<<"log">>,{function,fun log/2}},
+     {<<"log10">>,{function,fun log10/2}},	%For 5.1 backwards compatibility
      {<<"max">>,{function,fun max/2}},
      {<<"min">>,{function,fun min/2}},
      {<<"pi">>,math:pi()},
@@ -61,127 +67,135 @@ table() ->
 abs(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[abs(N)],St};
-	_ -> error({badarg,abs,As})
+	_ -> lua_error({badarg,abs,As})
     end.
 
 acos(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:acos(N)],St};
-	nil -> error({badarg,acos,As})
+	nil -> lua_error({badarg,acos,As})
     end.
 
 asin(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:asin(N)],St};
-	_ -> error({badarg,asin,As})
+	_ -> lua_error({badarg,asin,As})
     end.
 
 atan(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:atan(N)],St};
-	_ -> error({badarg,atan,As})
+	_ -> lua_error({badarg,atan,As})
     end.
 
 atan2(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N1,N2|_] -> {[math:atan2(N1, N2)],St};
-	_ -> error({badarg,atan2,As})
+	_ -> lua_error({badarg,atan2,As})
     end.
 
 ceil(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[float(round(N + 0.5))],St};
-	_ -> error({badarg,ceil,As})
+	_ -> lua_error({badarg,ceil,As})
     end.
 
 cos(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:cos(N)],St};
-	_ -> error({badarg,cos,As})
+	_ -> lua_error({badarg,cos,As})
     end.
 
 cosh(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:cosh(N)],St};
-	_ -> error({badarg,cosh,As})
+	_ -> lua_error({badarg,cosh,As})
     end.
 
 deg(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[180.0*N/math:pi()],St};
-	_ -> error({badarg,deg,As})
+	_ -> lua_error({badarg,deg,As})
     end.
 
 exp(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:exp(N)],St};
-	_ -> error({badarg,exp,As})
+	_ -> lua_error({badarg,exp,As})
     end.
 
 floor(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[float(round(N - 0.5))],St};
-	_ -> error({badarg,floor,As})
+	_ -> lua_error({badarg,floor,As})
     end.
 
 log(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N] -> {[math:log(N)],St};
+	[N,10.0|_] -> {[math:log10(N)],St};	%Seeing it is builtin
 	[N1,N2|_] ->
 	    {[math:log(N1)/math:log(N2)],St};
-	_ -> error({badarg,log,As})
+	_ -> lua_error({badarg,log,As})
+    end.
+
+log10(As, St) ->				%For 5.1 backwards compatibility
+    case luerl_lib:tonumbers(As) of
+	[0.0|_] -> {[-500.0],St};		%Bit hacky
+	[N|_] -> {[math:log10(N)],St};
+	_ -> lua_error({badarg,log10,As})
     end.
 
 max(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[_|_]=Ns -> {[lists:max(Ns)],St};
-	_ -> error({badarg,max,As})
+	_ -> lua_error({badarg,max,As})
     end.
 
 min(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[_|_]=Ns -> {[lists:min(Ns)],St};
-	_ -> error({badarg,min,As})
+	_ -> lua_error({badarg,min,As})
     end.
 
 pow(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N1,N2|_] -> {[math:pow(N1, N2)],St};
-	_ -> error({badarg,pow,As})
+	_ -> lua_error({badarg,pow,As})
     end.
 
 rad(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:pi()*N/180.0],St};
-	_ -> error({badarg,sinh,As})
+	_ -> lua_error({badarg,sinh,As})
     end.
 
 sin(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:sin(N)],St};
-	_ -> error({badarg,sin,As})
+	_ -> lua_error({badarg,sin,As})
     end.
 
 sinh(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:sinh(N)],St};
-	_ -> error({badarg,sinh,As})
+	_ -> lua_error({badarg,sinh,As})
     end.
 
 sqrt(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:sqrt(N)],St};
-	_ -> error({badarg,sqrt,As})
+	_ -> lua_error({badarg,sqrt,As})
     end.
 
 tan(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:tan(N)],St};
-	_ -> error({badarg,tan,As})
+	_ -> lua_error({badarg,tan,As})
     end.
 
 tanh(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:tanh(N)],St};
-	_ -> error({badarg,tanh,As})
+	_ -> lua_error({badarg,tanh,As})
     end.

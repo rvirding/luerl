@@ -29,12 +29,14 @@
 
 -module(luerl).
 
+-include("luerl.hrl").
+
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
         do/1,do/2,dofile/1,dofile/2,
         load/1,loadfile/1,
         compile/1,compilefile/1,
         call/1,call/2,
-        start/0,stop/1,gc/1]).
+        start/0,stop/1,gc/1,decode/2,encode/2]).
 
 %% luerl:eval(String|Binary|Form[, State]) -> Result.
 eval(Chunk) ->
@@ -138,9 +140,34 @@ stop(St) ->
 %% gc(State) -> State.
 gc(St) -> luerl_eval:gc(St).
 
-%% luerl:encode(list()) -> LuerlTermsList().
-% luerl:encode(list()) -> LuerlTermsList().
+%% encode(term(), State) -> {LuerlTerm,State}.
 
-%% luerl:decode(LuerlTermsList()) -> list().
-% decode(LuerlTermsList) ->
-%    list().
+encode(B, St) when is_binary(B) -> {B,St};
+encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
+encode(I, St) when is_integer(I) -> {float(I),St};
+encode(F, St) when is_float(F) -> {F,St};
+encode(B, St) when is_boolean(B) -> {B,St};
+encode(nil, St) -> {nil,St};
+encode(L, St0) ->
+    {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
+					  {K1,S1} = encode(K0, S0),
+					  {V1,S2} = encode(V0, S1),
+					  {{K1,V1},{I,S2}};
+				      (V0, {I,S0}) ->
+					  {V1,S1} = encode(V0, S0),
+					  {{I,V1},{I+1,S1}}
+			      end, {1.0,St0}, L),
+    Ts = orddict:from_list(Es),
+    {T,St2} = luerl_eval:alloc_table(Ts, St1),
+    {T,St2}.
+
+%% decode(LuerlTerm(), State) -> Term.
+
+decode(B, _) when is_binary(B) -> B;
+decode(N, _) when is_number(N) -> N;
+decode(B, _) when is_boolean(B) -> B;
+decode(nil, _) -> nil;
+decode(#tref{i=N}, St) ->
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+    lists:map(fun ({K,V}) -> {decode(K, St),decode(V, St)} end, Tab);
+decode({function,Fun}, _) -> {function,Fun}.
