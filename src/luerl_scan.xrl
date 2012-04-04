@@ -70,13 +70,19 @@ Rules.
 \"(\\.|[^"\n])*\" :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
-	S = list_to_binary(chars(Cs)),
-	{token,{'STRING',TokenLine,S}}.
+	case string_chars(Cs) of
+	    {ok,S} ->
+		{token,{'STRING',TokenLine,list_to_binary(S)}};
+	    error -> {error,"illegal string"}
+	end.
 \'(\\.|[^'\n])*\' :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
-	S = list_to_binary(chars(Cs)),
-	{token,{'STRING',TokenLine,S}}.
+	case string_chars(Cs) of
+	    {ok,S} ->
+		{token,{'STRING',TokenLine,list_to_binary(S)}};
+	    error -> {error,"illegal string"}
+	end.
 \[\[([^]]|\][^]])*\]+\] :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 3, TokenLen - 4),
@@ -158,18 +164,28 @@ base1([C|Cs], Base, SoFar) when C >= $A, C =< $F, C < Base + $A - 10 ->
 base1([C|Cs], _Base, SoFar) -> {SoFar,[C|Cs]};
 base1([], _Base, N) -> {N,[]}.
 
-%% chars(InputChars) -> Chars.
+%% string_chars(InputChars) -> {ok,Chars} | error.
 %% Convert an input string into the corresponding string
 %% characters. We know that the input string is correct.
 
-chars([$\\,$x,C|Cs0]) ->
-    case hex_char(C) of
-	true ->
-	    case base1([C|Cs0], 16, 0) of
-		{N,[$;|Cs1]} -> [N|chars(Cs1)];
-		_Other -> [escape_char($x)|chars([C|Cs0])]
+string_chars(Cs) -> catch {ok,chars(Cs)}.
+
+chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits
+    I1 = C1 - $0,
+    case Cs0 of
+	[C2|Cs1] when C2 >= $0, C2 =< $9 ->
+	    I2 = C2 - $0,
+	    case Cs1 of
+		[C3|Cs2] when C3 >= $0, C3 =< $9 ->
+		    [100*I1 + 10*I2 + (C3-$0)|chars(Cs2)];
+		_ -> [10*I1 + I2|chars(Cs1)]
 	    end;
-	false -> [escape_char($x)|chars([C|Cs0])]
+	_ -> [I1|chars(Cs0)]
+    end;
+chars([$\\,$x,C1,C2|Cs]) ->			%2 hex digits
+    case hex_char(C1) and hex_char(C2) of
+	true -> [hex_val(C1)*16+hex_val(C2)|chars(Cs)];
+	false -> throw(error)
     end;
 chars([$\\,C|Cs]) -> [escape_char(C)|chars(Cs)];
 chars([C|Cs]) -> [C|chars(Cs)];
@@ -179,6 +195,10 @@ hex_char(C) when C >= $0, C =< $9 -> true;
 hex_char(C) when C >= $a, C =< $f -> true;
 hex_char(C) when C >= $A, C =< $F -> true;
 hex_char(_) -> false.
+
+hex_val(C) when C >= $0, C =< $9 -> C - $0;
+hex_val(C) when C >= $a, C =< $f -> C - $a + 10;
+hex_val(C) when C >= $A, C =< $F -> C - $A + 10.
 
 escape_char($n) -> $\n;				%\n = LF
 escape_char($r) -> $\r;				%\r = CR
@@ -192,10 +212,10 @@ escape_char($d) -> $\d;				%\d = DEL
 escape_char(C) -> C.
 
 long_bracket(Line, [$\n|Cs]) ->
-    S = list_to_binary(chars(Cs)),
+    S = list_to_binary(Cs),
      {token,{'STRING',Line,S}};
 long_bracket(Line, Cs) ->
-    S = list_to_binary(chars(Cs)),
+    S = list_to_binary(Cs),
      {token,{'STRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
