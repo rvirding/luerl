@@ -39,34 +39,40 @@ Rules.
 %% Names/identifiers.
 ({U}|{L}|_)({U}|{L}|_|{D})* :
 	name_token(TokenChars, TokenLine).
+%% Numbers, we separately parse (Erlang) integers and floats.
 %% Integers.
 {D}+ : 
 	case catch {ok,list_to_integer(TokenChars)} of
 	    {ok,I} -> {token,{'NUMBER',TokenLine,float(I)}};
 	    _ -> {error,"illegal number"}
 	end.
-0x{H}{H}{H}{H} :
+0x{H}+ :
 	base_token(string:substr(TokenChars, 3), 16, TokenLine).
 %% Floats.
-{D}+\.{D}+([eE][-+]{D}+)? :
+{D}+\.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float(TokenChars)} of
 	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
-{D}[eE][-+]{D}+ :
+{D}+[eE][-+]?{D}+ :
 	[M,E] = string:tokens(TokenChars, "eE"),
 	case catch {ok,list_to_float(M ++ ".0e" ++ E)} of
 	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
+\.{D}+[eE][-+]?{D}+ :
+	case catch {ok,list_to_float("0" ++ TokenChars)} of
+	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    _ -> {error,"illegal number"}
+	end.
 
 %% Strings.
-\"(\\.|[^"])*\" :
+\"(\\.|[^"\n])*\" :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
 	S = list_to_binary(chars(Cs)),
 	{token,{'STRING',TokenLine,S}}.
-\'(\\.|[^'])*\' :
+\'(\\.|[^'\n])*\' :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
 	S = list_to_binary(chars(Cs)),
@@ -136,7 +142,7 @@ name_token(Cs, L) ->
 
 base_token(Cs, B, L) ->
     case base1(Cs, B, 0) of
-	{N,[]} -> {token,{'INTEGER',L,N}};
+	{I,[]} -> {token,{'NUMBER',L,float(I)}};
 	{_,_} -> {error,"illegal based number"}
     end.
 
