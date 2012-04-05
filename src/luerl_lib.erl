@@ -35,13 +35,26 @@
 
 -include("luerl.hrl").
 
--export([lua_error/1,is_true/1,first_value/1,number_to_list/1,
+-export([lua_error/1,errormsg/1,is_true/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
 
 lua_error(E) -> error({lua_error,E}).
+
+errormsg({badarg,Where,As}) ->
+    io_lib:format("badarg in ~w: ~w", [Where,As]);
+errormsg({illegal_key,Tab,Key}) ->
+    io_lib:format("invalid key in ~w: ~w", [Tab,Key]);
+errormsg({illegal_index,Where,I}) ->
+    io_lib:format("invalid index in ~w: ~w", [Where,I]);
+errormsg({illegal_val,Where,Val}) ->
+    io_lib:format("invalid value in ~w: ~w", [Where,Val]);
+errormsg({illegal_op,Op}) ->
+    io_lib:format("illegal op: ~w", [Op]);
+errormsg({undefined_op,Op}) ->
+    io_lib:format("undefined op: ~w", [Op]).
 
 %% is_true(Rets) -> boolean()>
 

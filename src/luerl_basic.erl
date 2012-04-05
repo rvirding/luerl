@@ -53,6 +53,7 @@ table() ->
      {<<"load">>,{function,fun load/2}},
      {<<"loadfile">>,{function,fun loadfile/2}},
      {<<"next">>,{function,fun next/2}},
+     {<<"pcall">>,{function,fun pcall/2}},
      {<<"pairs">>,{function,fun pairs/2}},
      {<<"print">>,{function,fun print/2}},
      {<<"rawequal">>,{function,fun rawequal/2}},
@@ -121,7 +122,7 @@ next([#tref{i=T},K|_], St) ->
 	    case next_loop(K, Tab) of
 		[{Next,V}|_] -> {[Next,V],St};
 		[] -> {[nil],St};
-		error -> lua_error({invalid_key,K})
+		error -> lua_error({invalid_key,#tref{i=T},K})
 	    end
     end;
 next(As, _) -> lua_error({badarg,next,As}).
@@ -308,4 +309,16 @@ parse_string(S) ->
 		{error,E} -> {error,E}
 	    end;
 	{error,E} -> {error,E}
+    end.
+
+pcall([F|As], St0) ->
+    try
+	{Rs,St1} = luerl_eval:functioncall(F, As, St0),
+	{[true|Rs],St1}
+    catch
+	%% Only catch Lua errors here, signal system errors.
+	error:{lua_error,E} ->
+	    %% Really basic formatting for now.
+	    Msg = iolist_to_binary(luerl_lib:errormsg(E)),
+	    {[false,Msg],St0}
     end.
