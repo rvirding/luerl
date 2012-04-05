@@ -212,9 +212,10 @@ tostring(N) when is_number(N) ->
 	end,
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
-tostring(#tref{}=T) -> iolist_to_binary(io_lib:write(T));
-tostring({function,_,_,_,_}) -> iolist_to_binary(io_lib:write(function));
-tostring({function,_}) -> iolist_to_binary(io_lib:write(function));
+tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
+tostring({function,L,_,_,_}) ->
+    iolist_to_binary(["function: ",io_lib:write(L)]);
+tostring({function,F}) -> iolist_to_binary(["function: ",io_lib:write(F)]);
 tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.

@@ -62,8 +62,6 @@ concat(#tref{i=N}=T, A2, As, St) ->
 	_ -> lua_error({badarg,concat,[T,A2|As]})
     end.
 
-concat(_, _, [I|_]) when I < 1.0 ->
-    lua_error({illegal_val,concat,I});
 concat(Tab, Sep, [I]) ->
     Rest = skip_until(Tab, I),
     Conc = concat_loop(Rest, I),

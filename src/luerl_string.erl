@@ -33,11 +33,12 @@
 
 -export([install/1]).
 
--export([test_gsub/3,test_do_match/3,test_pat/1]).	%Test functions
+-export([test_gsub/3,test_do_match/3,test_pat/1,	%Test functions
+	 test_byte/3,test_find/4,test_sub/2,test_sub/3]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
--compile([bin_opt_info]).			%For when we are optimising
+%%-compile([bin_opt_info]).			%For when we are optimising
 
 install(St0) ->
     {T,St1} = luerl_eval:alloc_table(table(), St0),
@@ -65,22 +66,36 @@ table() ->					%String table
      {<<"upper">>,{function,fun upper/2}}
     ].
 
-byte([A], St) -> byte(A, 1, 1, St);
-byte([A1,A2], St) -> byte(A1, A2, A2, St);
-byte([A1,A2,A3|_], St) -> byte(A1, A2, A3, St);
-byte(As, _) -> lua_error({badarg,byte,As}).
+byte(As, St) ->
+    case luerl_lib:conv_list(As, [lstring,integer,integer]) of
+	[S|Is] ->
+	    Bs = do_byte(S, byte_size(S), Is),
+	    {Bs,St};
+	_ -> lua_error({badarg,byte,As})	%nil or []
+    end.
 
-byte(A1, A2, A3, St) when is_binary(A1), is_number(A2), is_number(A3) ->
-    F = round(A2),				%First and last positions
-    L = round(A3),
-    if F >= 1, L >= F, L =< byte_size(A1) ->
-	    {binary_to_list(A1, F, L),St};
-       true -> {[],St}
-    end;
-byte(_, _, _, St) -> {[],St}.
+do_byte(_, 0, _) -> [nil];
+do_byte(S, Len, []) -> do_byte(S, Len, 1, 1);
+do_byte(S, Len, [I]) -> do_byte(S, Len, I, I);
+do_byte(S, Len, [I,J]) -> do_byte(S, Len, I, J).
 
+do_byte(S, Len, I0, J0) ->			%The same as for sub
+    I1 = do_sub_m(Len, I0),
+    J1 = do_sub_m(Len, J0),
+    do_byte_ij(S, Len, I1, J1).
+
+do_byte_ij(S, Len, I, J) when I < 1 -> do_byte_ij(S, Len, 1, J);
+do_byte_ij(S, Len, I, J) when J > Len -> do_byte_ij(S, Len, I, Len);
+do_byte_ij(_, _, I, J) when I > J -> [nil];
+do_byte_ij(S, _, I, J) ->
+    [ float(N) || N <- binary_to_list(S, I, J) ].
+
+test_byte(S, I, J) ->
+    do_byte(S, byte_size(S), I, J).
+
+char([nil], St) -> {[<<>>],St};
 char(As, St) ->
-    case catch list_to_binary(luerl_lib:tointegers(As)) of
+    case catch list_to_binary(luerl_lib:to_ints(As)) of
 	{'EXIT',_} -> lua_error({badarg,char,As});
 	B -> {[B],St}
     end.
@@ -89,27 +104,31 @@ find([A1,A2], St) -> find([A1,A2,1.0], St);
 find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
 find(As, St) ->
     case luerl_lib:conv_list(As, [lstring,lstring,integer,lbool]) of
-	nil -> lua_error({badarg,find,As});
-	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St}
+	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St};
+	_ -> lua_error({badarg,find,As})	%nil, [_] or []
     end.
+
+test_find(S, P, I, Pl) -> find(S, byte_size(S), P, I, Pl).
 
 %% find(String, Length, Pattern, Start, Plain) -> [Return].
 %% Adjust the starting index and find the string.
 
-find(_, L, _, I, _) when I > L -> [nil];
+find(_, L, _, I, _) when I > L+1 -> [nil];
 find(S, L, P, I, Pl) when I < -L -> find(S, L, P, 1, Pl);
 find(S, L, P, I, Pl) when I < 0 -> find(S, L, P, L+I+1, Pl);
 find(S, L, P, 0, Pl) ->  find(S, L, P, 1, Pl);
 find(S, L, P, I, true) ->			%Plain text search string
     case binary:match(S, P, [{scope,{I-1,L-I+1}}]) of
-	{Fs,Fl} -> [Fs+1,Fs+Fl];
+	{Fs,Fl} -> [float(Fs+1),float(Fs+Fl)];
 	nomatch -> [nil]
     end;
 find(S, L, P, I, false) ->			%Pattern search string
     case pat(binary_to_list(P)) of
 	{ok,{Pat,_},_} ->
-	    case find_loop(S, L, Pat, I) of
+	    S1 = binary_part(S, I-1, L-I+1),	%Start searching from I
+	    case find_loop(S1, L, Pat, I) of
 		[{_,F,Len}|Cas] ->
+		    io:format("f: ~p\n", [{F,Len,Cas}]),
 		    [float(F),float(F+Len-1)|match_cas(Cas, S)];
 		[] -> [nil]
 	    end;
@@ -117,12 +136,13 @@ find(S, L, P, I, false) ->			%Pattern search string
     end.
 
 find_loop(_, L, _, I) when I > L -> [];
-find_loop(S0, L, Pat, I0) ->
-    case do_match(S0, Pat, I0) of
+find_loop(S0, L, Pat, I) ->
+    io:format("fl: ~p\n", [{S0,Pat,I}]),
+    case do_match(S0, Pat, I) of
 	{match,Cas,_,_} -> Cas;
 	nomatch ->
-	    S1 = binary_part(S0, 1, L-I0),
-	    find_loop(S1, L, Pat, I0+1)
+	    S1 = binary_part(S0, 1, L-I),
+	    find_loop(S1, L, Pat, I+1)
     end.
 
 %% format([Format,Arg|_], State) -> {String,State}.
@@ -345,29 +365,35 @@ reverse(As, _) -> lua_error({badarg,reverse,As}).
 
 %% sub(Args, State) -> {[Res],State}.
 
-sub([A1|As], St) ->
-    case luerl_lib:conv_list([A1|As], [lstring,integer,integer]) of
-	[S|Is] ->
+sub(As, St) ->
+    case luerl_lib:conv_list(As, [lstring,integer,integer]) of
+	[S,I|Js] ->
 	    Len = byte_size(S),
-	    Sub = case Is of
-		      [I] -> do_sub(S, Len, I);		%Just an I
-		      [I,J] -> do_sub(S, Len, I, J)	%Both an I and a J
-		  end,
-	    {[Sub],St}
-    end;
-sub(As, _) -> lua_error({badarg,sub,As}).
+	    Sub = do_sub(S, Len, I, Js),	%Just I, or both I and J
+	    {[Sub],St};
+	_ -> lua_error({badarg,sub,As})		%nil, [_] or []
+    end.
 
-do_sub(S, _, 0) -> S;
-do_sub(S, Len, I) when I < 1 -> do_sub(S, Len, Len+I+1, Len);
-do_sub(S, Len, I) -> do_sub(S, Len, I, Len).
+test_sub(S, I) -> do_sub(S, byte_size(S), I, []).
+test_sub(S, I, J) -> do_sub(S, byte_size(S), I, [J]).
 
-do_sub(S, Len, I, J) when I < 1 -> do_sub(S, Len, 1, J);
-do_sub(_, Len, _, J) when J < -Len -> <<>>;
-do_sub(S, Len, I, J) when J < 0 -> do_sub(S, Len, I, Len+J+1);
-do_sub(S, Len, I, J) when J > Len -> do_sub(S, Len, I, Len);
-do_sub(_, Len, I, _) when I > Len -> <<>>;
-do_sub(_, _, I, J) when J < I -> <<>>;
-do_sub(S, _, I, J) -> binary:part(S, I-1, J-I+1). %Zero-based, yuch!
+do_sub(S, _, 0, []) -> S;			%Special case this
+do_sub(S, Len, I, []) -> do_sub_1(S, Len, I, Len);
+do_sub(S, Len, I, [J]) -> do_sub_1(S, Len, I, J).
+
+do_sub_1(S, Len, I0, J0) ->
+    I1 = do_sub_m(Len, I0),
+    J1 = do_sub_m(Len, J0),
+    do_sub_ij(S, Len, I1, J1).
+
+do_sub_m(Len, I) when I < 0 -> Len+I+1;		%Negative count from end
+do_sub_m(_, I) -> I.
+
+do_sub_ij(S, Len, I, J) when I < 1 -> do_sub_ij(S, Len, 1, J);
+do_sub_ij(S, Len, I, J) when J > Len -> do_sub_ij(S, Len, I, Len);
+do_sub_ij(_, _, I, J) when I > J -> <<>>;
+do_sub_ij(S, _, I, J) ->
+    binary:part(S, I-1, J-I+1).			%Zero-based, yuch!
 
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
