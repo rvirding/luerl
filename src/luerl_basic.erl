@@ -173,22 +173,25 @@ rawset([#tref{i=N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
     St#luerl{tabs=Ts1};
 rawset(As, _) -> lua_error({badarg,rawset,As}).
 
-select([<<$#>>|As], St) -> {[length(As)],St};
+select([<<$#>>|As], St) -> io:fwrite("sel:~p\n", [[<<$#>>|As]]),{[float(length(As))],St};
 select([A|As], St) ->
-    case luerl_lib:tonumber(A) of
-	N when is_number(N), N > 0 -> {select_front(round(N), As),St};
-	N when is_number(N), N < 0 -> {select_back(-round(N), As),St};
+    io:fwrite("sel:~p\n", [[A|As]]),
+    Len = length(As),
+    case luerl_lib:to_int(A) of
+	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
+	N when is_integer(N), N < 0 -> {select_back(-N, As, Len),St};
 	_ -> lua_error({badarg,select,[A|As]})
     end;
 select(As, _) -> lua_error({badarg,select,As}).
 
-select_front(N, As) when N < length(As) ->
+select_front(N, As, Len) when N < Len ->
     lists:nthtail(N-1, As);
-select_front(_, _) -> [].
+select_front(_, _, _) -> [].
 
-select_back(N, As) ->
-    L = length(As),
-    lists:sublist(As, L-N+1, N).
+select_back(N, As, Len) when N < Len ->
+    lists:nthtail(Len-N, As);
+select_back(_, As, _) -> As.
+
 
 tonumber([Arg], St) -> {[luerl_lib:tonumber(Arg)],St};
 tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St}.
@@ -308,7 +311,7 @@ parse_string(S) ->
 		{ok,C} -> {ok,C};
 		{error,E} -> {error,E}
 	    end;
-	{error,E} -> {error,E}
+	{error,E,_} -> {error,E}
     end.
 
 pcall([F|As], St0) ->
@@ -318,7 +321,7 @@ pcall([F|As], St0) ->
     catch
 	%% Only catch Lua errors here, signal system errors.
 	error:{lua_error,E} ->
-	    %% Really basic formatting for now.
-	    Msg = iolist_to_binary(luerl_lib:errormsg(E)),
+	    %% Basic formatting for now.
+	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
 	    {[false,Msg],St0}
     end.

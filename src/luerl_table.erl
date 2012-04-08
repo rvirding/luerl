@@ -106,18 +106,24 @@ pack_loop([E|Es], N) ->				%In order for an orddict!
     [{N+1,E}|pack_loop(Es, N+1)];
 pack_loop([], N) -> [{<<"n">>,N}].
 
-unpack([A1], St) -> unpack([A1,1.0], St);
 unpack([#tref{i=N}=T|As], St) ->
     #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:tointegers(As) of
+    case luerl_lib:tointegers(unpack_args(As)) of
 	[I] ->
 	    Start = skip_until(Tab, I),
 	    {unpack_loop(Start, I),St};
-	[I,J|_] ->
+	[I,J] ->
 	    Start = skip_until(Tab, I),
 	    {unpack_loop(Start, I, J),St};
 	_ -> lua_error({badarg,unpack,[T|As]})
-    end.
+    end;
+unpack([], _) -> lua_error({badarg,unpack,[]}).
+
+unpack_args([]) -> unpack_args([1.0]);		%Just start from the beginning
+unpack_args([nil|As]) -> unpack_args([1.0|As]);
+unpack_args([I]) -> [I];			%Only one argument
+unpack_args([I,nil|_]) -> [I];			%Goto the default end
+unpack_args([I,J|_]) -> [I,J].			%Two arguments
 
 skip_until([{K,_}|_]=Tab, I) when K >= I -> Tab;
 skip_until([_|Tab], I) -> skip_until(Tab, I);

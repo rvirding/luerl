@@ -74,6 +74,9 @@ byte(As, St) ->
 	_ -> lua_error({badarg,byte,As})	%nil or []
     end.
 
+test_byte(S, I, J) ->
+    do_byte(S, byte_size(S), I, J).
+
 do_byte(_, 0, _) -> [nil];
 do_byte(S, Len, []) -> do_byte(S, Len, 1, 1);
 do_byte(S, Len, [I]) -> do_byte(S, Len, I, I);
@@ -89,9 +92,6 @@ do_byte_ij(S, Len, I, J) when J > Len -> do_byte_ij(S, Len, I, Len);
 do_byte_ij(_, _, I, J) when I > J -> [nil];
 do_byte_ij(S, _, I, J) ->
     [ float(N) || N <- binary_to_list(S, I, J) ].
-
-test_byte(S, I, J) ->
-    do_byte(S, byte_size(S), I, J).
 
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
@@ -128,7 +128,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 	    S1 = binary_part(S, I-1, L-I+1),	%Start searching from I
 	    case find_loop(S1, L, Pat, I) of
 		[{_,F,Len}|Cas] ->
-		    io:format("f: ~p\n", [{F,Len,Cas}]),
+		    %% io:format("f: ~p\n", [{F,Len,Cas}]),
 		    [float(F),float(F+Len-1)|match_cas(Cas, S)];
 		[] -> [nil]
 	    end;
@@ -137,7 +137,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 
 find_loop(_, L, _, I) when I > L -> [];
 find_loop(S0, L, Pat, I) ->
-    io:format("fl: ~p\n", [{S0,Pat,I}]),
+    %% io:format("fl: ~p\n", [{S0,Pat,I}]),
     case do_match(S0, Pat, I) of
 	{match,Cas,_,_} -> Cas;
 	nomatch ->
@@ -345,7 +345,7 @@ match_cas(Cas, S) -> [ match_ca(Ca, S) || Ca <- Cas ].
     
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
-    case luerl_lib:conv_list(As, [list,integer,list]) of
+    case luerl_lib:conv_list(As, [lstring,integer,lstring]) of
 	[S,I,Sep] ->
 	    if I > 0 ->
 		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
