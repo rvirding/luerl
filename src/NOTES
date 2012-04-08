@@ -11,6 +11,21 @@ bigger change as copying the whole table for each access would be very
 inefficient. Either use bags and have one per table or sue sets and
 have the ETS key as {Tab,Key}.
 
+To handle multiple return values we always return a list of values.
+The only place this is not done is in luerl_eval.erl when getting
+values from the environment where we can only have one value. This
+means a lot of calls to first_value/1 in luerl_eval.erl, but the
+consistency is worth it.
+
+Similarily all the arguments in a function call are passed in a list.
+The function then unpacks the list into its arguments, including
+'...'.
+
+All of the predefinde libraries have an install/1 function. This is
+called when initialising Luerl; it does any library specific
+initialisation necessary and returns a table containing the functions
+in the library.
+
 Lua implementation "features"
 -----------------------------
 
