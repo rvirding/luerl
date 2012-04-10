@@ -55,6 +55,8 @@ table() ->
      {<<"pi">>,math:pi()},
      {<<"pow">>,{function,fun pow/2}},
      {<<"rad">>,{function,fun rad/2}},
+     {<<"random">>,{function,fun random/2}},
+     {<<"randomseed">>,{function,fun randomseed/2}},
      {<<"sin">>,{function,fun sin/2}},
      {<<"sinh">>,{function,fun sinh/2}},
      {<<"sqrt">>,{function,fun sqrt/2}},
@@ -168,6 +170,27 @@ rad(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:pi()*N/180.0],St};
 	_ -> lua_error({badarg,sinh,As})
+    end.
+
+random(As, St) ->
+    case luerl_lib:to_ints(As) of
+	[] -> {[random:uniform()],St};		%0-1.0
+	[M] when M > 1 ->
+	    R = random:uniform(M),
+	    {[float(R)],St};
+	[M,N] when N > M ->
+	    R = random:uniform(N - M),
+	    {[float(R + M)],St};
+	_ -> lua_error({badarg,random,As})
+    end.
+
+randomseed(As, St) ->
+    case luel_lib:tonumbers(As) of
+	[S|_] ->
+	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
+	    random:seed(A1, A2, A3),
+	    {[],St};
+	_ -> lua_error({badarg,randomseed,As})
     end.
 
 sin(As, St) ->
