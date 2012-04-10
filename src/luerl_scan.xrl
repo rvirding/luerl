@@ -119,10 +119,11 @@ Rules.
 
 [\000-\s]+ : skip_token.
 
-%% Comments.
---(\n|[^[].*) : skip_token.
+%% Comments, either -- or --[[ ]].
+--(\[[^[].*|[^[].*|\n) : skip_token.
 %% --aa([^b]|b[^b])*b+b
 --\[\[([^]]|\][^]])*\]+\] : skip_token.
+--\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
 
 Erlang code.
 
