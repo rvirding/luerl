@@ -231,19 +231,17 @@ uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.
 
--export([chunk/1,code/1]).
+-export([chunk/1]).
 
-chunk(Ts) -> parse(Ts).
-%%     case F = parse(Ts) of
-%%         {error,{Line,luerl_parse,MsgList}} ->
-%%             io:format("~nLuerl parse error in line ~p: ~p~n", [Line, lists:flatten(MsgList)]),
-%%             F;
-%%         {ok,{functiondef,_,_,_}} -> F;
-%%         {ok,{functiondef,_,_,_,_}} -> F;
-%%         {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[],Body}}
-%%     end.        
+%% chunk(Tokens) -> FunctionDef | Error.
+%% Return the parse as a callable nameless function definition.
 
-code(Ts) -> parse(Ts).
+chunk(Ts) ->
+    case parse(Ts) of
+        {error,_}=Error -> Error;
+        {ok,Body} -> {ok,{functiondef,1,[{'...',1}],Body}}
+%%         {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[{'...',1}],Body}}
+    end.
 
 cat(T) -> element(1, T).
 line(T) -> element(2, T).
