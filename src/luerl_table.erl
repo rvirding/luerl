@@ -47,6 +47,7 @@ install(St) ->
 table() ->
     [{<<"concat">>,{function,fun concat/2}},
      {<<"pack">>,{function,fun pack/2}},
+     {<<"sort">>,{function,fun sort/2}},
      {<<"unpack">>,{function,fun unpack/2}}
     ].
 
@@ -142,6 +143,44 @@ unpack_loop([{K,_}|_]=Tab, N, J) when K > N -> [nil|unpack_loop(Tab, N+1, J)];
 unpack_loop([{K,_}|Tab], N, J) when K < N -> unpack_loop(Tab, N, J);
 unpack_loop([], N, J) -> [nil|unpack_loop([], N+1, J)].
 
+sort([#tref{i=N}], St0) ->
+    Comp = fun ([{_,A},{_,B}], St) -> lt_comp(A, B, St) end,
+    St1 = do_sort(Comp, St0, N),
+    {[],St1};
+sort([#tref{i=N},Func|_], St0) ->
+    Comp = fun ([{_,A},{_,B}], St) ->
+		   luerl_eval:functioncall(Func, [A,B], St)
+	   end,
+    St1 = do_sort(Comp, St0, N),
+    {[],St1};
+sort(As, _) -> lua_error({badarg,sort,As}).
+
+do_sort(Sort, St0, N) ->
+    #table{t=Tab0}=T = ?GET_TABLE(N, St0#luerl.tabs),
+    {Tab1,St1} = merge_sort(Sort, St0, Tab0),
+    Tab2 = renumber(Tab1),
+    Ts0 = St1#luerl.tabs,
+    Ts1 = ?SET_TABLE(N, T#table{t=Tab2}, Ts0),
+    St1#luerl{tabs=Ts1}.
+
+%% lt_comp(O1, O2, State) -> {[Bool],State}.
+%%  Proper Lua '<' comparison.
+
+lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
+lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
+lt_comp(O1, O2, St0) ->
+    case luerl_eval:getmetamethod(O1, O2, <<"__lt">>, St0) of
+	nil -> lua_error({illegal_comp,sort});
+	Meta ->
+	    {Ret,St1} = luerl_eval:functioncall(Meta, [O1,O2], St0),
+	    {[is_true(Ret)],St1}
+    end.
+
+renumber(Tab0) ->
+    Fun = fun ({_,V}, I) -> {{I,V},I+1} end,
+    {Tab1,_} = lists:mapfoldl(Fun, 1.0, Tab0),
+    Tab1.
+
 %% length(Stable, State) -> {Length,State}.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1.0.
@@ -160,3 +199,227 @@ length_loop([]) -> 0.0.
 
 length_loop([{K,_}|T], K) -> length_loop(T, K+1);
 length_loop(_, N) -> N-1.
+
+%% sort(A,B,C) -> sort_up(A,B,C).
+
+%% sort_up(A,B,[X,Y|L]) ->
+%%     case X =< Y of
+%% 	true -> merge_dn([Y,X], sort_dn(A, B, L), []);
+%% 	false -> merge_dn([X,Y], sort_dn(A, B, L), [])
+%%     end;
+%% sort_up(A,B,[X]) -> [X];
+%% sort_up(A,B,[]) -> [].
+
+%% sort_dn(A,B,[X,Y|L]) ->
+%%     case X =< Y of
+%% 	true -> merge_up([X,Y], sort_up(A, B, L), []);
+%% 	false ->  merge_up([Y,X], sort_up(A, B, L), [])
+%%     end;
+%% sort_dn(A,B,[X]) -> [X];
+%% sort_dn(A,B,[]) -> [].
+
+%% merge(A,B,C) ->
+%%     merge_dn(A,B,C).
+
+%% %% merge_up(L1, L2, Acc)
+%% %%  L1, L2 increasing, Acc will be decreasing
+
+%% merge_up([X|Xs]=Xs0, [Y|Ys]=Ys0, Acc) ->
+%%     case X =< Y of
+%% 	true -> merge_up(Xs, Ys0, [X|Acc]);
+%% 	false -> merge_up(Xs0, Ys, [Y|Acc])
+%%     end;
+%% merge_up([X|Xs], [], Acc) -> merge_up(Xs, [], [X|Acc]);
+%% merge_up([], [Y|Ys], Acc) -> merge_up([], Ys, [Y|Acc]);
+%% merge_up([], [], Acc) -> Acc.
+
+%% %% merge_dn(L1, L2, Acc)
+%% %%  L1, L2 decreasing, Acc will be increasing
+
+%% merge_dn([X|Xs]=Xs0, [Y|Ys]=Ys0, Acc) ->
+%%     case X =< Y of
+%% 	true -> merge_dn(Xs0, Ys, [Y|Acc]);
+%% 	false -> merge_dn(Xs, Ys0, [X|Acc])
+%%     end;
+%% merge_dn([X|Xs], [], Acc) -> merge_dn(Xs, [], [X|Acc]);
+%% merge_dn([], [Y|Ys], Acc) -> merge_dn([], Ys, [Y|Acc]);
+%% merge_dn([], [], Acc) -> Acc.
+
+%% merge_sort(CompFun, State, List) -> {SortedList,State}.
+%%  The code here has been taken from the sort/2 code in lists.erl and
+%%  converted to chain State through all calls to the comparison
+%%  function.
+
+merge_sort(_, St, []) -> {[],St};
+merge_sort(_, St, [_] = L) -> {L,St};
+merge_sort(Fun, St0, [X, Y|T]) ->
+    {Ret,St1} = Fun([X,Y], St0),
+    case is_true(Ret) of
+	true ->
+	    fsplit_1(Y, X, Fun, St1, T, [], []);
+	false ->
+	    fsplit_2(Y, X, Fun, St1, T, [], [])
+    end.
+
+%% Ascending.
+fsplit_1(Y, X, Fun, St0, [Z|L], R, Rs) ->
+    {Ret1,St1} = Fun([Y,Z], St0),
+    case is_true(Ret1) of
+        true ->
+            fsplit_1(Z, Y, Fun, St1, L, [X|R], Rs);
+        false ->
+	    {Ret2,St2} = Fun([X,Z], St1),
+            case is_true(Ret2) of
+                true ->
+                    fsplit_1(Y, Z, Fun, St2, L, [X|R], Rs);
+                false when R == [] ->
+                    fsplit_1(Y, X, Fun, St2, L, [Z], Rs);
+                false ->
+                    fsplit_1_1(Y, X, Fun, St2, L, R, Rs, Z)
+            end
+    end;
+fsplit_1(Y, X, Fun, St, [], R, Rs) ->
+    rfmergel([[Y, X|R]|Rs], [], Fun, St, asc).
+
+fsplit_1_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
+    {Ret1,St1} = Fun([Y,Z], St0),
+    case is_true(Ret1) of
+        true ->
+            fsplit_1_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
+        false ->
+	    {Ret2,St2} = Fun([X,Z], St1),
+            case is_true(Ret2) of
+                true ->
+                    fsplit_1_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
+                false ->
+		    {Ret3,St3} = Fun([S,Z], St2),
+                    case is_true(Ret3) of
+                        true ->
+                            fsplit_1(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
+                        false ->
+                            fsplit_1(S, Z, Fun, St3, L, [], [[Y, X|R]|Rs])
+                    end
+            end
+    end;
+fsplit_1_1(Y, X, Fun, St, [], R, Rs, S) ->
+    rfmergel([[S], [Y, X|R]|Rs], [], Fun, St, asc).
+
+%% Descending.
+fsplit_2(Y, X, Fun, St0, [Z|L], R, Rs) ->
+    {Ret1,St1} = Fun([Y,Z], St0),
+    case is_true(Ret1) of
+        false ->
+            fsplit_2(Z, Y, Fun, St1, L, [X|R], Rs);
+        true ->
+	    {Ret2,St2} = Fun([X,Z], St1),
+            case is_true(Ret2) of
+                false ->
+                    fsplit_2(Y, Z, Fun, St2, L, [X|R], Rs);
+                true when R == [] ->
+                    fsplit_2(Y, X, Fun, St2, L, [Z], Rs);
+                true ->
+                    fsplit_2_1(Y, X, Fun, St2, L, R, Rs, Z)
+            end
+    end;
+fsplit_2(Y, X, Fun, St, [], R, Rs) ->
+    fmergel([[Y, X|R]|Rs], [], Fun, St, desc).
+
+fsplit_2_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
+    {Ret1,St1} = Fun([Y,Z], St0),
+    case is_true(Ret1) of
+        false ->
+            fsplit_2_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
+        true ->
+	    {Ret2,St2} = Fun([X,Z], St1),
+            case is_true(Ret2) of
+                false ->
+                    fsplit_2_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
+                true ->
+		    {Ret3,St3} = Fun([S,Z], St2),
+                    case is_true(Ret3) of
+                        false ->
+                            fsplit_2(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
+                        true ->
+                            fsplit_2(S, Z, Fun, St3, L, [], [[Y, X|R]|Rs])
+                    end
+            end
+    end;
+fsplit_2_1(Y, X, Fun, St, [], R, Rs, S) ->
+    fmergel([[S], [Y, X|R]|Rs], [], Fun, St, desc).
+
+fmergel([T1, [H2|T2]|L], Acc, Fun, St0, asc) ->
+    {L1,St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
+    fmergel(L, [L1|Acc], Fun, St1, asc);
+fmergel([[H2|T2], T1|L], Acc, Fun, St0, desc) ->
+    {L1,St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
+    fmergel(L, [L1|Acc], Fun, St1, desc);
+fmergel([L], [], _Fun, St, _O) -> {L,St};
+fmergel([L], Acc, Fun, St, O) ->
+    rfmergel([lists:reverse(L, [])|Acc], [], Fun, St, O);
+fmergel([], Acc, Fun, St, O) ->
+    rfmergel(Acc, [], Fun, St, O).
+
+rfmergel([[H2|T2], T1|L], Acc, Fun, St0, asc) ->
+    {L1,St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
+    rfmergel(L, [L1|Acc], Fun, St1, asc);
+rfmergel([T1, [H2|T2]|L], Acc, Fun, St0, desc) ->
+    {L1,St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
+    rfmergel(L, [L1|Acc], Fun, St1, desc);
+rfmergel([L], Acc, Fun, St, O) ->
+    fmergel([lists:reverse(L, [])|Acc], [], Fun, St, O);
+rfmergel([], Acc, Fun, St, O) ->
+    fmergel(Acc, [], Fun, St, O).
+
+%% Elements from the first list are prioritized.
+fmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
+    {Ret,St1} = Fun([H1,H2], St0),
+    case is_true(Ret) of
+        true ->
+            fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
+        false ->
+            fmerge2_2(H1, T1, Fun, St1, T2, [H2|M])
+    end;
+fmerge2_1([], H2, _Fun, St, T2, M) ->
+    {lists:reverse(T2, [H2|M]),St}.
+
+fmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
+    {Ret,St1} = Fun([H1,H2], St0),
+    case is_true(Ret) of
+        true ->
+            fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
+        false ->
+            fmerge2_2(H1, T1, Fun, St1, T2, [H2|M])
+    end;
+fmerge2_2(H1, T1, _Fun, St, [], M) ->
+    {lists:reverse(T1, [H1|M]),St}.
+
+%% rmerge/3
+
+rfmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
+    {Ret,St1} = Fun([H1,H2], St0),
+    case is_true(Ret) of
+        true ->
+            rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
+        false ->
+            rfmerge2_1(T1, H2, Fun, St1, T2, [H1|M])
+    end;
+rfmerge2_1([], H2, _Fun, St, T2, M) ->
+    {lists:reverse(T2, [H2|M]),St}.
+
+rfmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
+    {Ret,St1} = Fun([H1,H2], St0),
+    case is_true(Ret) of
+        true ->
+            rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
+        false ->
+            rfmerge2_1(T1, H2, Fun, St1, T2, [H1|M])
+    end;
+rfmerge2_2(H1, T1, _Fun, St, [], M) ->
+    {lists:reverse(T1, [H1|M]),St}.
+
+%% is_true(Rets) -> boolean().
+
+is_true([nil|_]) -> false;
+is_true([false|_]) -> false;
+is_true([_|_]) -> true;
+is_true([]) -> false.
