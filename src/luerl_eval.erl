@@ -35,14 +35,15 @@
 -include("luerl.hrl").
 
 %% Basic interface.
--export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
+-export([init/0,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
--export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
+-export([alloc_table/2,functioncall/3,get_table_key/3,
+	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
 -export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
-	 set_env_name_env/4]).
+	 get_local_key/2,set_env_name_env/4]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -273,6 +274,23 @@ chunk(Stats, St0) ->
     %% Should do GC here.
     {Ret,St1}.
 
+%% chunk(Chunk, Args, State) -> {Return,State}.
+
+chunk({functiondef,L,_,Ps,B}, Args, St0) ->
+    {[Lf],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Lf, Args, St1),
+    %% Should do GC here.
+    {Ret,St2};
+chunk({functiondef,L,Ps,B}, Args, St0) ->
+    {[Lf],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Lf, Args, St1),
+    %% Should do GC here.
+    {Ret,St2};
+chunk({function,_}=Func, Args, St0) ->
+    {Ret,St1} = functioncall(Func, Args, St0),
+    %% Should do GC here.
+    {Ret,St1}.
+
 %% funchunk(Function, State) -> {Return,State}.
 
 funchunk({functiondef,_Line,_Name,_Pars,Body}, St0) ->
@@ -341,8 +359,8 @@ stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
 stat({block,_,B}, St) ->
     block(B, St);
-stat({functiondef,L,Fname,Ps,B}, St) ->
-    St1 = set_var(Fname, {function,L,St#luerl.env,Ps,B}, St),
+stat({functiondef,L,Fname,Ps,B}, St0) ->
+    St1 = set_var(Fname, {function,L,St0#luerl.env,Ps,B}, St0),
     St1#luerl{locf=true};
 stat({'while',_,Exp,Body}, St) ->
     do_while(Exp, Body, St);
@@ -632,6 +650,7 @@ prefixexp_rest(Exp, SoFar, St) ->
 
 prefixexp_element({functioncall,_,Args0}, SoFar, St0) ->
     {Args1,St1} = explist(Args0, St0),
+    %%io:fwrite("pe1: ~p\n", [{SoFar,Args1}]),
     functioncall(SoFar, Args1, St1);
 prefixexp_element({'NAME',_,N}, SoFar, St0) ->
     {V,St1} = get_table_name(SoFar, N, St0),
@@ -643,6 +662,7 @@ prefixexp_element({key_field,_,Exp}, SoFar, St0) ->
 prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
     {Func,St1} = get_table_name(SoFar, N, St0),
     {Args1,St2} = explist(Args0, St1),
+    %%io:fwrite("pe2: ~p\n", [{Func,[SoFar|Args1]}]),
     functioncall(first_value(Func), [SoFar|Args1], St2).
 
 functioncall({function,_,Env,Ps,B}, Args, St0) ->

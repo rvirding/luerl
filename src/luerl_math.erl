@@ -29,7 +29,7 @@
 
 -module(luerl_math).
 
--export([install/1]).
+-export([install/1,fmod/2]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -48,6 +48,7 @@ table() ->
      {<<"deg">>,{function,fun deg/2}},
      {<<"exp">>,{function,fun exp/2}},
      {<<"floor">>,{function,fun floor/2}},
+     {<<"fmod">>,{function,fun fmod/2}},
      {<<"log">>,{function,fun log/2}},
      {<<"log10">>,{function,fun log10/2}},	%For 5.1 backwards compatibility
      {<<"max">>,{function,fun max/2}},
@@ -132,6 +133,15 @@ floor(As, St) ->
 	_ -> lua_error({badarg,floor,As})
     end.
 
+fmod(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[X,Y|_] ->
+	    Div = float(trunc(X/Y)),
+	    Rem = X - Div*Y,
+	    {[Rem],St};
+	_ -> lua_error({badarg,fmod,As})
+    end.
+
 log(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N] -> {[math:log(N)],St};
@@ -185,8 +195,9 @@ random(As, St) ->
     end.
 
 randomseed(As, St) ->
-    case luel_lib:tonumbers(As) of
+    case luerl_lib:tonumbers(As) of
 	[S|_] ->
+	    %% Split float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
 	    random:seed(A1, A2, A3),
 	    {[],St};

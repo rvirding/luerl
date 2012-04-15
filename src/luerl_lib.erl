@@ -43,6 +43,10 @@
 
 lua_error(E) -> error({lua_error,E}).
 
+%% format_error(LuaError) -> ErrorString.
+%%  Some of these use same text as Lua error string, so be careful if
+%%  modifying them.
+
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
 format_error({illegal_key,Tab,Key}) ->
@@ -53,12 +57,27 @@ format_error({illegal_val,Where,Val}) ->
     io_lib:format("invalid value in ~w: ~w", [Where,Val]);
 format_error({illegal_val,Val}) ->
     io_lib:format("invalid value: ~w", [Val]);
+format_error({illegal_comp,Where}) ->
+    io_lib:format("illegal comparison in ~w", [Where]);
+format_error({invalid_order,Where}) ->		%Keep text!
+    io_lib:format("invalid order function in ~w", [Where]);
+%% Pattern errors.
+format_error(invalid_pattern) ->		%Keep text!
+    io_lib:format("malformed pattern", []);
+format_error(invalid_capture) ->		%Keep text!
+    io_lib:format("malformed pattern", []);
+format_error({invalid_char_class,C}) ->		%Keep text!
+    io_lib:format("malformed pattern: class ~c", [C]);
+format_error(invalid_char_set) ->		%Keep text!
+    io_lib:format("malformed pattern: missing ]", []);
+%% Illegal or undefined ops.
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);
 format_error({undefined_op,Op}) ->
     io_lib:format("undefined op: ~w", [Op]).
 
 %% is_true(Rets) -> boolean()>
+%% first_value(Rets) -> Value | nil.
 
 is_true([nil|_]) -> false;
 is_true([false|_]) -> false;

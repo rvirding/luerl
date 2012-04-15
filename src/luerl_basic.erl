@@ -53,8 +53,8 @@ table() ->
      {<<"load">>,{function,fun load/2}},
      {<<"loadfile">>,{function,fun loadfile/2}},
      {<<"next">>,{function,fun next/2}},
-     {<<"pcall">>,{function,fun pcall/2}},
      {<<"pairs">>,{function,fun pairs/2}},
+     {<<"pcall">>,{function,fun pcall/2}},
      {<<"print">>,{function,fun print/2}},
      {<<"rawequal">>,{function,fun rawequal/2}},
      {<<"rawget">>,{function,fun rawget/2}},
@@ -127,9 +127,12 @@ next([#tref{i=T},K|_], St) ->
     end;
 next(As, _) -> lua_error({badarg,next,As}).
 
-next_loop(K, [{K,_}|Tab]) -> Tab;
+next_loop(K, [{K,_}|Tab]) -> next_loop(Tab);	%Now skip nil values
 next_loop(K, [_|Tab]) -> next_loop(K, Tab);
 next_loop(_, []) ->  error.
+
+next_loop([{_,nil}|Tab]) -> next_loop(Tab);	%Skip nil values
+next_loop(Tab) -> Tab.
 
 pairs([#tref{}=T|_], St) ->
     {[{function,fun next/2},T,nil],St};
@@ -161,7 +164,7 @@ rawlen([#tref{i=N}|_], St) ->
     {length(Tab),St};
 rawlen(As, _) -> lua_error({badarg,rawlen,As}).
 
-rawset([#tref{i=N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
+rawset([#tref{i=N}=Tref,Key,Val|_], #luerl{tabs=Ts0}=St) ->
     Upd = if Val =:= nil ->
 		  fun (#table{t=T}=Tab) ->
 			  Tab#table{t=orddict:erase(Key, T)} end;
@@ -170,12 +173,12 @@ rawset([#tref{i=N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
 			  Tab#table{t=orddict:store(Key, Val, T)} end
 	  end,
     Ts1 = ?UPD_TABLE(N, Upd, Ts0),
-    St#luerl{tabs=Ts1};
+    {[Tref],St#luerl{tabs=Ts1}};
 rawset(As, _) -> lua_error({badarg,rawset,As}).
 
-select([<<$#>>|As], St) -> io:fwrite("sel:~p\n", [[<<$#>>|As]]),{[float(length(As))],St};
+select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->
-    io:fwrite("sel:~p\n", [[A|As]]),
+    %%io:fwrite("sel:~p\n", [[A|As]]),
     Len = length(As),
     case luerl_lib:to_int(A) of
 	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
@@ -184,11 +187,11 @@ select([A|As], St) ->
     end;
 select(As, _) -> lua_error({badarg,select,As}).
 
-select_front(N, As, Len) when N < Len ->
+select_front(N, As, Len) when N =< Len ->
     lists:nthtail(N-1, As);
 select_front(_, _, _) -> [].
 
-select_back(N, As, Len) when N < Len ->
+select_back(N, As, Len) when N =< Len ->
     lists:nthtail(Len-N, As);
 select_back(_, As, _) -> As.
 
@@ -281,11 +284,12 @@ loadfile(As, St) ->
 do_load(S, St) ->
     case parse_string(S) of
 	{ok,C} ->
-	    F = fun (_, St0) ->
+	    F = fun (As, St0) ->
+			%io:fwrite("l: ~p\n", [{C,As}]),
 			Env0 = St0#luerl.env,	%Caller's environment
 			%% Evaluate at top-level,
 			Env = [lists:last(Env0)],
-			{Ret,St1} = luerl_eval:chunk(C, St0#luerl{env=Env}),
+			{Ret,St1} = luerl_eval:chunk(C, As, St0#luerl{env=Env}),
 			St2 = St1#luerl{env=Env0},
 			{Ret,St2}
 		end,
@@ -319,6 +323,9 @@ pcall([F|As], St0) ->
 	{Rs,St1} = luerl_eval:functioncall(F, As, St0),
 	{[true|Rs],St1}
     catch
+%% 	Class:Error ->
+%% 	    io:fwrite("pc: ~p\n", [{Class,Error}]),
+%% 	    {[false,<<>>],St0};
 	%% Only catch Lua errors here, signal system errors.
 	error:{lua_error,E} ->
 	    %% Basic formatting for now.
