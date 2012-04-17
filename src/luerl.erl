@@ -35,7 +35,7 @@
         do/1,do/2,dofile/1,dofile/2,
         load/1,loadfile/1,
         compile/1,compilefile/1,
-        call/1,call/2,
+        call/2,call/3,
         start/0,stop/1,gc/1,decode/2,encode/2]).
 
 %% luerl:eval(String|Binary|Form[, State]) -> Result.
@@ -91,7 +91,6 @@ dofile(Path, St) ->
 %% load(String|Binary) -> {ok,Form}.
 load(Chunk) when is_binary(Chunk) ->
     load(binary_to_list(Chunk));
-
 load(Chunk) when is_list(Chunk) ->
     {ok,Ts,_} = luerl_scan:string(Chunk),
     luerl_parse:chunk(Ts).
@@ -120,18 +119,15 @@ compilefile(Path) ->
 start() -> 
     luerl_eval:init().
 
-%% call(Form[, State][, ErlParam]) -> {Result,State}
-call(C) ->
-    call(C, luerl_eval:init(), []).
+%% call(Form, Terms, State) -> {Result,State}
 
-call(C, St) ->
-    call(C, St, []).
+call(C, Ts) -> call(C, Ts, luerl_eval:init()).
 
-call({functiondef,_,_,_}=C, St, P) ->
-    luerl_eval:funchunk(C, St, P);
-
-call({functiondef,_,_,_,_}=C, St, P) ->
-    luerl_eval:funchunk(C, St, P).
+call(C, Ts, St0) ->
+    {Lts,St1} = encode_list(Ts, St0),
+    {Lrs,St2} = luerl_eval:chunk(C, Lts, St1),
+    Rs = decode_list(Lrs, St2),
+    {Rs,St2}.
 
 %% stop(State) -> GCedState.
 stop(St) -> 
@@ -140,7 +136,11 @@ stop(St) ->
 %% gc(State) -> State.
 gc(St) -> luerl_eval:gc(St).
 
-%% encode(term(), State) -> {LuerlTerm,State}.
+%% encode_list([Term], State) -> {[LuerlTerm],State}.
+%% encode(Term, State) -> {LuerlTerm,State}.
+
+encode_list(Ts, St) ->
+    lists:mapfoldl(fun encode/2, St, Ts).
 
 encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
@@ -161,13 +161,20 @@ encode(L, St0) ->
     {T,St2} = luerl_eval:alloc_table(Ts, St1),
     {T,St2}.
 
-%% decode(LuerlTerm(), State) -> Term.
+%% decode_list([LuerlTerm], State) -> [Term].
+%% decode(LuerlTerm, State) -> Term.
+
+decode_list(Lts, St) ->
+    lists:map(fun (Lt) -> decode(Lt, St) end, Lts).
 
 decode(B, _) when is_binary(B) -> B;
 decode(N, _) when is_number(N) -> N;
 decode(B, _) when is_boolean(B) -> B;
 decode(nil, _) -> nil;
 decode(#tref{i=N}, St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    lists:map(fun ({K,V}) -> {decode(K, St),decode(V, St)} end, Tab);
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+    Fun = fun ({K,V}) -> {decode(K, St),decode(V, St)} end,
+    At = lists:map(Fun, Arr),
+    Tt = lists:map(Fun, Tab),
+    Tt ++ At;
 decode({function,Fun}, _) -> {function,Fun}.

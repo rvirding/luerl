@@ -101,11 +101,28 @@ pop_env(#luerl{env=[_|Es]}=St) ->
 alloc_table(St) -> alloc_table(orddict:new(), St).
 
 alloc_table(Itab, #luerl{tabs=Ts0,free=[N|Ns]}=St) ->
-    Ts1 = ?SET_TABLE(N, #table{t=Itab,m=nil}, Ts0),
+    T = init_table(Itab),
+    Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,free=Ns}};
 alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
-    Ts1 = ?SET_TABLE(N, #table{t=Itab,m=nil}, Ts0),
+    T = init_table(Itab),
+    Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
+
+init_table(Itab) ->
+    T0 = orddict:new(),
+    A0 = orddict:new(),				%These are still orddicts!
+    Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
+	       ({K,V}, {T,A}) when is_number(K) ->
+		   case ?IS_INTEGER(K, I) of
+		       %% true when I >= 1 -> {T,orddict:store(I, V, A)};
+		       true -> {T,orddict:store(I, V, A)};
+		       _NegFalse -> {orddict:store(K, V, T),A}
+		   end;
+	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
+	   end,
+    {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
+    #table{a=A1,t=T1,m=nil}.
 
 free_table(#tref{i=N}, #luerl{tabs=Ts0,free=Ns}=St) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
@@ -116,55 +133,86 @@ free_table(#tref{i=N}, #luerl{tabs=Ts0,free=Ns}=St) ->
 %% get_table_name(Tref, Name, State) -> {[Val],State}.
 %% get_table_key(Tref, Key, State) -> {[Val],State}.
 %%  Access tables, as opposed to the environment (which are also
-%%  tables). Setting a value to 'nil' will clear it from the table.
-%%  NOTE: WE ALWAYS RETURN A LIST OF VALUES GET AS METAMETHOD MY DO SO
-%%  AND WE DON'T WANT TO PRE-SUPPOSE HOW THE VALUE IS TO BE USED!
+%%  tables). Setting a value to 'nil' will clear it from the array but
+%%  not from the table; however, we won't add a nil value. NOTE: WE
+%%  ALWAYS RETURN A LIST OF VALUES GET AS METAMETHOD MY DO SO AND WE
+%%  DON'T WANT TO PRE-SUPPOSE HOW THE VALUE IS TO BE USED!
 
 set_table_name(Tab, Name, Val, St) ->
     set_table_key(Tab, atom_to_binary(Name, latin1), Val, St).
 
-set_table_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
-    #table{t=Tab0,m=Meta} = ?GET_TABLE(N, Ts0),	%Get the table
+set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
+    case ?IS_INTEGER(Key, I) of
+	%% true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
+	true -> set_table_int_key(Tref, Key, I, Val, St);
+	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
+    end;
+set_table_key(#tref{}=Tref, Key, Val, St) ->
+    set_table_key_key(Tref, Key, Val, St);
+set_table_key(Tab, Key, _, _) ->
+    lua_error({illegal_index,Tab,Key}).
+
+set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
+    #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case orddict:find(Key, Tab0) of
-	{ok,_} ->
-%% 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
-%% 		      true -> orddict:store(Key, Val, Tab0)
-%% 		   end,
+	{ok,_} ->			    %Key exists
+	    %% Don't delete key for nil here!
 	    Tab1 = orddict:store(Key, Val, Tab0),
-	    Ts1 = ?SET_TABLE(N, #table{t=Tab1,m=Meta}, Ts0),
+	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{tabs=Ts1};
-	error ->
+	error ->				%Key does not exist
 	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
-		    Tab1 = orddict:store(Key, Val, Tab0),
-		    Ts1 = ?SET_TABLE(N, #table{t=Tab1,m=Meta}, Ts0),
+		    %% Only add non-nil value.
+		    Tab1 = if Val =:= nil -> Tab0;
+			      true -> orddict:store(Key, Val, Tab0)
+			   end,
+		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{tabs=Ts1};
 		Meth when element(1, Meth) =:= function ->
 		    functioncall(Meth, [Key,Val], St);
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
-    end;
-set_table_key(Tab, Key, _, _) ->
-    lua_error({illegal_index,Tab,Key}).
+    end.
+
+set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{tabs=Ts0}=St) ->
+    #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
+    case orddict:find(I, Arr0) of
+	{ok,_} ->				%Key exists
+	    %% Should we do this here?
+	    %% Arr1 = orddict:store(I, Val, Arr0),
+	    Arr1 = if Val =:= nil -> orddict:erase(Key, Arr0);
+		      true -> orddict:store(Key, Val, Arr0)
+		   end,
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    St#luerl{tabs=Ts1};
+	error ->				%Key does not exist
+	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
+		nil ->
+		    %% Only add non-nil value.
+		    Arr1 = if Val =:= nil -> Arr0;
+			      true -> orddict:store(I, Val, Arr0)
+			   end,
+		    %%Arr1 = orddict:store(I, Val, Arr0),
+		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+		    St#luerl{tabs=Ts1};
+		Meth when element(1, Meth) =:= function ->
+		    functioncall(Meth, [Key,Val], St);
+		Meth -> set_table_key(Meth, Key, Val, St)
+	    end
+    end.
 
 get_table_name(Tab, Name, St) ->
     get_table_key(Tab, atom_to_binary(Name, latin1), St).
 
-get_table_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
-    #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(Key, Tab) of
-	{ok,Val} -> {[Val],St};
-	error ->
-	    %% Key not present so try metamethod
-	    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
-		nil -> {[nil],St};
-		Meth when element(1, Meth) =:= function ->
-		    {Vs,St1} = functioncall(Meth, [T,Key], St),
-		    {Vs,St1};
-		Meth ->				%Recurse down the metatable
-		    get_table_key(Meth, Key, St)
-	    end
+get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
+    case ?IS_INTEGER(Key, I) of
+	%% true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
+	true -> get_table_int_key(Tref, Key, I, St);
+	_NegFalse -> get_table_key_key(Tref, Key, St)
     end;
+get_table_key(#tref{}=Tref, Key, St) ->
+    get_table_key_key(Tref, Key, St);
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key});
@@ -172,6 +220,34 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {Vs,St1};
 	Meth ->					%Recurse down the metatable
+	    get_table_key(Meth, Key, St)
+    end.
+
+get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
+    #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
+    case orddict:find(Key, Tab) of
+	{ok,Val} -> {[Val],St};
+	error ->
+	    %% Key not present so try metamethod
+	    get_table_metamethod(T, Meta, Key, Ts, St)
+    end.
+
+get_table_int_key(#tref{i=N}=T, Key, I, #luerl{tabs=Ts}=St) ->
+    #table{a=A,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
+    case orddict:find(I, A) of
+	{ok,Val} -> {[Val],St};
+	error ->
+	    %% Key not present so try metamethod
+	    get_table_metamethod(T, Meta, Key, Ts, St)
+    end.
+
+get_table_metamethod(T, Meta, Key, Ts, St) ->
+    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
+	nil -> {[nil],St};
+	Meth when element(1, Meth) =:= function ->
+	    {Vs,St1} = functioncall(Meth, [T,Key], St),
+	    {Vs,St1};
+	Meth ->				%Recurse down the metatable
 	    get_table_key(Meth, Key, St)
     end.
 
@@ -749,30 +825,30 @@ unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
 
 tableconstructor(Fs, St0) ->
     %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.env}]),
-    {T,St1} = tc_fields(Fs, 1.0, orddict:new(), St0),
-    %% io:fwrite("tc->~p\n", [{T}]),
-    {T,St1}.
+    {Tes,St1} = tc_fields(Fs, 1.0, [], St0),
+    %% io:fwrite("tc->~p\n", [{Tes}]),
+    {Tes,St1}.
 
-tc_fields([{exp_field,_,Ve}], I, T, St0) ->
+tc_fields([{exp_field,_,Ve}], I, Tes, St0) ->
     {Fs,St1} = exp(Ve, St0),			%Get the last field!
-    tc_tail(Fs, I, T, St1); 
-tc_fields([{exp_field,_,Ve}|Fs], I, T, St0) ->
+    tc_tail(Fs, I, Tes, St1); 
+tc_fields([{exp_field,_,Ve}|Fs], I, Tes, St0) ->
     {V,St1} = exp(Ve, St0),
-    tc_fields(Fs, I+1, orddict:store(I, first_value(V), T), St1);
-tc_fields([{name_field,_,{'NAME',_,N},Ve}|Fs], I, T, St0) ->
+    tc_fields(Fs, I+1, [{I,first_value(V)}|Tes], St1);
+tc_fields([{name_field,_,{'NAME',_,N},Ve}|Fs], I, Tes, St0) ->
     {V,St1} = exp(Ve, St0),
     K = atom_to_binary(N, latin1),
-    tc_fields(Fs, I, orddict:store(K, first_value(V), T), St1);
-tc_fields([{key_field,_,Ke,Ve}|Fs], I, T, St0) ->
+    tc_fields(Fs, I, [{K,first_value(V)}|Tes], St1);
+tc_fields([{key_field,_,Ke,Ve}|Fs], I, Tes, St0) ->
     {K,St1} = exp(Ke, St0),
     {V,St2} = exp(Ve, St1),
-    tc_fields(Fs, I, orddict:store(first_value(K), first_value(V), T), St2);
-tc_fields([], _, T, St) -> {T,St}.
+    tc_fields(Fs, I, [{first_value(K),first_value(V)}|Tes], St2);
+tc_fields([], _, Tes, St) -> {lists:reverse(Tes),St}.
 
-tc_tail(Fs, I0, T0, St) ->
-    Fun = fun (Ve, {I,T}) -> {I+1,orddict:store(I, Ve, T)} end,
-    {_,T1} = lists:foldl(Fun, {I0,T0}, Fs),
-    {T1,St}.
+tc_tail(Fs, I0, Tes, St) ->
+    Fun = fun (Ve, I) -> {{I,Ve},I+1} end,
+    {Tail,_} = lists:mapfoldl(Fun, I0, Fs),
+    {lists:reverse(Tes, Tail),St}.
 
 %% op(Op, Arg, State) -> {[Ret],State}.
 %% op(Op, Arg1, Arg2, State) -> {[Ret],State}.

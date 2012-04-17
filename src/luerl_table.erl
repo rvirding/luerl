@@ -35,7 +35,7 @@
 
 -include("luerl.hrl").
 
--export([install/1,length/2]).
+-export([install/1,length/2,test_insert/2,test_insert/3]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -46,10 +46,13 @@ install(St) ->
 
 table() ->
     [{<<"concat">>,{function,fun concat/2}},
+     {<<"insert">>,{function,fun insert/2}},
      {<<"pack">>,{function,fun pack/2}},
      {<<"sort">>,{function,fun sort/2}},
      {<<"unpack">>,{function,fun unpack/2}}
     ].
+
+%% concat - concat the elements of a list into a string.
 
 concat([#tref{}=T], St) -> concat(T, <<>>, [1.0], St);
 concat([#tref{}=T,A2], St) -> concat(T, A2, [1.0], St);
@@ -57,46 +60,88 @@ concat([#tref{}=T,A2|As], St) -> concat(T, A2, As, St);
 concat(As, _) -> lua_error({badarg,concat,As}).
 
 concat(#tref{i=N}=T, A2, As, St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:tostrings([A2], luerl_lib:tointegers(As)) of
-	[Sep|Is] -> {[concat(Tab, Sep, Is)],St};
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    case luerl_lib:tostrings([A2], luerl_lib:to_ints(As)) of
+	[Sep|Is] -> {[concat(Arr, Sep, Is)],St};
 	_ -> lua_error({badarg,concat,[T,A2|As]})
     end.
 
-concat(Tab, Sep, [I]) ->
-    Rest = skip_until(Tab, I),
-    Conc = concat_loop(Rest, I),
+concat(Arr, Sep, [I]) ->
+    Conc = concat_loop(Arr, I, length_loop(Arr, 1)),
     concat_join(Conc, Sep);
-concat(Tab, Sep, [I,J|_]) ->
-    Rest = skip_until(Tab, I),
-    Conc = concat_loop(Rest, I, J),
+concat(Arr, Sep, [I,J|_]) ->
+    Conc = concat_loop(Arr, I, J),
     concat_join(Conc, Sep).
 
-concat_loop([{N,V}|Tab], N) ->			%An interesting element
-    case luerl_lib:to_list(V) of		%Check if right type
-	nil -> lua_error({illegal_val,concat,V});
-	S -> [S|concat_loop(Tab, N+1)]
-    end;
-concat_loop([{K,_}|Tab], N) when K < N ->	%Skip intermediates
-    concat_loop(Tab, N);
-concat_loop(_, _) -> [].			%No more interesting elements
-
+%% This and unpack_loop are very similar.
 concat_loop(_, N, J) when N > J -> [];		%Done
-concat_loop([{N,V}|Tab], N, J) ->		%An interesting element
-    case luerl_lib:to_list(V) of		%Check if right type
+concat_loop([{N,V}|Tab], N, J) ->
+    case luerl_lib:to_list(V) of
 	nil -> lua_error({illegal_val,concat,V});
 	S -> [S|concat_loop(Tab, N+1, J)]
     end;
-concat_loop([{K,_}|Tab], N, J) when K < N ->	%Skip intermediates
+concat_loop([{K,_}|_], N, _) when K > N ->	%Gap
+    lua_error({illegal_val,concat,nil});
+concat_loop([{K,_}|Tab], N, J) when K < N ->
     concat_loop(Tab, N, J);
-concat_loop(_, _, J) ->				%No more interesting elements
-    lua_error({illegal_val,concat,J}).
+concat_loop([], _, _) -> lua_error({illegal_val,concat,nil}).
 
 concat_join([E], _) -> list_to_binary(E);
 concat_join([E1|Es], Sep) ->
     iolist_to_binary([E1|[ [Sep,E] || E <- Es ]]);
 concat_join([], _) -> <<>>.
 
+%% insert - insert an element into a list shifting following elements.
+
+insert([#tref{i=N},V], St0) ->
+    Ts0 = St0#luerl.tabs,
+    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    Tab1 = do_insert_last(Tab0, V),
+    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+    {[],St0#luerl{tabs=Ts1}};
+insert([#tref{i=N},P0,V]=As, St0) ->
+    Ts0 = St0#luerl.tabs,
+    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    case luerl_lib:tonumber(P0) of
+	P1 when ?IS_INTEGER(P1) ->
+	    Tab1 = do_insert(Tab0, P1, V),
+	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+	    {[],St0#luerl{tabs=Ts1}};
+	nil -> lua_error({badarg,insert,As})
+    end;
+insert(As, _) -> lua_error({badarg,insert,As}).
+
+test_insert(T, V) -> do_insert_last(T, V).
+test_insert(T, N, V) -> do_insert(T, N, V).
+
+do_insert([{N,nil}|Tab], N, V) -> [{N,V}|Tab];	%Just put it there
+do_insert([{N,_}|_]=Tab, N, V) ->		%Push it in here
+    [{N,V}|insert_renum(Tab, N)];
+do_insert([{K,_}|_]=Tab, N, V) when K > N -> [{N,V}|Tab];
+do_insert([P|Tab], N, V) -> [P|do_insert(Tab, N, V)];
+do_insert([], N, V) -> [{N,V}].
+
+insert_renum([{_,nil}|_]=Tab, _) -> Tab;
+insert_renum([{K,_}=P|Tab], N) when K < N ->
+    [P|insert_renum(Tab, N)];
+insert_renum([{K,_}|_]=Tab, N) when K > N -> Tab;
+insert_renum([{_,V}|Tab], N) -> [{N+1,V}|insert_renum(Tab, N+1)];
+insert_renum([], _) -> [].
+
+do_insert_last([{K,_}=P|Tab], V) when K < 1.0 ->
+    [P|do_insert_last(Tab, V)];
+do_insert_last(Tab, V) ->
+    do_insert_last(Tab, 1.0, V).
+
+do_insert_last([{K,nil}|Tab], _, V) when ?IS_INTEGER(K) ->
+    [{K,V}|Tab];
+do_insert_last([{N,_}=P|Tab], N, V) ->
+    [P|do_insert_last(Tab, N+1, V)];
+do_insert_last([{K,_}=P|Tab], N, V) when K < N ->
+    [P|do_insert_last(Tab, N, V)];
+do_insert_last(Tab, N, V) -> [{N,V}|Tab].
+
+%% pack - pack arguments in to a table.
 
 pack(As, St0) ->
     T = pack_loop(As, 0.0),			%Indexes are floats!
@@ -107,15 +152,19 @@ pack_loop([E|Es], N) ->				%In order for an orddict!
     [{N+1,E}|pack_loop(Es, N+1)];
 pack_loop([], N) -> [{<<"n">>,N}].
 
+%% unpack - unpack table into return values.
+
 unpack([#tref{i=N}=T|As], St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:tointegers(unpack_args(As)) of
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    case luerl_lib:to_ints(unpack_args(As)) of
 	[I] ->
-	    Start = skip_until(Tab, I),
-	    {unpack_loop(Start, I),St};
+	    Unp = unpack_loop(Arr, I, length_loop(Arr, 1)),
+	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
+	    {Unp,St};
 	[I,J] ->
-	    Start = skip_until(Tab, I),
-	    {unpack_loop(Start, I, J),St};
+	    Unp = unpack_loop(Arr, I, J),
+	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
+	    {Unp,St};
 	_ -> lua_error({badarg,unpack,[T|As]})
     end;
 unpack([], _) -> lua_error({badarg,unpack,[]}).
@@ -126,22 +175,17 @@ unpack_args([I]) -> [I];			%Only one argument
 unpack_args([I,nil|_]) -> [I];			%Goto the default end
 unpack_args([I,J|_]) -> [I,J].			%Two arguments
 
-skip_until([{K,_}|_]=Tab, I) when K >= I -> Tab;
-skip_until([_|Tab], I) -> skip_until(Tab, I);
-skip_until([], _) -> [].
-
-%% Unpack until we reach th end of the list.
-
-unpack_loop([{N,V}|Tab], N) -> [V|unpack_loop(Tab, N+1)];
-unpack_loop([{K,_}|Tab], N) when K < N ->	%Skip inbetween keys
-    unpack_loop(Tab, N);
-unpack_loop(_, _) -> [].			%Next key bigger than next N
-
-unpack_loop(_, N, J) when N > J -> [];			%Done
-unpack_loop([{N,V}|Tab], N, J) -> [V|unpack_loop(Tab, N+1, J)];
-unpack_loop([{K,_}|_]=Tab, N, J) when K > N -> [nil|unpack_loop(Tab, N+1, J)];
-unpack_loop([{K,_}|Tab], N, J) when K < N -> unpack_loop(Tab, N, J);
+%% This and concat_loop are very similar.
+unpack_loop(_, N, J) when N > J -> [];		%Done
+unpack_loop([{N,V}|Tab], N, J) ->
+    [V|unpack_loop(Tab, N+1, J)];
+unpack_loop([{K,_}|_]=Tab, N, J) when K > N ->	%Gap
+    [nil|unpack_loop(Tab, N+1, J)];
+unpack_loop([{K,_}|Tab], N, J) when K < N ->
+    unpack_loop(Tab, N, J);
 unpack_loop([], N, J) -> [nil|unpack_loop([], N+1, J)].
+
+%% sort - sort the elements of the list after their values.
 
 sort([#tref{i=N}], St0) ->
     Comp = fun ([{_,A},{_,B}], St) -> lt_comp(A, B, St) end,
@@ -156,11 +200,12 @@ sort([#tref{i=N},Func|_], St0) ->
 sort(As, _) -> lua_error({badarg,sort,As}).
 
 do_sort(Sort, St0, N) ->
-    #table{t=Tab0}=T = ?GET_TABLE(N, St0#luerl.tabs),
-    {Tab1,St1} = merge_sort(Sort, St0, Tab0),
-    Tab2 = renumber(Tab1),
+    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.tabs),
+    {Arr1,St1} = merge_sort(Sort, St0, Arr0),
+    Arr2 = renumber(Arr1),
+    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
     Ts0 = St1#luerl.tabs,
-    Ts1 = ?SET_TABLE(N, T#table{t=Tab2}, Ts0),
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
     St1#luerl{tabs=Ts1}.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.
@@ -178,7 +223,7 @@ lt_comp(O1, O2, St0) ->
 
 renumber(Tab0) ->
     Fun = fun ({_,V}, I) -> {{I,V},I+1} end,
-    {Tab1,_} = lists:mapfoldl(Fun, 1.0, Tab0),
+    {Tab1,_} = lists:mapfoldl(Fun, 1, Tab0),
     Tab1.
 
 %% length(Stable, State) -> {Length,State}.
@@ -189,16 +234,12 @@ length(#tref{i=N}=T, St) ->
     Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
     if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
        true ->
-	    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-	    {[length_loop(Tab)],St}
+	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+	    {[float(length_loop(Arr, 1))],St}
     end.
 
-length_loop([{1.0,_}|T]) -> length_loop(T, 2.0);
-length_loop([_|T]) -> length_loop(T);
-length_loop([]) -> 0.0.
-
-length_loop([{K,_}|T], K) -> length_loop(T, K+1);
-length_loop(_, N) -> N-1.
+length_loop([{N,V}|Arr], N) when V =/= nil -> length_loop(Arr, N+1);
+length_loop(_, N) -> N-1.			%Hit a nil or gap
 
 %% sort(A,B,C) -> sort_up(A,B,C).
 
@@ -370,6 +411,11 @@ rfmergel([L], Acc, Fun, St, O) ->
 rfmergel([], Acc, Fun, St, O) ->
     fmergel(Acc, [], Fun, St, O).
 
+%% merge(Fun, T1, [H2 | T2]) when is_function(Fun, 2) ->
+%%     lists:reverse(fmerge2_1(T1, H2, Fun, T2, []), []);
+%% merge(Fun, T1, []) when is_function(Fun, 2) ->
+%%     T1.
+
 %% Elements from the first list are prioritized.
 fmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
     {Ret,St1} = Fun([H1,H2], St0),
@@ -393,7 +439,10 @@ fmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
 fmerge2_2(H1, T1, _Fun, St, [], M) ->
     {lists:reverse(T1, [H1|M]),St}.
 
-%% rmerge/3
+%% rmerge(Fun, T1, [H2 | T2]) when is_function(Fun, 2) ->
+%%     lists:reverse(rfmerge2_1(T1, H2, Fun, T2, []), []);
+%% rmerge(Fun, T1, []) when is_function(Fun, 2) ->
+%%     T1.
 
 rfmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
     {Ret,St1} = Fun([H1,H2], St0),

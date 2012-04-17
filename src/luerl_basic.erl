@@ -87,8 +87,8 @@ collectgarbage(_, St) ->			%Ignore everything else
 
 eprint(Args, St) ->
     lists:foreach(fun (#tref{i=N}) ->
-			  #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-			  io:format("~w ", [Tab]);
+			  T = ?GET_TABLE(N, St#luerl.tabs),
+			  io:format("~w ", [T]);
 		      (A) -> io:format("~w ", [A])
 		  end, Args),
     io:nl(),
@@ -97,45 +97,96 @@ eprint(Args, St) ->
 error([M|_], _) -> lua_error(M);		%Never returns!
 error(As, _) -> lua_error({badarg,error,As}).
 
-ipairs([#tref{}=T|_], St) ->
-    {[{function,fun ipairs_next/2},T,0],St};
+ipairs([#tref{}=Tref|_], St) ->
+    case luerl_eval:getmetamethod(Tref, <<"__ipairs">>, St) of
+	nil -> {[{function,fun ipairs_next/2},Tref,0.0],St};
+	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+    end;
 ipairs(As, _) -> lua_error({badarg,ipairs,As}).
     
-ipairs_next([A], St) -> ipairs_next([A,0], St);
-ipairs_next([#tref{i=T},I|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
-    Next = I + 1.0,				%Ensure float!
-    case orddict:find(Next, Tab) of
-	{ok,V} -> {[Next,V],St};
-	error -> {[nil],St}
-    end.
+ipairs_next([A], St) -> ipairs_next([A,0.0], St);
+ipairs_next([#tref{i=T},K|_], St) ->
+    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    case ?IS_INTEGER(K, I) of
+	%%true when I >= 0 ->
+	true ->
+	    Next = I + 1,
+	    case orddict:find(Next, Arr) of
+		{ok,V} when V =/= nil ->	%Only non-nil values
+		    {[float(Next),V],St};
+		_ -> {[nil],St}			%No more or nil
+	    end;
+	_ -> lua_error({invalid_key,ipairs,K})
+    end;
+ipairs_next(As, _) -> lua_error({badarg,ipairs,As}).
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    #table{a=Arr,t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     if K == nil ->
-	    case Tab of
-		[{F,V}|_] -> {[F,V],St};
-		[] -> {[nil],St}
+	    %% Find the first, start with the array.
+	    %% io:format("n: ~p\n", [{Arr,Tab}]),
+	    case next_index_loop(1, Arr) of
+		[{I,V}|_] -> {[float(I),V],St};
+		_ ->
+		    %% Nothing in the array, take table
+		    case Tab of
+			[{F,V}|_] -> {[F,V],St};
+			[] -> {[nil],St}
+		    end
 	    end;
-       true ->
-	    case next_loop(K, Tab) of
-		[{Next,V}|_] -> {[Next,V],St};
-		[] -> {[nil],St};
-		error -> lua_error({invalid_key,#tref{i=T},K})
-	    end
+       is_number(K) ->
+	    case ?IS_INTEGER(K, I0) of
+		%% true when I0 >= 1 ->
+		true ->
+		    case next_index(I0, Arr) of
+			{I1,V} -> {[float(I1),V],St};
+			_ ->
+			    %% None left in array, take table.
+			    case Tab of
+				[{F,V}|_] -> {[F,V],St};
+				[] -> {[nil],St}
+			    end;
+			none -> next_key(K, Tab, St)
+		    end;
+		_ -> next_key(K, Tab, St)	%Not integer or negative
+	    end;
+       true -> next_key(K, Tab, St)
     end;
 next(As, _) -> lua_error({badarg,next,As}).
 
-next_loop(K, [{K,_}|Tab]) -> next_loop(Tab);	%Now skip nil values
-next_loop(K, [_|Tab]) -> next_loop(K, Tab);
-next_loop(_, []) ->  error.
+next_index(I, Arr) ->
+    case next_index_loop(I, Arr) of
+	[{I1,V}|_] -> {I1,V};
+	_ -> none
+    end.
 
-next_loop([{_,nil}|Tab]) -> next_loop(Tab);	%Skip nil values
-next_loop(Tab) -> Tab.
+next_index_loop(I, [{I,_}|Arr]) -> Arr;		%The next one
+next_index_loop(I, [{K,_}|_]=Arr) when K > I -> Arr;
+next_index_loop(I, [{K,_}|Arr]) when K < I ->	%Not there yet
+    next_index_loop(I, Arr);
+next_index_loop(_, []) -> none.			%Nothing there
 
-pairs([#tref{}=T|_], St) ->
-    {[{function,fun next/2},T,nil],St};
+next_key(K, Tab, St) ->
+    %% io:fwrite("nk: ~p\n", [{K,lists:sublist(Tab,20)}]),
+    case next_key_loop(K, Tab) of
+	[{Next,V}|_] -> {[Next,V],St};
+	[] -> {[nil],St};
+	none -> lua_error({invalid_key,next,K})
+    end.
+
+next_key_loop(K, [{K,_}|Tab]) -> next_key_loop(Tab);
+next_key_loop(K, [_|Tab]) -> next_key_loop(K, Tab);
+next_key_loop(_, []) ->  none.
+
+next_key_loop([{_,nil}|Tab]) -> next_key_loop(Tab);    %Skip nil values
+next_key_loop(Tab) -> Tab.
+
+pairs([#tref{}=Tref|_], St) ->
+    case luerl_eval:getmetamethod(Tref, <<"__pairs">>, St) of
+	nil -> {[{function,fun next/2},Tref,nil],St};
+	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+    end;
 pairs(As, _) -> lua_error({badarg,pairs,As}).
 
 print(Args, St0) ->
@@ -150,29 +201,61 @@ print(Args, St0) ->
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
 rawequal(As, _) -> lua_error({badarg,rawequal,As}).
 
+rawget([#tref{i=N},K|_], St) when is_number(K) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    case ?IS_INTEGER(K, I) of
+	%% true when I >= 1 ->			%Array index
+	true ->					%Array index
+	    case orddict:find(I, Arr) of
+		{ok,V} -> {[V],St};
+		error -> {[nil],St}
+	    end;
+	_ ->					%Negative or false
+	    case orddict:find(K, Tab) of
+		{ok,V} -> {[V],St};
+		error -> {[nil],St}
+	    end
+    end;
 rawget([#tref{i=N},K|_], St) ->
-    #table{t=T} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
-    case orddict:find(K, T) of
-	{ok,Val} -> Val;
-	error -> nil				%Default value
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    case orddict:find(K, Tab) of
+	{ok,V} -> {[V],St};
+	error -> {[nil],St}
     end;
 rawget(As, _) -> lua_error({badarg,rawget,As}).
 
+raw_get_index(Arr, I) -> orddict:find(I, Arr).
+
+raw_set_index(Arr, I, nil) -> orddict:erase(I, Arr);
+raw_set_index(Arr, I, V) -> orddict:store(I, V, Arr).
+
+raw_get_key(I, Tab) -> orddict:find(I, Tab).
+
+raw_set_key(Arr, I, nil) -> orddict:erase(I, Arr);
+raw_set_key(Arr, I, V) -> orddict:store(I, V, Arr).
+
 rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 rawlen([#tref{i=N}|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    {length(Tab),St};
+    #table{t=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    {length(Arr),St};
 rawlen(As, _) -> lua_error({badarg,rawlen,As}).
 
-rawset([#tref{i=N}=Tref,Key,Val|_], #luerl{tabs=Ts0}=St) ->
-    Upd = if Val =:= nil ->
-		  fun (#table{t=T}=Tab) ->
-			  Tab#table{t=orddict:erase(Key, T)} end;
-	     true ->
-		  fun (#table{t=T}=Tab) ->
-			  Tab#table{t=orddict:store(Key, Val, T)} end
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) when is_number(K) ->
+    #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    Ts1 = case ?IS_INTEGER(K, I) of
+	      %% true when I >= 1 ->
+	      true ->
+		  Arr1 = raw_set_index(Arr0, I, V),
+		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
+	      _ ->				%Negative or false
+		  Tab1 = raw_set_key(Tab0, K, V),
+		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
 	  end,
-    Ts1 = ?UPD_TABLE(N, Upd, Ts0),
+    {[Tref],St#luerl{tabs=Ts1}};
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) ->
+    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    Tab1 = raw_set_key(Tab0, K, V),
+    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
     {[Tref],St#luerl{tabs=Ts1}};
 rawset(As, _) -> lua_error({badarg,rawset,As}).
 
@@ -243,10 +326,10 @@ type(_) -> <<"unknown">>.
 %% Meta table functions.
 
 getmetatable([#tref{i=T}|_], #luerl{tabs=Ts}=St) ->
-    #table{m=M} = ?GET_TABLE(T, Ts),		%Get the table
-    {[M],St};
-getmetatable([{userdata,_}|_], #luerl{meta=Meta}=St) ->
-    {[Meta#meta.userdata],St};
+    #table{m=Meta} = ?GET_TABLE(T, Ts),		%Get the table
+    {[Meta],St};
+getmetatable([#userdata{m=Meta}|_], St) ->
+    {[Meta],St};
 getmetatable(S, #luerl{meta=Meta}=St) when is_binary(S) ->
     {[Meta#meta.string],St};
 getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
