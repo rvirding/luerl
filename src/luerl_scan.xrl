@@ -46,9 +46,9 @@ Rules.
 	    {ok,I} -> {token,{'NUMBER',TokenLine,float(I)}};
 	    _ -> {error,"illegal number"}
 	end.
-0x{H}+ :
+0[xX]{H}+ :
 	base_token(string:substr(TokenChars, 3), 16, TokenLine).
-%% Floats.
+%% Floats, we have separate rules to make them easier to handle.
 {D}+\.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float(TokenChars)} of
 	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
@@ -60,7 +60,13 @@ Rules.
 	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
-\.{D}+[eE][-+]?{D}+ :
+{D}+\.([eE][-+]?{D}+)? :
+	[M|E] = string:tokens(TokenChars, "."),
+	case catch {ok,list_to_float(lists:append([M,".0"|E]))} of
+	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    _ -> {error,"illegal number"}
+	end.
+\.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float("0" ++ TokenChars)} of
 	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
 	    _ -> {error,"illegal number"}
@@ -117,7 +123,7 @@ Rules.
 \.\. : {token,{'..',TokenLine}}.
 \.\.\. : {token,{'...',TokenLine}}.
 
-[\000-\s]+ : skip_token.
+[\011-\015\s\240]+ : skip_token.		%Mirror Lua here
 
 %% Comments, either -- or --[[ ]].
 --(\[[^[].*|[^[].*|\n) : skip_token.
