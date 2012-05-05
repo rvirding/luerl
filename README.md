@@ -215,3 +215,18 @@ Currently implemented functions in the libraries
 - table.remove
 - table.sort
 - table.unpack
+
+Known Bugs
+----------
+
+Functions defined in a loop, _while_, _repeat_ and _for_, **and** when the
+loop is exited with a _break_ will generate an error when called. For
+example the functions defined in
+
+    for i=1,10 do
+      a[i] = {set = function(x) i=x end, get = function () return i end}
+      if i == 3 then break end
+    end
+
+**N.B.** This only occurs if the loop is actually exited with the
+break, otherwise there is no problem.
