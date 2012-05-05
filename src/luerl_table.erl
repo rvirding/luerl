@@ -48,6 +48,7 @@ table() ->
     [{<<"concat">>,{function,fun concat/2}},
      {<<"insert">>,{function,fun insert/2}},
      {<<"pack">>,{function,fun pack/2}},
+     {<<"remove">>,{function,fun remove/2}},
      {<<"sort">>,{function,fun sort/2}},
      {<<"unpack">>,{function,fun unpack/2}}
     ].
@@ -95,51 +96,64 @@ concat_join([], _) -> <<>>.
 
 insert([#tref{i=N},V], St0) ->
     Ts0 = St0#luerl.tabs,
-    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
-    Tab1 = do_insert_last(Tab0, V),
-    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    Arr1 = do_insert_last(Arr0, V),
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
     {[],St0#luerl{tabs=Ts1}};
 insert([#tref{i=N},P0,V]=As, St0) ->
     Ts0 = St0#luerl.tabs,
-    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
-    case luerl_lib:tonumber(P0) of
-	P1 when ?IS_INTEGER(P1) ->
-	    Tab1 = do_insert(Tab0, P1, V),
-	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
-	    {[],St0#luerl{tabs=Ts1}};
-	nil -> lua_error({badarg,insert,As})
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    case luerl_lib:to_int(P0) of
+	nil -> lua_error({badarg,insert,As});
+	P1 ->
+	    Arr1 = do_insert(Arr0, P1, V),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    {[],St0#luerl{tabs=Ts1}}
     end;
 insert(As, _) -> lua_error({badarg,insert,As}).
+
+%% Facit
+%% t={} t={'aa','bb','cc',[6]='zz'} table.insert(t, 8, 'E')
+%%  print(table.unpack(t,0,10))
+%% -2  -1  0   1   2   3   4   5   6   7   8   9   10
+%% nil nil nil aa  bb  cc  nil nil zz  nil E   nil nil
+%% nil nil nil aa  bb  cc  nil nil zz  E   nil nil nil
+%% nil nil nil aa  bb  cc  nil nil E   nil nil nil nil
+%% nil nil nil aa  bb  cc  nil E   zz  nil nil nil nil
+%% nil nil nil aa  bb  cc  E   nil zz  nil nil nil nil
+%% nil nil nil aa  bb  E   cc  nil zz  nil nil nil nil
+%% nil nil nil aa  E   bb  cc  nil zz  nil nil nil nil
+%% nil nil nil E   aa  bb  cc  nil zz  nil nil nil nil
+%% nil nil E   nil aa  bb  cc  nil zz  nil nil nil nil
+%% nil E   nil nil aa  bb  cc  nil zz  nil nil nil nil
 
 test_insert(T, V) -> do_insert_last(T, V).
 test_insert(T, N, V) -> do_insert(T, N, V).
 
-do_insert([{N,nil}|Tab], N, V) -> [{N,V}|Tab];	%Just put it there
-do_insert([{N,_}|_]=Tab, N, V) ->		%Push it in here
-    [{N,V}|insert_renum(Tab, N)];
-do_insert([{K,_}|_]=Tab, N, V) when K > N -> [{N,V}|Tab];
-do_insert([P|Tab], N, V) -> [P|do_insert(Tab, N, V)];
+%% do_insert(Arr, N, V) -> Arr.
+%% Don't ask, it tries to emulate the "real" Lua.
+
+do_insert([{K,nil}|_], _, _) ->			%Shouldn't be a nil
+    error({boom,K,nil});
+do_insert([{N,_}|_]=Arr, N, V) ->		%Push it in here
+    [{N,V}|insert_renum(Arr, N)];
+do_insert([{K,_}|_]=Arr, N, V) when K > N ->	%Gap
+    [{N,V}|insert_renum(Arr, N)];
+do_insert([P|Arr], N, V) -> [P|do_insert(Arr, N, V)];
 do_insert([], N, V) -> [{N,V}].
 
-insert_renum([{_,nil}|_]=Tab, _) -> Tab;
-insert_renum([{K,_}=P|Tab], N) when K < N ->
-    [P|insert_renum(Tab, N)];
-insert_renum([{K,_}|_]=Tab, N) when K > N -> Tab;
-insert_renum([{_,V}|Tab], N) -> [{N+1,V}|insert_renum(Tab, N+1)];
-insert_renum([], _) -> [].
+insert_renum([{K,nil}|_], _) ->			%Shouldn't be a nil
+    error({boom,K,nil});
+insert_renum([{N,V}|Arr], N) -> [{N+1,V}|insert_renum(Arr, N+1)];
+insert_renum(Arr, _) -> Arr.			%Gap or end of list
 
-do_insert_last([{K,_}=P|Tab], V) when K < 1.0 ->
-    [P|do_insert_last(Tab, V)];
-do_insert_last(Tab, V) ->
-    do_insert_last(Tab, 1.0, V).
+do_insert_last(Arr, V) -> do_insert_last(Arr, 1, V).
 
-do_insert_last([{K,nil}|Tab], _, V) when ?IS_INTEGER(K) ->
-    [{K,V}|Tab];
-do_insert_last([{N,_}=P|Tab], N, V) ->
-    [P|do_insert_last(Tab, N+1, V)];
-do_insert_last([{K,_}=P|Tab], N, V) when K < N ->
-    [P|do_insert_last(Tab, N, V)];
-do_insert_last(Tab, N, V) -> [{N,V}|Tab].
+do_insert_last([{K,nil}|_], _, _) ->		%Shouldn't be a nil
+    error({boom,K,nil});
+do_insert_last([{N,_}=P|Arr], N, V) ->
+    [P|do_insert_last(Arr, N+1, V)];
+do_insert_last(Arr, N, V) -> [{N,V}|Arr].	%Gap or end of list
 
 %% pack - pack arguments in to a table.
 
@@ -151,6 +165,50 @@ pack(As, St0) ->
 pack_loop([E|Es], N) ->				%In order for an orddict!
     [{N+1,E}|pack_loop(Es, N+1)];
 pack_loop([], N) -> [{<<"n">>,N}].
+
+%% remove - Remove an element from a list shifting following elements.
+
+remove([#tref{i=N}], St0) ->
+    Ts0 = St0#luerl.tabs,
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    {Val,Arr1} = do_remove_last(Arr0),
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+    {[Val],St0#luerl{tabs=Ts1}};
+remove([#tref{i=N},P0]=As, St0) ->
+    Ts0 = St0#luerl.tabs,
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    case luerl_lib:to_int(P0) of
+	nil -> lua_error({badarg,remove,As});
+	P1 ->
+	    {Val,Arr1} = do_remove(Arr0, P1),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    {[Val],St0#luerl{tabs=Ts1}}
+    end;
+remove(As, _) -> lua_error({badarg,remove,As}).
+
+do_remove_last(Arr) -> do_remove_last(Arr, 1, nil, []).
+
+do_remove_last([{K,nil}|_], _, _, _) ->		%Shouldn't be a nil
+    error({boom,K,nil});
+do_remove_last([{N,V}=P|Arr], N, _, Acc) ->
+    do_remove_last(Arr, N+1, V, [P|Acc]);
+do_remove_last(Arr, _, V, [_|Acc]) ->		%Gap or end of list
+    {V,lists:reverse(Acc, Arr)};
+do_remove_last(Arr, _, V, []) -> {V,Arr}.
+
+do_remove(Arr, N) when N < 1 -> {nil,Arr};
+do_remove(Arr, N) -> do_remove(Arr, N, []).
+
+do_remove([{N,V}|Arr], N, Acc) ->
+    {V,lists:reverse(Acc, remove_renum(Arr, N))};
+do_remove([{K,_}=P|Arr], N, Acc) when K < N ->
+    do_remove(Arr, N, [P|Acc]);
+do_remove(Arr, _, Acc) ->			%Gap or end of list
+    {nil,lists:reverse(Acc, Arr)}.
+
+remove_renum([{K,V}|Arr], N) when K =:= N+1 ->
+    [{N,V}|remove_renum(Arr, N+1)];
+remove_renum(Arr, _) -> Arr.			%Gap or end of list
 
 %% unpack - unpack table into return values.
 
@@ -228,18 +286,33 @@ renumber(Tab0) ->
 
 %% length(Stable, State) -> {Length,State}.
 %%  The length of a table is the number of numeric keys in sequence
-%%  from 1.0.
+%%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
 length(#tref{i=N}=T, St) ->
     Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
     if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
        true ->
 	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
-	    {[float(length_loop(Arr, 1))],St}
+	    {[float(length_loop(Arr))],St}
     end.
 
+length_loop([{2,_}|Arr]) -> length_loop(Arr, 2);
+length_loop(Arr) -> length_loop(Arr, 1).
+
+length_loop([{K,_}|Arr], N) when K < N -> length_loop(Arr, N);
 length_loop([{N,V}|Arr], N) when V =/= nil -> length_loop(Arr, N+1);
 length_loop(_, N) -> N-1.			%Hit a nil or gap
+
+%% drop_until([{K,_}|Tab], N) when K < N ->
+%%     drop_until(Tab, N);
+%% drop_until(Tab, _) -> Tab.
+
+%% is_true(Rets) -> boolean().
+
+is_true([nil|_]) -> false;
+is_true([false|_]) -> false;
+is_true([_|_]) -> true;
+is_true([]) -> false.
 
 %% sort(A,B,C) -> sort_up(A,B,C).
 
@@ -465,10 +538,3 @@ rfmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
     end;
 rfmerge2_2(H1, T1, _Fun, St, [], M) ->
     {lists:reverse(T1, [H1|M]),St}.
-
-%% is_true(Rets) -> boolean().
-
-is_true([nil|_]) -> false;
-is_true([false|_]) -> false;
-is_true([_|_]) -> true;
-is_true([]) -> false.

@@ -108,15 +108,15 @@ ipairs_next([A], St) -> ipairs_next([A,0.0], St);
 ipairs_next([#tref{i=T},K|_], St) ->
     #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     case ?IS_INTEGER(K, I) of
-	%%true when I >= 0 ->
-	true ->
+	%% true ->
+	true when I >= 0 ->
 	    Next = I + 1,
 	    case orddict:find(Next, Arr) of
 		{ok,V} when V =/= nil ->	%Only non-nil values
 		    {[float(Next),V],St};
 		_ -> {[nil],St}			%No more or nil
 	    end;
-	_ -> lua_error({invalid_key,ipairs,K})
+	_NegFalse -> lua_error({invalid_key,ipairs,K})
     end;
 ipairs_next(As, _) -> lua_error({badarg,ipairs,As}).
 
@@ -126,9 +126,9 @@ next([#tref{i=T},K|_], St) ->
     if K == nil ->
 	    %% Find the first, start with the array.
 	    %% io:format("n: ~p\n", [{Arr,Tab}]),
-	    case next_index_loop(1, Arr) of
-		[{I,V}|_] -> {[float(I),V],St};
-		_ ->
+	    case first_index(Arr) of
+		{I,V} -> {[float(I),V],St};
+		none ->
 		    %% Nothing in the array, take table
 		    case Tab of
 			[{F,V}|_] -> {[F,V],St};
@@ -137,23 +137,25 @@ next([#tref{i=T},K|_], St) ->
 	    end;
        is_number(K) ->
 	    case ?IS_INTEGER(K, I0) of
-		%% true when I0 >= 1 ->
-		true ->
+		%% true ->
+		true when I0 >= 1 ->
 		    case next_index(I0, Arr) of
 			{I1,V} -> {[float(I1),V],St};
-			_ ->
+			none ->
 			    %% None left in array, take table.
 			    case Tab of
 				[{F,V}|_] -> {[F,V],St};
 				[] -> {[nil],St}
-			    end;
-			none -> next_key(K, Tab, St)
+			    end
 		    end;
-		_ -> next_key(K, Tab, St)	%Not integer or negative
+		_NegFalse -> next_key(K, Tab, St)	%Not integer or negative
 	    end;
        true -> next_key(K, Tab, St)
     end;
 next(As, _) -> lua_error({badarg,next,As}).
+
+first_index([E|_]) -> E;
+first_index([]) -> none.
 
 next_index(I, Arr) ->
     case next_index_loop(I, Arr) of
@@ -204,13 +206,13 @@ rawequal(As, _) -> lua_error({badarg,rawequal,As}).
 rawget([#tref{i=N},K|_], St) when is_number(K) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
     case ?IS_INTEGER(K, I) of
-	%% true when I >= 1 ->			%Array index
-	true ->					%Array index
+	%% true ->				%Array index
+	true when I >= 1 ->			%Array index
 	    case orddict:find(I, Arr) of
 		{ok,V} -> {[V],St};
 		error -> {[nil],St}
 	    end;
-	_ ->					%Negative or false
+	_NegFalse ->				%Negative or false
 	    case orddict:find(K, Tab) of
 		{ok,V} -> {[V],St};
 		error -> {[nil],St}
@@ -226,28 +228,28 @@ rawget(As, _) -> lua_error({badarg,rawget,As}).
 
 raw_get_index(Arr, I) -> orddict:find(I, Arr).
 
+raw_get_key(I, Tab) -> orddict:find(I, Tab).
+
 raw_set_index(Arr, I, nil) -> orddict:erase(I, Arr);
 raw_set_index(Arr, I, V) -> orddict:store(I, V, Arr).
-
-raw_get_key(I, Tab) -> orddict:find(I, Tab).
 
 raw_set_key(Arr, I, nil) -> orddict:erase(I, Arr);
 raw_set_key(Arr, I, V) -> orddict:store(I, V, Arr).
 
 rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 rawlen([#tref{i=N}|_], St) ->
-    #table{t=Arr} = ?GET_TABLE(N, St#luerl.tabs),
-    {length(Arr),St};
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    {[length(Arr)],St};
 rawlen(As, _) -> lua_error({badarg,rawlen,As}).
 
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) when is_number(K) ->
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     Ts1 = case ?IS_INTEGER(K, I) of
-	      %% true when I >= 1 ->
-	      true ->
+	      %% true ->
+	      true when I >= 1 ->
 		  Arr1 = raw_set_index(Arr0, I, V),
 		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
-	      _ ->				%Negative or false
+	      _NegFalse ->			%Negative or false
 		  Tab1 = raw_set_key(Tab0, K, V),
 		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
 	  end,
@@ -278,9 +280,9 @@ select_back(N, As, Len) when N =< Len ->
     lists:nthtail(Len-N, As);
 select_back(_, As, _) -> As.
 
-
 tonumber([Arg], St) -> {[luerl_lib:tonumber(Arg)],St};
-tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St}.
+tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St};
+tonumber(As, _) -> lua_error({badarg,tonumber,As}).
 
 tostring([Arg|_], St) ->
     case luerl_eval:getmetamethod(Arg, <<"__tostring">>, St) of
