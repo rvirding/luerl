@@ -102,10 +102,12 @@ alloc_table(St) -> alloc_table(orddict:new(), St).
 
 alloc_table(Itab, #luerl{tabs=Ts0,free=[N|Ns]}=St) ->
     T = init_table(Itab),
+    %% io:fwrite("it1: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,free=Ns}};
 alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
     T = init_table(Itab),
+    %% io:fwrite("it2: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
 
@@ -115,8 +117,8 @@ init_table(Itab) ->
     Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
 	       ({K,V}, {T,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
-		       %% true when I >= 1 -> {T,orddict:store(I, V, A)};
-		       true -> {T,orddict:store(I, V, A)};
+		       %% true -> {T,orddict:store(I, V, A)};
+		       true when I >= 1 -> {T,orddict:store(I, V, A)};
 		       _NegFalse -> {orddict:store(K, V, T),A}
 		   end;
 	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
@@ -125,6 +127,7 @@ init_table(Itab) ->
     #table{a=A1,t=T1,m=nil}.
 
 free_table(#tref{i=N}, #luerl{tabs=Ts0,free=Ns}=St) ->
+    %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
     Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{tabs=Ts1,free=[N|Ns]}.
 
@@ -143,8 +146,8 @@ set_table_name(Tab, Name, Val, St) ->
 
 set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
     case ?IS_INTEGER(Key, I) of
-	%% true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
-	true -> set_table_int_key(Tref, Key, I, Val, St);
+	%% true -> set_table_int_key(Tref, Key, I, Val, St);
+	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
 	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
     end;
 set_table_key(#tref{}=Tref, Key, Val, St) ->
@@ -207,8 +210,8 @@ get_table_name(Tab, Name, St) ->
 
 get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
     case ?IS_INTEGER(Key, I) of
-	%% true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
-	true -> get_table_int_key(Tref, Key, I, St);
+	%% true -> get_table_int_key(Tref, Key, I, St);
+	true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
 	_NegFalse -> get_table_key_key(Tref, Key, St)
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
@@ -310,9 +313,11 @@ set_env_name(Name, Val, St) ->
     set_env_key(atom_to_binary(Name, latin1), Val, St).
 
 set_env_name_env(Name, Val, Ts, Env) ->
+    %% io:fwrite("sek: ~p\n", [{Env}]),
     set_env_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
 set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
+    %% io:fwrite("sek: ~p\n", [{Env}]),
     Ts1 = set_env_key_env(K, Val, Ts0, Env),
     St#luerl{tabs=Ts1}.
 
@@ -321,6 +326,7 @@ set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
 		    Tab#table{t=orddict:store(K, Val, T)} end,
     ?UPD_TABLE(_G, Store, Ts);
 set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
+    %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
     case orddict:is_key(K, Tab) of
 	true ->
@@ -404,8 +410,10 @@ with_block(Do, St0) ->
     Locf0 = St0#luerl.locf,			%"Global" locf value
     {T,St1} = alloc_env(St0),			%Allocate the local table
     St2 = push_env(T, St1),			%Put it in the environment
+    %% io:fwrite("wb: ~p\n", [{Locf0}]),
     {Ret,St3} = Do(St2#luerl{locf=false}),	%Do its thing
     Locf1 = St3#luerl.locf,			%"Local" locf value
+    %% io:fwrite("wb->~p\n", [{Locf1}]),
     St4  = case Locf1 of			%Check if we can free table
 	       true -> pop_env(St3);
 	       false -> pop_env(free_table(T, St3))
@@ -430,6 +438,7 @@ stat({return,L,Es}, #luerl{tag=Tag}=St0) ->
 stat({label,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,label});
 stat({break,L}, #luerl{tag=T}=St) ->
+    %% io:fwrite("br: ~p\n", [{St#luerl.locf}]),
     throw({break,L,T,St});			%Easier match with explicit tag
 stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
@@ -543,6 +552,7 @@ loop_block(Do, St) ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
 			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    %% io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
 			    {[],St2}
 		    end
 	    end,
@@ -552,7 +562,12 @@ loop_block(Do, St) ->
 
 do_if(Tests, Else, St) ->
     %% io:format("di: ~p\n", [{Tests,Else}]),
-    if_tests(Tests, Else, St).
+    %% if_tests(Tests, Else, St).
+
+    %% io:format("di: ~p\n", [{St#luerl.locf}]),
+    St1 = if_tests(Tests, Else, St),
+    %% io:format("di->~p\n", [{St1#luerl.locf}]),
+    St1.
 
 if_tests([{Exp,Block}|Ts], Else, St0) ->
     {Test,St1} = exp(Exp, St0),			%What about the environment
@@ -562,13 +577,15 @@ if_tests([{Exp,Block}|Ts], Else, St0) ->
 	false ->				%Test failed, try again
 	    if_tests(Ts, Else, St1)
     end;
-if_tests([], Else, St0) -> block(Else, St0).
+if_tests([], Else, St) -> block(Else, St).
 
 %% do_numfor(Line, Var, Init, Limit, Step, Block, State) -> State.
 
 do_numfor(_, {'NAME',_,Name}, Init, Limit, Step, Block, St0) ->
     NumFor = fun (St) -> numeric_for(Name, Init, Limit, Step, Block, St) end,
+    %% io:fwrite("dn: ~p\n", [{Name,St0#luerl.locf}]),
     {_,St1} = loop_block(NumFor, St0),
+    %% io:fwrite("dn->~p\n", [{Name,St1#luerl.locf}]),
     St1.
 
 numeric_for(Name, Init, Limit, Step, Block, St) ->
@@ -586,10 +603,14 @@ numeric_for(Name, Init, Limit, Step, Block, St) ->
 
 numfor_loop(Name, I, L, S, B, St0)
   when S > 0, I =< L ; S =< 0, I >= L ->
-    St1 = set_local_name(Name, I, St0),
     %% Create a local block for each iteration of the loop.
-    St2 = block(B, St1),
-    numfor_loop(Name, I+S, L, S, B, St2);
+    Do = fun (S0) ->
+		 %% Use local assign to put argument into environment.
+		 S1 = set_local_name(Name, I, S0),
+		 {[],stats(B, S1)}
+	 end,
+    {_,St1} = with_block(Do, St0),
+    numfor_loop(Name, I+S, L, S, B, St1);
 numfor_loop(_, _, _, _, _, St) -> {[],St}.	%We're done
 
 %% do_genfor(Line, Names, Exps, Block, State) -> State.
@@ -616,10 +637,14 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
     {Vals,St1} = functioncall(F, [S,Var], St0),
     case is_true(Vals) of
 	true ->	    				%We go on
-	    St2 = assign_local_loop(Names, Vals, St1),
 	    %% Create a local block for each iteration of the loop.
-	    St3 = block(Block, St2),
-	    genfor_loop(Names, F, S, hd(Vals), Block, St3);
+	    Do = fun (S0) ->
+			 %% Use local assign to put arguments into environment.
+			 S1 = assign_local_loop(Names, Vals, S0),
+			 {[],stats(Block, S1)}
+		 end,
+	    {_,St2} = with_block(Do, St1),
+	    genfor_loop(Names, F, S, hd(Vals), Block, St2);
 	false -> {[],St1}			%Done
     end.
 
@@ -803,8 +828,8 @@ function_block(Do, St) ->
     with_block(Block, St).
 
 %% unwind_stack(From, To, State) -> State.
-%%  If locf else is false then we can unwind env stack freeing tables
-%%  as we go, otherwise if locf is true we can not do this.
+%%  If locf is false then we can unwind env stack freeing tables as we
+%%  go, otherwise if locf is true we can not do this.
 
 %% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
 unwind_stack(_, _, #luerl{locf=true}=St) -> St;
@@ -825,7 +850,9 @@ unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
 
 tableconstructor(Fs, St0) ->
     %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.env}]),
+    %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.locf}]),
     {Tes,St1} = tc_fields(Fs, 1.0, [], St0),
+    %% io:fwrite("tc->~p\n", [{St1#luerl.locf}]),
     %% io:fwrite("tc->~p\n", [{Tes}]),
     {Tes,St1}.
 
@@ -1047,10 +1074,11 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    mark(Todo, More, Seen0, Ts);
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
-	    #table{t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
+	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
 	    %% Have to be careful where add Tab and Meta as Tab is a
 	    %% [{Key,Val}] and Meta is a nil|#tref{i=M}. We want lists.
-	    mark([Meta|Todo], [[{in_table,T}],Tab,[{in_table,-T}]|More], Seen1, Ts)
+	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
+		 Seen1, Ts)
     end;
 mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
     mark(Todo, [Env|More], Seen, Ts);
