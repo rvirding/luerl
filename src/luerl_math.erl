@@ -29,7 +29,7 @@
 
 -module(luerl_math).
 
--export([install/1,fmod/2]).
+-export([install/1,fmod/2,frexp/2]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -49,10 +49,14 @@ table() ->
      {<<"exp">>,{function,fun exp/2}},
      {<<"floor">>,{function,fun floor/2}},
      {<<"fmod">>,{function,fun fmod/2}},
+     {<<"frexp">>,{function,fun frexp/2}},
+     {<<"huge">>,1.7976931348623157e308},	%From the specs
+     {<<"ldexp">>,{function,fun ldexp/2}},
      {<<"log">>,{function,fun log/2}},
      {<<"log10">>,{function,fun log10/2}},	%For 5.1 backwards compatibility
      {<<"max">>,{function,fun max/2}},
      {<<"min">>,{function,fun min/2}},
+     {<<"modf">>,{function,fun modf/2}},
      {<<"pi">>,math:pi()},
      {<<"pow">>,{function,fun pow/2}},
      {<<"rad">>,{function,fun rad/2}},
@@ -142,6 +146,29 @@ fmod(As, St) ->
 	_ -> lua_error({badarg,fmod,As})
     end.
 
+frexp(As, St) ->				%M,E such that X = M*2^E
+    case luerl_lib:tonumbers(As) of
+	[X|_] ->
+	    <<_:1,E0:11,M0:52>> = <<X/float>>,	%The sneaky bit!
+	    Two52 = 1 bsl 52,
+	    M1 = (M0 bor Two52)/Two52,
+	    if M1 >= 1.0 -> M2 = M1/2, E1 = E0 - 1022; %Export M2, E1
+	       M1 < 0.5 -> M2 = M1*2.0, E1 = E0 - 1024;
+	       true -> M2 = M1, E1 = E0 - 1023
+	    end,
+	    {[float(M2),float(E1)],St};
+	_ -> lua_error({badarg,frexp,As})
+    end.
+
+ldexp(As, St) ->
+    case luerl_lib:conv_list(As, [lnumber,linteger]) of
+	[M,E] ->
+	    {[M*math:pow(2, E)],St};
+%% 	    <<X/float>> = <<0:1,E:11,M:52>>,
+%% 	    {[X],St};
+	_ -> lua_error({badarg,ldexp,As})
+    end.
+
 log(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N] -> {[math:log(N)],St};
@@ -168,6 +195,14 @@ min(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[_|_]=Ns -> {[lists:min(Ns)],St};
 	_ -> lua_error({badarg,min,As})
+    end.
+
+modf(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] ->
+	    I = float(trunc(N)),		%Integral part
+	    {[I,N-I],St};
+	_ -> lua_error({badarg,modf,As})
     end.
 
 pow(As, St) ->
