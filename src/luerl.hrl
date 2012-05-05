@@ -52,7 +52,7 @@
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
--record(table, {t=[],m=nil}).			%Table type, tab and meta
+-record(table, {a,t=[],m=nil}).			%Table type, array, tab, meta
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 
@@ -61,7 +61,7 @@
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Set which table store to use.
--define(USE_ORDDICT, true).
+-define(USE_ARRAY, true).
 
 -ifdef(USE_ORDDICT).
 %% Using orddict to handle tables.
