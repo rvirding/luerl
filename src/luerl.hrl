@@ -61,9 +61,9 @@
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Set which table store to use.
--define(USE_ARRAY, true).
+-define(TS_USE_ARRAY, true).
 
--ifdef(USE_ORDDICT).
+-ifdef(TS_USE_ORDDICT).
 %% Using orddict to handle tables.
 -define(MAKE_TABLE(), orddict:new()).
 -define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
@@ -74,7 +74,7 @@
 -define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
--ifdef(USE_ARRAY).
+-ifdef(TS_USE_ARRAY).
 %% Use arrays to handle tables.
 -define(MAKE_TABLE(), array:new()).
 -define(GET_TABLE(N, Ar), array:get(N, Ar)).
@@ -95,7 +95,7 @@
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
 -endif.
 
--ifdef(USE_PD).
+-ifdef(TS_USE_PD).
 %% Use the process dictionary to handle tables.
 -define(MAKE_TABLE(), ok).
 -define(GET_TABLE(N, Pd), get(N)).
@@ -106,7 +106,7 @@
 -define(FOLD_TABLES(Fun, Acc, Pd), Pd).		%This needs work
 -endif.
 
--ifdef(USE_ETS).
+-ifdef(TS_USE_ETS).
 %% Use ETS to handle tables. Must get return values right!
 -define(MAKE_TABLE(),ets:new(luerl_tables, [set])).
 -define(GET_TABLE(N, E), ets:lookup_element(E, N, 2)).

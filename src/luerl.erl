@@ -68,8 +68,8 @@ do(B, St) when is_binary(B) ->
 do(S, St) when is_list(S) ->
     {ok,C} = load(S),
     luerl_eval:chunk(C, [], St);
-do(C, St) ->
-    luerl_eval:call(C, [], St).
+do(C, St) ->					%Pre-parsed/compiled chunk
+    luerl_eval:chunk(C, [], St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
 dofile(Path) ->
