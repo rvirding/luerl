@@ -41,7 +41,9 @@
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
 
--export([anew/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
+-export([anew/1,asiz/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
+
+-spec lua_error(_) -> no_return().
 
 lua_error(E) -> error({lua_error,E}).
 
@@ -51,6 +53,11 @@ lua_error(E) -> error({lua_error,E}).
 
 anew(_) -> [].
 
+asiz(A) -> asiz(A, 0).
+
+asiz([{_,L,_}|A], _) -> asiz(A, L);
+asiz([], S) -> S.
+
 aget(I, [{I,_,Es}|_]) -> hd(Es);		%First element
 aget(I, [{F,L,Es}|_]) when I >= F, I =< L ->	%It's in here
     lists:nth(I-F+1, Es);
@@ -58,6 +65,7 @@ aget(I, [{_,L,_}|A]) when I > L ->		%Not yet
     aget(I, A);
 aget(_, _) -> nil.				%Not at all
 
+aset(I, nil, A) -> aclr(I, A);			%Setting to nil is clearing
 aset(I, V, [{F,L,Es}|A]) when I >= F, I =< L -> %Set it here
     [{F,L,setnth(I-F+1, V, Es)}|A];
 aset(I, V, [{F,L,Es}]) when I =:= L+1, F-L < 10 ->

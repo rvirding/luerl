@@ -124,7 +124,7 @@ encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
 encode(B, St) when is_boolean(B) -> {B,St};
 encode(nil, St) -> {nil,St};
-encode(L, St0) ->
+encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
 					  {K1,S1} = encode(K0, S0),
 					  {V1,S2} = encode(V0, S1),
@@ -135,7 +135,8 @@ encode(L, St0) ->
 			      end, {1.0,St0}, L),
     Ts = orddict:from_list(Es),
     {T,St2} = luerl_eval:alloc_table(Ts, St1),
-    {T,St2}.
+    {T,St2};
+encode(_, _) -> error(badarg).
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.

@@ -35,7 +35,7 @@
 -include("luerl.hrl").
 
 %% Basic interface.
--export([init/0,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
+-export([init/0,call/2,call/3,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,get_table_key/3,
@@ -113,12 +113,11 @@ alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
 
 init_table(Itab) ->
     T0 = orddict:new(),
-    A0 = orddict:new(),				%These are still orddicts!
+    A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
 	       ({K,V}, {T,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
-		       %% true -> {T,orddict:store(I, V, A)};
-		       true when I >= 1 -> {T,orddict:store(I, V, A)};
+		       true when I >= 1 -> {T,array:set(I, V, A)};
 		       _NegFalse -> {orddict:store(K, V, T),A}
 		   end;
 	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
@@ -146,7 +145,6 @@ set_table_name(Tab, Name, Val, St) ->
 
 set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
     case ?IS_INTEGER(Key, I) of
-	%% true -> set_table_int_key(Tref, Key, I, Val, St);
 	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
 	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
     end;
@@ -180,29 +178,25 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
 
 set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{tabs=Ts0}=St) ->
     #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
-    case orddict:find(I, Arr0) of
-	{ok,_} ->				%Key exists
-	    %% Should we do this here?
-	    %% Arr1 = orddict:store(I, Val, Arr0),
-	    Arr1 = if Val =:= nil -> orddict:erase(Key, Arr0);
-		      true -> orddict:store(Key, Val, Arr0)
-		   end,
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    St#luerl{tabs=Ts1};
-	error ->				%Key does not exist
+    case array:get(I, Arr0) of
+	nil ->					%Key does not exist
 	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
-		    %% Only add non-nil value.
+		    %% Only add non-nil value, slightly faster (?)
 		    Arr1 = if Val =:= nil -> Arr0;
-			      true -> orddict:store(I, Val, Arr0)
+			      true -> array:set(I, Val, Arr0)
 			   end,
-		    %%Arr1 = orddict:store(I, Val, Arr0),
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{tabs=Ts1};
 		Meth when element(1, Meth) =:= function ->
 		    functioncall(Meth, [Key,Val], St);
 		Meth -> set_table_key(Meth, Key, Val, St)
-	    end
+	    end;
+	_ ->					%Key exists
+	    %% Can do this as 'nil' is default value of array.
+	    Arr1 = array:set(I, Val, Arr0),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    St#luerl{tabs=Ts1}
     end.
 
 get_table_name(Tab, Name, St) ->
@@ -210,7 +204,6 @@ get_table_name(Tab, Name, St) ->
 
 get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
     case ?IS_INTEGER(Key, I) of
-	%% true -> get_table_int_key(Tref, Key, I, St);
 	true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
 	_NegFalse -> get_table_key_key(Tref, Key, St)
     end;
@@ -237,11 +230,11 @@ get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
 
 get_table_int_key(#tref{i=N}=T, Key, I, #luerl{tabs=Ts}=St) ->
     #table{a=A,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(I, A) of
-	{ok,Val} -> {[Val],St};
-	error ->
+    case array:get(I, A) of
+	nil ->
 	    %% Key not present so try metamethod
-	    get_table_metamethod(T, Meta, Key, Ts, St)
+	    get_table_metamethod(T, Meta, Key, Ts, St);
+	Val -> {[Val],St}
     end.
 
 get_table_metamethod(T, Meta, Key, Ts, St) ->
@@ -349,26 +342,30 @@ get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
     end;
 get_env_key_env(_, _, []) -> nil.		%The default value
 
-%% chunk(Stats, State) -> {Return,State}.
-
-chunk(Stats, St0) ->
-    {Ret,St1} = function_block(fun (S) -> {[],stats(Stats, S)} end, St0),
-    %% Should do GC here.
-    {Ret,St1}.
-
+%% chunk(Chunk, State) -> {Return,State}.
 %% chunk(Chunk, Args, State) -> {Return,State}.
 
-chunk({functiondef,L,_,Ps,B}, Args, St0) ->
-    {[Lf],St1} = exp({functiondef,L,Ps,B}, St0),
-    {Ret,St2} = functioncall(Lf, Args, St1),
+chunk(Chunk, St) -> chunk(Chunk, [], St).
+chunk(Chunk, Args, St) -> call(Chunk, Args, St).
+
+%% call(Chunk, State) -> {Return,State}.
+%% call(Chunk, Args, State) -> {Return,State}.
+
+call(Chunk, St) -> call(Chunk, [], St).
+
+call({functiondef,L,_,Ps,B}, Args, St0) ->
+    %% Generate function and call it.
+    {[Func],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
-chunk({functiondef,L,Ps,B}, Args, St0) ->
-    {[Lf],St1} = exp({functiondef,L,Ps,B}, St0),
-    {Ret,St2} = functioncall(Lf, Args, St1),
+call({functiondef,L,Ps,B}, Args, St0) ->
+    %% Generate function and call it.
+    {[Func],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
-chunk({function,_}=Func, Args, St0) ->
+call({function,_}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.

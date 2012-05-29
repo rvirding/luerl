@@ -60,6 +60,44 @@
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
+%% Different methods for storing the array section of a table in
+%% #table{}.  Solely using these macros allows testing with different
+%% storage methods. When using orddicts it is more efficient to KNOW
+%% the defined internal structure.
+
+%% Set which array store to use.
+-define(ARR_USE_ARRAY, true).
+
+-ifdef(ARR_USE_ARRAY).
+-define(MAKE_ARR(), array:new([{default,nil}])).
+-define(ASIZE(A), array:size(A)).
+-define(AGET(I, A), array:get(I, A)).
+-define(ASET(I, V, A), array:set(I, V, A)).
+-endif.
+
+-ifdef(ARR_USE_ORRDICT).
+-define(MAKE_ARR(), orddict:new()).
+-define(ASIZE(A), orddict:size(A)).		%This not correct!
+-define(AGET(I, A), case orddict:find(I, A) of
+			{ok,___V} -> ___V;
+			error -> nil
+		    end).
+-define(ASET(I, V, A), orddict:store(I, V, A)).
+-endif.
+
+-ifdef(ARR_USE_EXP).
+%% Use experimental array structure in luerl_lib.
+-define(MAKE_ARR(), luerl_lib:anew()).
+-define(ASIZE(A), luerl_lib:asiz(A)).
+-define(AGET(I, A), luerl_lib:aget(I, A)).
+-define(ASET(I, V, A), luerl_lib:aset(I, V, A)).
+-endif.
+
+%% Different methods for storing tables in the global data #luerl{}.
+%% Access through macros to allow testing with different storage
+%% methods. This is inefficient with ETS tables where it would
+%% probably be better to use bags and acces with match/select.
+
 %% Set which table store to use.
 -define(TS_USE_ARRAY, true).
 

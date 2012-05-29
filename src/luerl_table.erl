@@ -29,13 +29,14 @@
 
 %% These functions sometimes behave strangely in the Lua 5.2
 %% libraries, but we try to follow them. Most of these functions KNOW
-%% that a table is an orddict!
+%% that a table is an orddict! We know that the erlang array has
+%% default value 'nil'.
 
 -module(luerl_table).
 
 -include("luerl.hrl").
 
--export([install/1,length/2,test_insert/2,test_insert/3]).
+-export([install/1,length/2,test_insert/2,test_insert/3,test_concat/1]).
 
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
@@ -55,37 +56,59 @@ table() ->
 
 %% concat - concat the elements of a list into a string.
 
-concat([#tref{}=T], St) -> concat(T, <<>>, [1.0], St);
-concat([#tref{}=T,A2], St) -> concat(T, A2, [1.0], St);
-concat([#tref{}=T,A2|As], St) -> concat(T, A2, As, St);
+concat([#tref{i=N}|As], St) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+    case luerl_lib:conv_list(concat_args(As), [lstring,linteger,linteger]) of
+	[Sep,I] ->
+	    {[concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
+	[Sep,I,J] ->
+	    {[concat(Arr, Tab, Sep, I, J)],St}
+    end;
 concat(As, _) -> lua_error({badarg,concat,As}).
 
-concat(#tref{i=N}=T, A2, As, St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:tostrings([A2], luerl_lib:to_ints(As)) of
-	[Sep|Is] -> {[concat(Arr, Sep, Is)],St};
-	_ -> lua_error({badarg,concat,[T,A2|As]})
-    end.
+test_concat(As) -> concat_args(As).
 
-concat(Arr, Sep, [I]) ->
-    Conc = concat_loop(Arr, I, length_loop(Arr, 1)),
-    concat_join(Conc, Sep);
-concat(Arr, Sep, [I,J|_]) ->
-    Conc = concat_loop(Arr, I, J),
+concat_args([]) -> concat_args([<<>>]);
+concat_args([nil|As]) -> concat_args([<<>>|As]);
+concat_args([Sep]) -> [Sep,1.0];
+concat_args([Sep,nil|As]) -> concat_args([Sep,1.0|As]);
+concat_args([Sep,I]) -> [Sep,I];
+concat_args([Sep,I,nil|_]) -> [Sep,I];
+concat_args([Sep,I,J|_]) -> [Sep,I,J].
+
+concat(Arr, Tab, Sep, I, J) ->
+    Conc = concat_table(Arr, Tab, I, J),
     concat_join(Conc, Sep).
 
+concat_table(Arr, Tab, I, J) ->
+    concat_tab(Arr, Tab, I, J).
+
 %% This and unpack_loop are very similar.
-concat_loop(_, N, J) when N > J -> [];		%Done
-concat_loop([{N,V}|Tab], N, J) ->
+%% First scan over table up to 0 then the array. We have the indexes
+%% and limits as integers and explicitly use '==' to compare with
+%% float values in table.
+
+concat_tab(_, _, N, J) when N > J -> [];	%Done
+concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
+    concat_arr(Arr, round(N), J);		%Need integers keys now
+concat_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
     case luerl_lib:to_list(V) of
 	nil -> lua_error({illegal_val,concat,V});
-	S -> [S|concat_loop(Tab, N+1, J)]
+	S -> [S|concat_tab(Arr, Tab, N+1, J)]
     end;
-concat_loop([{K,_}|_], N, _) when K > N ->	%Gap
+concat_tab(Arr, [{K,_}|_], N, _) when K > N ->	%Gap
     lua_error({illegal_val,concat,nil});
-concat_loop([{K,_}|Tab], N, J) when K < N ->
-    concat_loop(Tab, N, J);
-concat_loop([], _, _) -> lua_error({illegal_val,concat,nil}).
+concat_tab(Arr, [{K,_}|Tab], N, J) when K < N -> %Step over too small keys
+    concat_tab(Arr, Tab, N, J);
+concat_tab(_, [], _, _) -> lua_error({illegal_val,concat,nil}).
+
+concat_arr(_, N, J) when N > J -> [];
+concat_arr(Arr, N, J) ->
+    V = array:get(N, Arr),
+    case luerl_lib:to_list(V) of
+	nil -> lua_error({illegal_val,concat,V});
+	S -> [S|concat_arr(Arr, N+1, J)]
+    end.
 
 concat_join([E], _) -> list_to_binary(E);
 concat_join([E1|Es], Sep) ->
@@ -102,12 +125,12 @@ insert([#tref{i=N},V], St0) ->
     {[],St0#luerl{tabs=Ts1}};
 insert([#tref{i=N},P0,V]=As, St0) ->
     Ts0 = St0#luerl.tabs,
-    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
 	nil -> lua_error({badarg,insert,As});
 	P1 ->
-	    Arr1 = do_insert(Arr0, P1, V),
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    {Arr1,Tab1} = do_insert(Arr0, Tab0, P1, V),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
 	    {[],St0#luerl{tabs=Ts1}}
     end;
 insert(As, _) -> lua_error({badarg,insert,As}).
@@ -130,8 +153,13 @@ insert(As, _) -> lua_error({badarg,insert,As}).
 test_insert(T, V) -> do_insert_last(T, V).
 test_insert(T, N, V) -> do_insert(T, N, V).
 
-%% do_insert(Arr, N, V) -> Arr.
+%% do_insert(Arr, Tab, N, V) -> Arr.
 %% Don't ask, it tries to emulate the "real" Lua.
+
+do_insert(Arr, Tab, N, V) when N >= 1 ->
+    {insert_shift_arr(Arr, N, V),Tab};
+do_insert(Arr, Tab, N, V) ->
+    {Arr,Tab}.
 
 do_insert([{K,nil}|_], _, _) ->			%Shouldn't be a nil
     error({boom,K,nil});
@@ -147,13 +175,21 @@ insert_renum([{K,nil}|_], _) ->			%Shouldn't be a nil
 insert_renum([{N,V}|Arr], N) -> [{N+1,V}|insert_renum(Arr, N+1)];
 insert_renum(Arr, _) -> Arr.			%Gap or end of list
 
+insert_shift_arr(Arr0, N, Here) ->		%Put This at N shifting up
+    case array:get(N, Arr0) of
+	nil -> array:set(N, Here, Arr0);	%Just fill hole
+	Next ->					%Take value for next slot
+	    Arr1 = array:set(N, Here, Arr0),
+	    insert_shift_arr(Arr1, N+1, Next)
+    end.
+
 do_insert_last(Arr, V) -> do_insert_last(Arr, 1, V).
 
-do_insert_last([{K,nil}|_], _, _) ->		%Shouldn't be a nil
-    error({boom,K,nil});
-do_insert_last([{N,_}=P|Arr], N, V) ->
-    [P|do_insert_last(Arr, N+1, V)];
-do_insert_last(Arr, N, V) -> [{N,V}|Arr].	%Gap or end of list
+do_insert_last(Arr, N, V) ->			%Find first nil
+    case array:get(N, Arr) of
+	nil -> array:set(N, V, Arr);
+	_ -> do_insert_last(Arr, N+1, V)
+    end.
 
 %% pack - pack arguments in to a table.
 
@@ -213,14 +249,14 @@ remove_renum(Arr, _) -> Arr.			%Gap or end of list
 %% unpack - unpack table into return values.
 
 unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:to_ints(unpack_args(As)) of
 	[I] ->
-	    Unp = unpack_loop(Arr, I, length_loop(Arr, 1)),
+	    Unp = unpack_table(Arr, Tab, I, length_loop(Arr)),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
 	    {Unp,St};
 	[I,J] ->
-	    Unp = unpack_loop(Arr, I, J),
+	    Unp = unpack_table(Arr, Tab, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
 	_ -> lua_error({badarg,unpack,[T|As]})
@@ -233,15 +269,27 @@ unpack_args([I]) -> [I];			%Only one argument
 unpack_args([I,nil|_]) -> [I];			%Goto the default end
 unpack_args([I,J|_]) -> [I,J].			%Two arguments
 
-%% This and concat_loop are very similar.
-unpack_loop(_, N, J) when N > J -> [];		%Done
-unpack_loop([{N,V}|Tab], N, J) ->
-    [V|unpack_loop(Tab, N+1, J)];
-unpack_loop([{K,_}|_]=Tab, N, J) when K > N ->	%Gap
-    [nil|unpack_loop(Tab, N+1, J)];
-unpack_loop([{K,_}|Tab], N, J) when K < N ->
-    unpack_loop(Tab, N, J);
-unpack_loop([], N, J) -> [nil|unpack_loop([], N+1, J)].
+%% This and concat_table are very similar.
+%% First scan over table up to 0 then the array. We have the indexes
+%% and limits as integers and explicitly use '==' to compare with
+%% float values in table.
+
+unpack_table(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
+
+unpack_tab(_, _, N, J) when N > J -> [];	%Done
+unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
+    unpack_arr(Arr, round(N), J);		%Need integer keys now
+unpack_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
+    [V|unpack_tab(Arr, Tab, N+1, J)];
+unpack_tab(Arr, [{K,_}|_]=Tab, N, J) when K > N ->	%Gap
+    [nil|unpack_tab(Arr, Tab, N+1, J)];
+unpack_tab(Arr, [{K,_}|Tab], N, J) when K < N -> %Step over too small keys
+    unpack_tab(Arr, Tab, N, J);
+unpack_tab(Arr, [], N, J) -> [nil|unpack_tab(Arr, [], N+1, J)].
+
+unpack_arr(_, N, J) when N > J -> [];
+unpack_arr(Arr, N, J) ->
+    [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
 %% sort - sort the elements of the list after their values.
 
@@ -296,16 +344,19 @@ length(#tref{i=N}=T, St) ->
 	    {[float(length_loop(Arr))],St}
     end.
 
-length_loop([{2,_}|Arr]) -> length_loop(Arr, 2);
-length_loop(Arr) -> length_loop(Arr, 1).
+length_loop(Arr) ->
+    case {array:get(1, Arr),array:get(2, Arr)} of
+	{nil,nil} -> 0;
+	{nil,_} -> length_loop(3, Arr);
+	{_,nil} -> 1;
+	{_,_} -> length_loop(3, Arr)
+    end.
 
-length_loop([{K,_}|Arr], N) when K < N -> length_loop(Arr, N);
-length_loop([{N,V}|Arr], N) when V =/= nil -> length_loop(Arr, N+1);
-length_loop(_, N) -> N-1.			%Hit a nil or gap
-
-%% drop_until([{K,_}|Tab], N) when K < N ->
-%%     drop_until(Tab, N);
-%% drop_until(Tab, _) -> Tab.
+length_loop(I, Arr) ->
+    case array:get(I, Arr) of
+	nil -> I-1;
+	_ -> length_loop(I+1, Arr)
+    end.
 
 %% is_true(Rets) -> boolean().
 
