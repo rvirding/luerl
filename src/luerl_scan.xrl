@@ -43,7 +43,7 @@ Rules.
 %% Integers.
 {D}+ : 
 	case catch {ok,list_to_integer(TokenChars)} of
-	    {ok,I} -> {token,{'NUMBER',TokenLine,float(I)}};
+	    {ok,I} -> {token,{'NUMBER',TokenLine,I}};
 	    _ -> {error,"illegal number"}
 	end.
 0[xX]{H}+ :

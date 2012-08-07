@@ -15,7 +15,7 @@ YRL_INTERM   := $(YRL_MODULES:%=$(SRCDIR)/%.erl)
 MODULES      := $(XRL_MODULES) $(YRL_MODULES) $(ERL_MODULES)
 OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
 
-all: $(OBJECTS) hello.beam 
+all: $(OBJECTS) 
 
 $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
 	@ mkdir -p $(BEAMDIR) 

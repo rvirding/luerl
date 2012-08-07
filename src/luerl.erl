@@ -120,7 +120,7 @@ encode_list(Ts, St) ->
 
 encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
-encode(I, St) when is_integer(I) -> {float(I),St};
+encode(I, St) when is_integer(I) -> {I,St};
 encode(F, St) when is_float(F) -> {F,St};
 encode(B, St) when is_boolean(B) -> {B,St};
 encode(nil, St) -> {nil,St};
