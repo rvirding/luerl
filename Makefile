@@ -2,6 +2,7 @@
 # Building from .xrl, .yrl and .erl
 # Intermediaries from leex and yecc stay in ./src
 
+
 SRCDIR        =./src
 BEAMDIR       =./ebin
 ERL_SOURCES  := $(wildcard $(SRCDIR)/*.erl)
