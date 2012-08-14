@@ -209,14 +209,16 @@ get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
+get_table_key(nil, Key, _St) ->
+    lua_error({method_on_nil, Key});
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
-	nil -> lua_error({illegal_index,Tab,Key});
-	Meth when element(1, Meth) =:= function ->
-	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
-	    {Vs,St1};
-	Meth ->					%Recurse down the metatable
-	    get_table_key(Meth, Key, St)
+        nil -> lua_error({illegal_index,Tab,Key});
+        Meth when element(1, Meth) =:= function ->
+            {Vs,St1} = functioncall(Meth, [Tab,Key], St),
+            {Vs,St1};
+        Meth ->					%Recurse down the metatable
+            get_table_key(Meth, Key, St)
     end.
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
