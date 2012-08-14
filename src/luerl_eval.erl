@@ -734,6 +734,14 @@ exp(E, St) ->
 %% prefixexp(PrefixExp, State) -> {[Vals],State}.
 %% Step down the prefixexp sequence evaluating as we go.
 
+prefixexp({'.', Line, {'NAME',_, Name} = Exp, {functioncall,_,Args0} = Rest}, St0) ->
+    {Next,St1} = prefixexp_first(Exp, St0),
+    case Next of
+        nil ->
+            lua_error({undefined_method, Name, Args0, Line});
+        _ ->
+            prefixexp_rest(Rest, first_value(Next), St1)
+    end;
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {Next,St1} = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, first_value(Next), St1);
