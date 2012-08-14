@@ -750,6 +750,14 @@ prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
     {R,St1} = exp(E, St0),
     {[first_value(R)],St1}.
 
+prefixexp_rest({'.', Line, {'NAME',_, Name} = Exp, {functioncall,_,Args0} = Rest}, SoFar, St0) ->
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    case Next of
+        nil ->
+            lua_error({undefined_method, Name, Args0, Line});
+        _ ->
+            prefixexp_rest(Rest, first_value(Next), St1)
+    end;
 prefixexp_rest({'.',_,Exp,Rest}, SoFar, St0) ->
     {Next,St1} = prefixexp_element(Exp, SoFar, St0),
     prefixexp_rest(Rest, first_value(Next), St1);
