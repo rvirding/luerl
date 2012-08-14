@@ -99,6 +99,8 @@ setnth(N, V, [E|Es]) -> [E|setnth(N-1, V, Es)].
 %%  Some of these use same text as Lua error string, so be careful if
 %%  modifying them.
 
+format_error({undefined_method, Name, Args0, Line}) ->
+    io_lib:format("undefined_method ~w with args: ~p on line ~p", [Name, Args0, Line]);
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
 format_error({method_on_nil, Key}) ->
