@@ -113,7 +113,7 @@ Examples
 
 #### separately parse, then execute
     {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
-    State = luerl:start(),
+    State = luerl:init(),
     {_Ret, _NewState} = luerl:do(Chunk, State),
 
 
@@ -154,67 +154,62 @@ Currently implemented functions in the libraries
 - tonumber
 - tostring
 - type
-
-- io.flush
-- io.write
-
-- math.abs
-- math.acos
-- math.asin
-- math.atan
-- math.atan2
-- math.ceil
-- math.cos
-- math.cosh
-- math.deg
-- math.exp
-- math.floor
-- math.fmod
-- math.frexp
-- math.huge
-- math.ldexp
-- math.log
-- math.log10
-- math.max
-- math.min
-- math.modf
-- math.pi
-- math.pow
-- math.rad
-- math.random
-- math.randomseed
-- math.sin
-- math.sinh
-- math.sqrt
-- math.tan
-- math.tanh
-
-- os.clock
-- os.date
-- os.difftime
-- os.getenv
-- os.time
-
-- string.byte
-- string.char
-- string.find
-- string.format (very limited as yet)
-- string.gmatch
-- string.gsub
-- string.len
-- string.lower
-- string.match
-- string.rep
-- string.reverse
-- string.sub
-- string.upper
-
-- table.concat
-- table.insert
-- table.pack
-- table.remove
-- table.sort
-- table.unpack
+- io\.flush
+- io\.write
+- math\.abs
+- math\.acos
+- math\.asin
+- math\.atan
+- math\.atan2
+- math\.ceil
+- math\.cos
+- math\.cosh
+- math\.deg
+- math\.exp
+- math\.floor
+- math\.fmod
+- math\.frexp
+- math\.huge
+- math\.ldexp
+- math\.log
+- math\.log10
+- math\.max
+- math\.min
+- math\.modf
+- math\.pi
+- math\.pow
+- math\.rad
+- math\.random
+- math\.randomseed
+- math\.sin
+- math\.sinh
+- math\.sqrt
+- math\.tan
+- math\.tanh
+- os\.clock
+- os\.date
+- os\.difftime
+- os\.getenv
+- os\.time
+- string\.byte
+- string\.char
+- string\.find
+- string\.format (very limited as yet)
+- string\.gmatch
+- string\.gsub
+- string\.len
+- string\.lower
+- string\.match
+- string\.rep
+- string\.reverse
+- string\.sub
+- string\.upper
+- table\.concat
+- table\.insert
+- table\.pack
+- table\.remove
+- table\.sort
+- table\.unpack
 
 Known Bugs
 ----------
