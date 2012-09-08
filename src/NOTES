@@ -1,14 +1,16 @@
 Implementation Notes
 --------------------
 
-All tables are orddicts. We use this information when building/
-processing tables. Seems like Lua internaly stores elements as a
-(unordered) sequence of key-value elements.
+All tables are combinations of orddicts and arrays. In each table an
+array is used for integer keys >= 1 while an orddict is used for all
+other keys. We use this information when building/ processing
+tables. Seems like Lua internaly stores elements as a (unordered)
+sequence of key-value elements.
 
 The table table can be either an ordict, an array or use the process
 dictionary; these are accessed through macros. To use ETS would need a
 bigger change as copying the whole table for each access would be very
-inefficient. Either use bags and have one per table or sue sets and
+inefficient. Either use bags and have one per table or use sets and
 have the ETS key as {Tab,Key}.
 
 To handle multiple return values we always return a list of values.
@@ -21,7 +23,7 @@ Similarily all the arguments in a function call are passed in a list.
 The function then unpacks the list into its arguments, including
 '...'.
 
-All of the predefinde libraries have an install/1 function. This is
+All of the predefined libraries have an install/1 function. This is
 called when initialising Luerl; it does any library specific
 initialisation necessary and returns a table containing the functions
 in the library.
