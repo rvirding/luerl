@@ -458,7 +458,7 @@ stat({'if',_,Tests,Else}, St) ->
 stat({for,Line,V,I,L,S,B}, St) ->
     do_numfor(Line, V, I, L, S, B, St);
 stat({for,Line,V,I,L,B}, St) ->
-    do_numfor(Line, V, I, L, {'NUMBER',Line,1}, B, St);
+    do_numfor(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
 stat({for,Line,Ns,Gen,B}, St) ->
     do_genfor(Line, Ns, Gen, B, St);
 stat({local,Decl}, St) ->
@@ -871,7 +871,7 @@ unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
 tableconstructor(Fs, St0) ->
     %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.env}]),
     %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.locf}]),
-    {Tes,St1} = tc_fields(Fs, 1, [], St0),
+    {Tes,St1} = tc_fields(Fs, 1.0, [], St0),
     %% io:fwrite("tc->~p\n", [{St1#luerl.locf}]),
     %% io:fwrite("tc->~p\n", [{Tes}]),
     {Tes,St1}.
