@@ -324,7 +324,7 @@ lt_comp(O1, O2, St0) ->
 	nil -> lua_error({illegal_comp,sort});
 	Meta ->
 	    {Ret,St1} = luerl_eval:functioncall(Meta, [O1,O2], St0),
-	    {[is_true(Ret)],St1}
+	    {[luerl_lib:is_true_value(Ret)],St1}
     end.
 
 renumber(Tab0) ->
@@ -357,13 +357,6 @@ length_loop(I, Arr) ->
 	nil -> I-1;
 	_ -> length_loop(I+1, Arr)
     end.
-
-%% is_true(Rets) -> boolean().
-
-is_true([nil|_]) -> false;
-is_true([false|_]) -> false;
-is_true([_|_]) -> true;
-is_true([]) -> false.
 
 %% sort(A,B,C) -> sort_up(A,B,C).
 
@@ -419,7 +412,7 @@ merge_sort(_, St, []) -> {[],St};
 merge_sort(_, St, [_] = L) -> {L,St};
 merge_sort(Fun, St0, [X, Y|T]) ->
     {Ret,St1} = Fun([X,Y], St0),
-    case is_true(Ret) of
+    case luerl_lib:is_true_value(Ret) of
 	true ->
 	    fsplit_1(Y, X, Fun, St1, T, [], []);
 	false ->
@@ -429,12 +422,12 @@ merge_sort(Fun, St0, [X, Y|T]) ->
 %% Ascending.
 fsplit_1(Y, X, Fun, St0, [Z|L], R, Rs) ->
     {Ret1,St1} = Fun([Y,Z], St0),
-    case is_true(Ret1) of
+    case luerl_lib:is_true_value(Ret1) of
         true ->
             fsplit_1(Z, Y, Fun, St1, L, [X|R], Rs);
         false ->
 	    {Ret2,St2} = Fun([X,Z], St1),
-            case is_true(Ret2) of
+            case luerl_lib:is_true_value(Ret2) of
                 true ->
                     fsplit_1(Y, Z, Fun, St2, L, [X|R], Rs);
                 false when R == [] ->
@@ -448,17 +441,17 @@ fsplit_1(Y, X, Fun, St, [], R, Rs) ->
 
 fsplit_1_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
     {Ret1,St1} = Fun([Y,Z], St0),
-    case is_true(Ret1) of
+    case luerl_lib:is_true_value(Ret1) of
         true ->
             fsplit_1_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
         false ->
 	    {Ret2,St2} = Fun([X,Z], St1),
-            case is_true(Ret2) of
+            case luerl_lib:is_true_value(Ret2) of
                 true ->
                     fsplit_1_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
                 false ->
 		    {Ret3,St3} = Fun([S,Z], St2),
-                    case is_true(Ret3) of
+                    case luerl_lib:is_true_value(Ret3) of
                         true ->
                             fsplit_1(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
                         false ->
@@ -472,12 +465,12 @@ fsplit_1_1(Y, X, Fun, St, [], R, Rs, S) ->
 %% Descending.
 fsplit_2(Y, X, Fun, St0, [Z|L], R, Rs) ->
     {Ret1,St1} = Fun([Y,Z], St0),
-    case is_true(Ret1) of
+    case luerl_lib:is_true_value(Ret1) of
         false ->
             fsplit_2(Z, Y, Fun, St1, L, [X|R], Rs);
         true ->
 	    {Ret2,St2} = Fun([X,Z], St1),
-            case is_true(Ret2) of
+            case luerl_lib:is_true_value(Ret2) of
                 false ->
                     fsplit_2(Y, Z, Fun, St2, L, [X|R], Rs);
                 true when R == [] ->
@@ -491,17 +484,17 @@ fsplit_2(Y, X, Fun, St, [], R, Rs) ->
 
 fsplit_2_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
     {Ret1,St1} = Fun([Y,Z], St0),
-    case is_true(Ret1) of
+    case luerl_lib:is_true_value(Ret1) of
         false ->
             fsplit_2_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
         true ->
 	    {Ret2,St2} = Fun([X,Z], St1),
-            case is_true(Ret2) of
+            case luerl_lib:is_true_value(Ret2) of
                 false ->
                     fsplit_2_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
                 true ->
 		    {Ret3,St3} = Fun([S,Z], St2),
-                    case is_true(Ret3) of
+                    case luerl_lib:is_true_value(Ret3) of
                         false ->
                             fsplit_2(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
                         true ->
@@ -543,7 +536,7 @@ rfmergel([], Acc, Fun, St, O) ->
 %% Elements from the first list are prioritized.
 fmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
     {Ret,St1} = Fun([H1,H2], St0),
-    case is_true(Ret) of
+    case luerl_lib:is_true_value(Ret) of
         true ->
             fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
         false ->
@@ -554,7 +547,7 @@ fmerge2_1([], H2, _Fun, St, T2, M) ->
 
 fmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
     {Ret,St1} = Fun([H1,H2], St0),
-    case is_true(Ret) of
+    case luerl_lib:is_true_value(Ret) of
         true ->
             fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
         false ->
@@ -570,7 +563,7 @@ fmerge2_2(H1, T1, _Fun, St, [], M) ->
 
 rfmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
     {Ret,St1} = Fun([H1,H2], St0),
-    case is_true(Ret) of
+    case luerl_lib:is_true_value(Ret) of
         true ->
             rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
         false ->
@@ -581,7 +574,7 @@ rfmerge2_1([], H2, _Fun, St, T2, M) ->
 
 rfmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
     {Ret,St1} = Fun([H1,H2], St0),
-    case is_true(Ret) of
+    case luerl_lib:is_true_value(Ret) of
         true ->
             rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
         false ->

@@ -48,7 +48,7 @@
 -import(luerl_lib, [lua_error/1,badarg_error/2]).
 
 %% -compile(inline).				%For when we are optimising
-%% -compile({inline,[is_true/1,first_value/1]}).
+%% -compile({inline,[is_true_value/1,first_value/1]}).
 
 %%-define(DP(F,As), io:format(F, As)).
 -define(DP(F, A), ok).
@@ -513,7 +513,7 @@ do_while(Exp, Body, St0) ->
 
 while_loop(Exp, Body, St0) ->
     {Test,St1} = exp(Exp, St0),
-    case is_true(Test) of
+    case is_true_value(Test) of
 	true ->
 	    St2 = block(Body, St1),
 	    while_loop(Exp, Body, St2);
@@ -533,7 +533,7 @@ do_repeat(Body, Exp, St0) ->
 
 repeat_loop(Body, St0) ->
     {Ret,St1} = with_block(Body, St0),
-    case is_true(Ret) of
+    case is_true_value(Ret) of
 	true -> {[],St1};
 	false -> repeat_loop(Body, St1)
     end.
@@ -570,7 +570,7 @@ do_if(Tests, Else, St) ->
 
 if_tests([{Exp,Block}|Ts], Else, St0) ->
     {Test,St1} = exp(Exp, St0),			%What about the environment
-    case is_true(Test) of
+    case is_true_value(Test) of
 	true ->					%Test succeeded, do block
 	    block(Block, St1);
 	false ->				%Test failed, try again
@@ -634,7 +634,7 @@ generic_for(Names, Exps, Block, St) ->
 
 genfor_loop(Names, F, S, Var, Block, St0) ->
     {Vals,St1} = functioncall(F, [S,Var], St0),
-    case is_true(Vals) of
+    case is_true_value(Vals) of
 	true ->	    				%We go on
 	    %% Create a local block for each iteration of the loop.
 	    Do = fun (S0) ->
@@ -703,7 +703,7 @@ exp({table,_,Fs}, St0) ->
 %% 'and' and 'or' short-circuit so need special handling.
 exp({op,_,'and',L0,R0}, St0) ->
     {L1,St1} = exp(L0, St0),
-    case is_true(L1) of
+    case is_true_value(L1) of
 	true ->
 	    {R1,St2} = exp(R0, St1),
 	    {R1,St2};				%Do we need first value?
@@ -711,7 +711,7 @@ exp({op,_,'and',L0,R0}, St0) ->
     end;
 exp({op,_,'or',L0,R0}, St0) ->
     {L1,St1} = exp(L0, St0),
-    case is_true(L1) of
+    case is_true_value(L1) of
 	true -> {L1,St1};
 	false ->
 	    {R1,St2} = exp(R0, St1),
@@ -959,7 +959,7 @@ numeric_op(_Op, O, E, Raw, St0) ->
        true ->
 	    Meta = getmetamethod(O, E, St0),
 	    {Ret,St1} = functioncall(Meta, [O], St0),
-	    {[is_true(Ret)],St1}
+	    {[is_true_value(Ret)],St1}
     end.
 
 numeric_op(_Op, O1, O2, E, Raw, St0) ->
@@ -969,18 +969,18 @@ numeric_op(_Op, O1, O2, E, Raw, St0) ->
        true ->
 	    Meta = getmetamethod(O1, O2, E, St0),
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true(Ret)],St1}
+	    {[is_true_value(Ret)],St1}
     end.
 
 eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[true],St};
 eq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
-    {[is_true(Ret)],St1}.
+    {[is_true_value(Ret)],St1}.
 
 neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[false],St};
 neq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
-    {[not is_true(Ret)],St1}.
+    {[not is_true_value(Ret)],St1}.
 
 eq_meta(O1, O2, St0) ->
     case getmetamethod(O1, <<"__eq">>, St0) of
@@ -998,7 +998,7 @@ lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 < O2],St};
 lt_op(_Op, O1, O2, St0) ->
     Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
     {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-    {[is_true(Ret)],St1}.
+    {[is_true_value(Ret)],St1}.
 
 le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
@@ -1006,12 +1006,12 @@ le_op(_Op, O1, O2, St0) ->
     case getmetamethod(O1, O2, <<"__le">>, St0) of
 	Meta when Meta =/= nil ->
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true(Ret)],St1};
+	    {[is_true_value(Ret)],St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
 	    Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
 	    {Ret,St1} = functioncall(Meta, [O2,O1], St0),
-	    {[not is_true(Ret)],St1}
+	    {[not is_true_value(Ret)],St1}
     end.
 
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
@@ -1043,12 +1043,12 @@ getmetamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-%% is_true(Rets) -> boolean().
+%% is_true_value(Rets) -> boolean().
 
-is_true([nil|_]) -> false;
-is_true([false|_]) -> false;
-is_true([_|_]) -> true;
-is_true([]) -> false.
+is_true_value([nil|_]) -> false;
+is_true_value([false|_]) -> false;
+is_true_value([_|_]) -> true;
+is_true_value([]) -> false.
 
 %% first_value(Rets) -> Value.
 

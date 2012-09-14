@@ -68,7 +68,7 @@ table() ->
     ].
 
 assert(As, St) ->
-    case luerl_lib:is_true(As) of
+    case luerl_lib:is_true_value(As) of
 	true -> {As,St};
 	false ->
 	    M = case As of
