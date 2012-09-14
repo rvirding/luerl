@@ -45,7 +45,7 @@
 -export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
 	 get_local_key/2,set_env_name_env/4]).
 
--import(luerl_lib, [lua_error/1]).
+-import(luerl_lib, [lua_error/1,badarg_error/2]).
 
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[is_true/1,first_value/1]}).
@@ -1054,8 +1054,6 @@ is_true([]) -> false.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
-
-badarg_error(What, Args) -> lua_error({badarg,What,Args}). 
 
 illegal_val_error(Val) ->
     lua_error({illegal_val,Val}).
