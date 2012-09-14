@@ -1,11 +1,21 @@
 Implementation Notes
 --------------------
 
+So far luerl is a straight interpreter and no compilation is
+done. This means that many simple optimisations are not done.
+
+We are almost able to represent the Lua syntax as an LALR(1)
+grammar. The only place this doesn't work is when a statement can be a
+function call as it clashes when it can also be a varlist. We get
+around this by using the more general prefixexp and doing a post-test
+to check that it is a functioncall. This works together with the
+varlist.
+
 All tables are combinations of orddicts and arrays. In each table an
 array is used for integer keys >= 1 while an orddict is used for all
 other keys. We use this information when building/ processing
 tables. Seems like Lua internaly stores elements as a (unordered)
-sequence of key-value elements.
+sequence of key-value elements, except maybe for the table part.
 
 The table table can be either an ordict, an array or use the process
 dictionary; these are accessed through macros. To use ETS would need a

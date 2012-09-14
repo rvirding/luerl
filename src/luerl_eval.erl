@@ -219,7 +219,7 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 	    {Vs,St1};
 	Meth ->					%Recurse down the metatable
 	    get_table_key(Meth, Key, St)
-end.
+    end.
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
@@ -748,7 +748,7 @@ prefixexp_first({'NAME',_,N}, St) -> {[get_env_name(N, St)],St};
 prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
     %% io:format("pf: ~p\n", [E]),
     {R,St1} = exp(E, St0),
-    {[first_value(R)],St1}.
+    {[first_value(R)],St1}.			%Only one value!
 
 prefixexp_rest({'.',_,{'NAME',_,N}=Exp,{functioncall,_,_}=Rest},
 	       SoFar, St0) ->
