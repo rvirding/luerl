@@ -35,7 +35,8 @@
 
 -include("luerl.hrl").
 
--export([lua_error/1,format_error/1,is_true/1,first_value/1,number_to_list/1,
+-export([lua_error/1,format_error/1,
+	 is_true/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
@@ -117,6 +118,8 @@ format_error({illegal_comp,Where}) ->
     io_lib:format("illegal comparison in ~w", [Where]);
 format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
+format_error({undef_function,Name}) ->
+    io_lib:format("undefined function ~w", [Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);

@@ -45,7 +45,7 @@
 -export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
 	 get_local_key/2,set_env_name_env/4]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/1]).
 
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[is_true/1,first_value/1]}).
@@ -97,8 +97,10 @@ pop_env(#luerl{env=[_|Es]}=St) ->
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
 %% free_table(Tref, State) -> State.
+%%  The InitialTable is [{Key,Value}], there is no longer any need to
+%%  have it as an orddict.
 
-alloc_table(St) -> alloc_table(orddict:new(), St).
+alloc_table(St) -> alloc_table([], St).
 
 alloc_table(Itab, #luerl{tabs=Ts0,free=[N|Ns]}=St) ->
     T = init_table(Itab),
@@ -209,17 +211,15 @@ get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
-get_table_key(nil, Key, _St) ->
-    lua_error({method_on_nil, Key});
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
-        nil -> lua_error({illegal_index,Tab,Key});
-        Meth when element(1, Meth) =:= function ->
-            {Vs,St1} = functioncall(Meth, [Tab,Key], St),
-            {Vs,St1};
-        Meth ->					%Recurse down the metatable
-            get_table_key(Meth, Key, St)
-    end.
+	nil -> lua_error({illegal_index,Tab,Key});
+	Meth when element(1, Meth) =:= function ->
+	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
+	    {Vs,St1};
+	Meth ->					%Recurse down the metatable
+	    get_table_key(Meth, Key, St)
+end.
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
@@ -486,8 +486,8 @@ assign_loop([], _, St) -> St.
 set_var({'.',_,Exp,Rest}, Val, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     var_rest(Rest, Val, Next, St1);
-set_var({'NAME',_,Name}, Val, St) ->
-    set_env_name(Name, Val, St).
+set_var({'NAME',_,N}, Val, St) ->
+    set_env_name(N, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
     {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
@@ -571,7 +571,7 @@ do_if(Tests, Else, St) ->
 if_tests([{Exp,Block}|Ts], Else, St0) ->
     {Test,St1} = exp(Exp, St0),			%What about the environment
     case is_true(Test) of
-       true ->					%Test succeeded, do block
+	true ->					%Test succeeded, do block
 	    block(Block, St1);
 	false ->				%Test failed, try again
 	    if_tests(Ts, Else, St1)
@@ -580,11 +580,11 @@ if_tests([], Else, St) -> block(Else, St).
 
 %% do_numfor(Line, Var, Init, Limit, Step, Block, State) -> State.
 
-do_numfor(_, {'NAME',_,Name}, Init, Limit, Step, Block, St0) ->
-    NumFor = fun (St) -> numeric_for(Name, Init, Limit, Step, Block, St) end,
-    %% io:fwrite("dn: ~p\n", [{Name,St0#luerl.locf}]),
+do_numfor(_, {'NAME',_,N}, Init, Limit, Step, Block, St0) ->
+    NumFor = fun (St) -> numeric_for(N, Init, Limit, Step, Block, St) end,
+    %% io:fwrite("dn: ~p\n", [{N,St0#luerl.locf}]),
     {_,St1} = loop_block(NumFor, St0),
-    %% io:fwrite("dn->~p\n", [{Name,St1#luerl.locf}]),
+    %% io:fwrite("dn->~p\n", [{N,St1#luerl.locf}]),
     St1.
 
 numeric_for(Name, Init, Limit, Step, Block, St) ->
@@ -647,10 +647,10 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 	false -> {[],St1}			%Done
     end.
 
-local({functiondef,L,{'NAME',_,Name},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
+local({functiondef,L,{'NAME',_,N},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
-    Ts1 = set_local_name_env(Name, nil, Ts0, Env),
-    Ts2 = set_local_name_env(Name, {function,L,Env,Ps,B}, Ts1, Env),
+    Ts1 = set_local_name_env(N, nil, Ts0, Env),
+    Ts2 = set_local_name_env(N, {function,L,Env,Ps,B}, Ts1, Env),
     St#luerl{tabs=Ts2,locf=true};
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
@@ -729,16 +729,15 @@ exp(E, St) ->
     prefixexp(E, St).
 
 %% prefixexp(PrefixExp, State) -> {[Vals],State}.
-%% Step down the prefixexp sequence evaluating as we go.
+%% Step down the prefixexp sequence evaluating as we go. We special
+%% checking for functions/methods to give better errors, after an idea
+%% by @slepher.
 
-prefixexp({'.', Line, {'NAME',_, Name} = Exp, {functioncall,_,Args0} = Rest}, St0) ->
+prefixexp({'.',_,{'NAME',_,N}=Exp,{functioncall,_,_}=Rest}, St0) ->
     {Next,St1} = prefixexp_first(Exp, St0),
-    FirstValue = first_value(Next),
-    case FirstValue of
-        nil ->
-            lua_error({undefined_method, Name, Args0, Line});
-        _ ->
-            prefixexp_rest(Rest, FirstValue, St1)
+    case first_value(Next) of
+	nil -> lua_error({undef_function,N});
+	Fval -> prefixexp_rest(Rest, Fval, St1)
     end;
 prefixexp({'.',_,Exp,Rest}, St0) ->
     {Next,St1} = prefixexp_first(Exp, St0),
@@ -751,14 +750,12 @@ prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
     {R,St1} = exp(E, St0),
     {[first_value(R)],St1}.
 
-prefixexp_rest({'.', Line, {'NAME', _, Name} = Exp, {functioncall, _, Args0} = Rest}, SoFar, St0) ->
+prefixexp_rest({'.',_,{'NAME',_,N}=Exp,{functioncall,_,_}=Rest},
+	       SoFar, St0) ->
     {Next,St1} = prefixexp_element(Exp, SoFar, St0),
-    FirstValue = first_value(Next),
-    case FirstValue of
-        nil ->
-            lua_error({undefined_method, Name, Args0, Line});
-        _ ->
-            prefixexp_rest(Rest, FirstValue, St1)
+    case first_value(Next) of
+	nil -> lua_error({undef_function,N});
+	Fval -> prefixexp_rest(Rest, Fval, St1)
     end;
 prefixexp_rest({'.',_,Exp,Rest}, SoFar, St0) ->
     {Next,St1} = prefixexp_element(Exp, SoFar, St0),
@@ -779,9 +776,13 @@ prefixexp_element({key_field,_,Exp}, SoFar, St0) ->
     {V,St2};
 prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
     {Func,St1} = get_table_name(SoFar, N, St0),
-    {Args1,St2} = explist(Args0, St1),
-    %%io:fwrite("pe2: ~p\n", [{Func,[SoFar|Args1]}]),
-    functioncall(first_value(Func), [SoFar|Args1], St2).
+    case first_value(Func) of
+	nil -> lua_error({undef_function,N});
+	Fval ->
+	    {Args1,St2} = explist(Args0, St1),
+	    %%io:fwrite("pe2: ~p\n", [{Func,[SoFar|Args1]}]),
+	    functioncall(Fval, [SoFar|Args1], St2)
+    end.
 
 functioncall({function,_,Env,Ps,B}, Args, St0) ->
     Env0 = St0#luerl.env,			%Caller's environment
@@ -1049,11 +1050,12 @@ is_true([false|_]) -> false;
 is_true([_|_]) -> true;
 is_true([]) -> false.
 
+%% first_value(Rets) -> Value.
+
 first_value([V|_]) -> V;
 first_value([]) -> nil.
 
-badarg_error(What, Args) ->
-    lua_error({badarg,What,Args}).
+badarg_error(What, Args) -> lua_error({badarg,What,Args}). 
 
 illegal_val_error(Val) ->
     lua_error({illegal_val,Val}).
