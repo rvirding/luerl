@@ -158,7 +158,7 @@ test_insert(T, N, V) -> do_insert(T, N, V).
 
 do_insert(Arr, Tab, N, V) when N >= 1 ->
     {insert_shift_arr(Arr, N, V),Tab};
-do_insert(Arr, Tab, N, V) ->
+do_insert(Arr, Tab, _, _) ->
     {Arr,Tab}.
 
 do_insert([{K,nil}|_], _, _) ->			%Shouldn't be a nil
@@ -294,25 +294,30 @@ unpack_arr(Arr, N, J) ->
 %% sort - sort the elements of the list after their values.
 
 sort([#tref{i=N}], St0) ->
-    Comp = fun ([{_,A},{_,B}], St) -> lt_comp(A, B, St) end,
+    Comp = fun (A, B, St) -> lt_comp(A, B, St) end,
     St1 = do_sort(Comp, St0, N),
     {[],St1};
 sort([#tref{i=N},Func|_], St0) ->
-    Comp = fun ([{_,A},{_,B}], St) ->
+    Comp = fun (A, B, St) ->
 		   luerl_eval:functioncall(Func, [A,B], St)
 	   end,
     St1 = do_sort(Comp, St0, N),
     {[],St1};
 sort(As, _) -> lua_error({badarg,sort,As}).
 
-do_sort(Sort, St0, N) ->
+do_sort(Comp, St0, N) ->
     #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.tabs),
-    {Arr1,St1} = merge_sort(Sort, St0, Arr0),
-    Arr2 = renumber(Arr1),
-    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
-    Ts0 = St1#luerl.tabs,
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
-    St1#luerl{tabs=Ts1}.
+    case array:to_list(Arr0) of
+	[] -> St0;				%Nothing to do
+	[E0|Es0] ->
+	    %% 1st element index 0, skip it and then prepend it again
+	    {Es1,St1} = merge_sort(Comp, St0, Es0),
+	    Arr2 = array:from_list([E0|Es1], nil),
+	    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
+	    Ts0 = St1#luerl.tabs,
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
+	    St1#luerl{tabs=Ts1}
+    end.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.
 %%  Proper Lua '<' comparison.
@@ -326,11 +331,6 @@ lt_comp(O1, O2, St0) ->
 	    {Ret,St1} = luerl_eval:functioncall(Meta, [O1,O2], St0),
 	    {[luerl_lib:is_true_value(Ret)],St1}
     end.
-
-renumber(Tab0) ->
-    Fun = fun ({_,V}, I) -> {{I,V},I+1} end,
-    {Tab1,_} = lists:mapfoldl(Fun, 1, Tab0),
-    Tab1.
 
 %% length(Stable, State) -> {Length,State}.
 %%  The length of a table is the number of numeric keys in sequence
@@ -411,7 +411,7 @@ length_loop(I, Arr) ->
 merge_sort(_, St, []) -> {[],St};
 merge_sort(_, St, [_] = L) -> {L,St};
 merge_sort(Fun, St0, [X, Y|T]) ->
-    {Ret,St1} = Fun([X,Y], St0),
+    {Ret,St1} = Fun(X, Y, St0),
     case luerl_lib:is_true_value(Ret) of
 	true ->
 	    fsplit_1(Y, X, Fun, St1, T, [], []);
@@ -421,12 +421,12 @@ merge_sort(Fun, St0, [X, Y|T]) ->
 
 %% Ascending.
 fsplit_1(Y, X, Fun, St0, [Z|L], R, Rs) ->
-    {Ret1,St1} = Fun([Y,Z], St0),
+    {Ret1,St1} = Fun(Y, Z, St0),
     case luerl_lib:is_true_value(Ret1) of
         true ->
             fsplit_1(Z, Y, Fun, St1, L, [X|R], Rs);
         false ->
-	    {Ret2,St2} = Fun([X,Z], St1),
+	    {Ret2,St2} = Fun(X, Z, St1),
             case luerl_lib:is_true_value(Ret2) of
                 true ->
                     fsplit_1(Y, Z, Fun, St2, L, [X|R], Rs);
@@ -440,17 +440,17 @@ fsplit_1(Y, X, Fun, St, [], R, Rs) ->
     rfmergel([[Y, X|R]|Rs], [], Fun, St, asc).
 
 fsplit_1_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
-    {Ret1,St1} = Fun([Y,Z], St0),
+    {Ret1,St1} = Fun(Y, Z, St0),
     case luerl_lib:is_true_value(Ret1) of
         true ->
             fsplit_1_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
         false ->
-	    {Ret2,St2} = Fun([X,Z], St1),
+	    {Ret2,St2} = Fun(X, Z, St1),
             case luerl_lib:is_true_value(Ret2) of
                 true ->
                     fsplit_1_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
                 false ->
-		    {Ret3,St3} = Fun([S,Z], St2),
+		    {Ret3,St3} = Fun(S, Z, St2),
                     case luerl_lib:is_true_value(Ret3) of
                         true ->
                             fsplit_1(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
@@ -464,12 +464,12 @@ fsplit_1_1(Y, X, Fun, St, [], R, Rs, S) ->
 
 %% Descending.
 fsplit_2(Y, X, Fun, St0, [Z|L], R, Rs) ->
-    {Ret1,St1} = Fun([Y,Z], St0),
+    {Ret1,St1} = Fun(Y, Z, St0),
     case luerl_lib:is_true_value(Ret1) of
         false ->
             fsplit_2(Z, Y, Fun, St1, L, [X|R], Rs);
         true ->
-	    {Ret2,St2} = Fun([X,Z], St1),
+	    {Ret2,St2} = Fun(X, Z, St1),
             case luerl_lib:is_true_value(Ret2) of
                 false ->
                     fsplit_2(Y, Z, Fun, St2, L, [X|R], Rs);
@@ -483,17 +483,17 @@ fsplit_2(Y, X, Fun, St, [], R, Rs) ->
     fmergel([[Y, X|R]|Rs], [], Fun, St, desc).
 
 fsplit_2_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
-    {Ret1,St1} = Fun([Y,Z], St0),
+    {Ret1,St1} = Fun(Y, Z, St0),
     case luerl_lib:is_true_value(Ret1) of
         false ->
             fsplit_2_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
         true ->
-	    {Ret2,St2} = Fun([X,Z], St1),
+	    {Ret2,St2} = Fun(X, Z, St1),
             case luerl_lib:is_true_value(Ret2) of
                 false ->
                     fsplit_2_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
                 true ->
-		    {Ret3,St3} = Fun([S,Z], St2),
+		    {Ret3,St3} = Fun(S, Z, St2),
                     case luerl_lib:is_true_value(Ret3) of
                         false ->
                             fsplit_2(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
@@ -535,7 +535,7 @@ rfmergel([], Acc, Fun, St, O) ->
 
 %% Elements from the first list are prioritized.
 fmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
-    {Ret,St1} = Fun([H1,H2], St0),
+    {Ret,St1} = Fun(H1, H2, St0),
     case luerl_lib:is_true_value(Ret) of
         true ->
             fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
@@ -546,7 +546,7 @@ fmerge2_1([], H2, _Fun, St, T2, M) ->
     {lists:reverse(T2, [H2|M]),St}.
 
 fmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
-    {Ret,St1} = Fun([H1,H2], St0),
+    {Ret,St1} = Fun(H1, H2, St0),
     case luerl_lib:is_true_value(Ret) of
         true ->
             fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
@@ -562,7 +562,7 @@ fmerge2_2(H1, T1, _Fun, St, [], M) ->
 %%     T1.
 
 rfmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
-    {Ret,St1} = Fun([H1,H2], St0),
+    {Ret,St1} = Fun(H1, H2, St0),
     case luerl_lib:is_true_value(Ret) of
         true ->
             rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
@@ -573,7 +573,7 @@ rfmerge2_1([], H2, _Fun, St, T2, M) ->
     {lists:reverse(T2, [H2|M]),St}.
 
 rfmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
-    {Ret,St1} = Fun([H1,H2], St0),
+    {Ret,St1} = Fun(H1, H2, St0),
     case luerl_lib:is_true_value(Ret) of
         true ->
             rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
