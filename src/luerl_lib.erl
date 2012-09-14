@@ -35,13 +35,18 @@
 
 -include("luerl.hrl").
 
--export([lua_error/1,format_error/1,is_true/1,first_value/1,number_to_list/1,
+-export([lua_error/1,badarg_error/2,format_error/1,
+	 is_true_value/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
 
--export([anew/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
+-export([anew/1,asiz/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
+
+-spec lua_error(_) -> no_return().
+
+badarg_error(What, Args) -> lua_error({badarg,What,Args}). 
 
 lua_error(E) -> error({lua_error,E}).
 
@@ -51,6 +56,11 @@ lua_error(E) -> error({lua_error,E}).
 
 anew(_) -> [].
 
+asiz(A) -> asiz(A, 0).
+
+asiz([{_,L,_}|A], _) -> asiz(A, L);
+asiz([], S) -> S.
+
 aget(I, [{I,_,Es}|_]) -> hd(Es);		%First element
 aget(I, [{F,L,Es}|_]) when I >= F, I =< L ->	%It's in here
     lists:nth(I-F+1, Es);
@@ -58,6 +68,7 @@ aget(I, [{_,L,_}|A]) when I > L ->		%Not yet
     aget(I, A);
 aget(_, _) -> nil.				%Not at all
 
+aset(I, nil, A) -> aclr(I, A);			%Setting to nil is clearing
 aset(I, V, [{F,L,Es}|A]) when I >= F, I =< L -> %Set it here
     [{F,L,setnth(I-F+1, V, Es)}|A];
 aset(I, V, [{F,L,Es}]) when I =:= L+1, F-L < 10 ->
@@ -91,8 +102,12 @@ setnth(N, V, [E|Es]) -> [E|setnth(N-1, V, Es)].
 %%  Some of these use same text as Lua error string, so be careful if
 %%  modifying them.
 
+format_error({undefined_method, Name, Args0, Line}) ->
+    io_lib:format("undefined_method ~w with args: ~p on line ~p", [Name, Args0, Line]);
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
+format_error({method_on_nil, Key}) ->
+    io_lib:format("undefined method ~w on nil", [Key]);
 format_error({illegal_key,Tab,Key}) ->
     io_lib:format("invalid key in ~w: ~w", [Tab,Key]);
 format_error({illegal_index,Where,I}) ->
@@ -105,6 +120,8 @@ format_error({illegal_comp,Where}) ->
     io_lib:format("illegal comparison in ~w", [Where]);
 format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
+format_error({undef_function,Name}) ->
+    io_lib:format("undefined function ~w", [Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);
@@ -120,13 +137,13 @@ format_error({illegal_op,Op}) ->
 format_error({undefined_op,Op}) ->
     io_lib:format("undefined op: ~w", [Op]).
 
-%% is_true(Rets) -> boolean()>
+%% is_true_value(Rets) -> boolean()>
 %% first_value(Rets) -> Value | nil.
 
-is_true([nil|_]) -> false;
-is_true([false|_]) -> false;
-is_true([_|_]) -> true;
-is_true([]) -> false.
+is_true_value([nil|_]) -> false;
+is_true_value([false|_]) -> false;
+is_true_value([_|_]) -> true;
+is_true_value([]) -> false.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.

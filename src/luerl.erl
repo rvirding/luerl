@@ -68,8 +68,8 @@ do(B, St) when is_binary(B) ->
 do(S, St) when is_list(S) ->
     {ok,C} = load(S),
     luerl_eval:chunk(C, [], St);
-do(C, St) ->
-    luerl_eval:call(C, [], St).
+do(C, St) ->					%Pre-parsed/compiled chunk
+    luerl_eval:chunk(C, [], St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
 dofile(Path) ->
@@ -124,7 +124,7 @@ encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
 encode(B, St) when is_boolean(B) -> {B,St};
 encode(nil, St) -> {nil,St};
-encode(L, St0) ->
+encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
 					  {K1,S1} = encode(K0, S0),
 					  {V1,S2} = encode(V0, S1),
@@ -133,9 +133,9 @@ encode(L, St0) ->
 					  {V1,S1} = encode(V0, S0),
 					  {{I,V1},{I+1,S1}}
 			      end, {1.0,St0}, L),
-    Ts = orddict:from_list(Es),
-    {T,St2} = luerl_eval:alloc_table(Ts, St1),
-    {T,St2}.
+    {T,St2} = luerl_eval:alloc_table(Es, St1),
+    {T,St2};					%No more to do for now
+encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
@@ -148,9 +148,13 @@ decode(N, _) when is_number(N) -> N;
 decode(B, _) when is_boolean(B) -> B;
 decode(nil, _) -> nil;
 decode(#tref{i=N}, St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    Fun = fun ({K,V}) -> {decode(K, St),decode(V, St)} end,
-    At = lists:map(Fun, Arr),
-    Tt = lists:map(Fun, Tab),
-    Tt ++ At;
-decode({function,Fun}, _) -> {function,Fun}.
+    case ?GET_TABLE(N, St#luerl.tabs) of
+	#table{a=Arr,t=Tab} ->
+	    Kfun = fun (K, V) -> {decode(K, St),decode(V, St)} end,
+	    Afun = fun (K, V, Acc) -> [Kfun(K, V)|Acc] end,
+	    [ Kfun(K, V) || {K,V} <- Tab ] ++
+		array:sparse_foldr(Afun, [], Arr);
+	_Undefined -> error(badarg)
+    end;
+decode({function,Fun}, _) -> {function,Fun};
+decode(_, _) -> error(badarg).			%Shouldn't have anything else

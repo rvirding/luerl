@@ -60,10 +60,48 @@
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
-%% Set which table store to use.
--define(USE_ARRAY, true).
+%% Different methods for storing the array section of a table in
+%% #table{}.  Solely using these macros allows testing with different
+%% storage methods. When using orddicts it is more efficient to KNOW
+%% the defined internal structure.
 
--ifdef(USE_ORDDICT).
+%% Set which array store to use.
+-define(ARR_USE_ARRAY, true).
+
+-ifdef(ARR_USE_ARRAY).
+-define(MAKE_ARR(), array:new([{default,nil}])).
+-define(ASIZE(A), array:size(A)).
+-define(AGET(I, A), array:get(I, A)).
+-define(ASET(I, V, A), array:set(I, V, A)).
+-endif.
+
+-ifdef(ARR_USE_ORRDICT).
+-define(MAKE_ARR(), orddict:new()).
+-define(ASIZE(A), orddict:size(A)).		%This not correct!
+-define(AGET(I, A), case orddict:find(I, A) of
+			{ok,___V} -> ___V;
+			error -> nil
+		    end).
+-define(ASET(I, V, A), orddict:store(I, V, A)).
+-endif.
+
+-ifdef(ARR_USE_EXP).
+%% Use experimental array structure in luerl_lib.
+-define(MAKE_ARR(), luerl_lib:anew()).
+-define(ASIZE(A), luerl_lib:asiz(A)).
+-define(AGET(I, A), luerl_lib:aget(I, A)).
+-define(ASET(I, V, A), luerl_lib:aset(I, V, A)).
+-endif.
+
+%% Different methods for storing tables in the global data #luerl{}.
+%% Access through macros to allow testing with different storage
+%% methods. This is inefficient with ETS tables where it would
+%% probably be better to use bags and acces with match/select.
+
+%% Set which table store to use.
+-define(TS_USE_ARRAY, true).
+
+-ifdef(TS_USE_ORDDICT).
 %% Using orddict to handle tables.
 -define(MAKE_TABLE(), orddict:new()).
 -define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
@@ -74,7 +112,7 @@
 -define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
--ifdef(USE_ARRAY).
+-ifdef(TS_USE_ARRAY).
 %% Use arrays to handle tables.
 -define(MAKE_TABLE(), array:new()).
 -define(GET_TABLE(N, Ar), array:get(N, Ar)).
@@ -95,7 +133,7 @@
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
 -endif.
 
--ifdef(USE_PD).
+-ifdef(TS_USE_PD).
 %% Use the process dictionary to handle tables.
 -define(MAKE_TABLE(), ok).
 -define(GET_TABLE(N, Pd), get(N)).
@@ -106,7 +144,7 @@
 -define(FOLD_TABLES(Fun, Acc, Pd), Pd).		%This needs work
 -endif.
 
--ifdef(USE_ETS).
+-ifdef(TS_USE_ETS).
 %% Use ETS to handle tables. Must get return values right!
 -define(MAKE_TABLE(),ets:new(luerl_tables, [set])).
 -define(GET_TABLE(N, E), ets:lookup_element(E, N, 2)).
