@@ -36,7 +36,7 @@
 
 -include("luerl.hrl").
 
--export([install/1,length/2,test_insert/2,test_insert/3,test_concat/1]).
+-export([install/1,length/2,test_insert/2,test_insert/4,test_concat/1]).
 
 -import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
 
@@ -60,9 +60,9 @@ concat([#tref{i=N}|As], St) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
 	[Sep,I] ->
-	    {[concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
+	    {[do_concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
-	    {[concat(Arr, Tab, Sep, I, J)],St};
+	    {[do_concat(Arr, Tab, Sep, I, J)],St};
 	_ -> badarg_error(concat, As)
     end;
 concat(As, _) -> badarg_error(concat, As).
@@ -77,7 +77,7 @@ concat_args([Sep,I]) -> [Sep,I];
 concat_args([Sep,I,nil|_]) -> [Sep,I];
 concat_args([Sep,I,J|_]) -> [Sep,I,J].
 
-concat(Arr, Tab, Sep, I, J) ->
+do_concat(Arr, Tab, Sep, I, J) ->
     Conc = concat_table(Arr, Tab, I, J),
     concat_join(Conc, Sep).
 
@@ -116,7 +116,8 @@ concat_join([E1|Es], Sep) ->
     iolist_to_binary([E1|[ [Sep,E] || E <- Es ]]);
 concat_join([], _) -> <<>>.
 
-%% insert - insert an element into a list shifting following elements.
+%% insert(Table, [Pos,] Value) -> []
+%%  Insert an element into a list shifting following elements.
 
 insert([#tref{i=N},V], St0) ->
     Ts0 = St0#luerl.tabs,
@@ -152,36 +153,45 @@ insert(As, _) -> badarg_error(insert, As).
 %% nil E   nil nil aa  bb  cc  nil zz  nil nil nil nil
 
 test_insert(T, V) -> do_insert_last(T, V).
-test_insert(T, N, V) -> do_insert(T, N, V).
+test_insert(A, T, N, V) -> do_insert(A, T, N, V).
 
-%% do_insert(Arr, Tab, N, V) -> Arr.
-%% Don't ask, it tries to emulate the "real" Lua.
+%% do_insert(Array, Table, N, V) -> {Array,Table}.
+%% Don't ask, it tries to emulate the "real" Lua. We have the indexes
+%% and limits as integers and explicitly use '==' to compare with
+%% float values in table.
 
-do_insert(Arr, Tab, N, V) when N >= 1 ->
-    {insert_shift_arr(Arr, N, V),Tab};
-do_insert(Arr, Tab, _, _) ->
-    {Arr,Tab}.
+do_insert(Arr, Tab, N, V) when N >= 1 ->	%Go to the array part
+    {insert_array(Arr, N, V),Tab};
+do_insert(Arr0, Tab0, N, V) ->
+    {Next,Tab1} = insert_tab(Tab0, N, V, []),
+    Arr1 = insert_array(Arr0, 1, Next),
+    {Arr1,Tab1}.
 
-do_insert([{K,nil}|_], _, _) ->			%Shouldn't be a nil
-    error({boom,K,nil});
-do_insert([{N,_}|_]=Arr, N, V) ->		%Push it in here
-    [{N,V}|insert_renum(Arr, N)];
-do_insert([{K,_}|_]=Arr, N, V) when K > N ->	%Gap
-    [{N,V}|insert_renum(Arr, N)];
-do_insert([P|Arr], N, V) -> [P|do_insert(Arr, N, V)];
-do_insert([], N, V) -> [{N,V}].
+insert_tab(Tab, N, Here, Acc) when N > 0 ->	%Done them all
+    {Here,lists:reverse(Acc, Tab)};
+insert_tab([{K,_}=E|Tab], N, Here, Acc) when K < N ->
+    insert_tab(Tab, N, Here, [E|Acc]);		%Haven't reached it yet
+insert_tab([{K,V}|Tab], N, Here, Acc0) when K == N -> 
+    Acc1 = if Here =:= nil -> Acc0;
+	      true -> [{K,Here}|Acc0]
+	   end,
+    insert_tab(Tab, N+1, V, Acc1);
+insert_tab([{K,_}|_]=Tab, N, Here, Acc0) when K > N ->
+    Acc1 = if Here =:= nil -> Acc0;
+	      true -> [{float(N),Here}|Acc0]
+	   end,
+    insert_tab(Tab, N+1, nil, Acc1);
+insert_tab([], N, Here, Acc) ->
+    if Here =:= nil -> {nil,lists:reverse(Acc, [])};
+       true -> {nil,lists:reverse(Acc, [{float(N),Here}])}
+    end.
 
-insert_renum([{K,nil}|_], _) ->			%Shouldn't be a nil
-    error({boom,K,nil});
-insert_renum([{N,V}|Arr], N) -> [{N+1,V}|insert_renum(Arr, N+1)];
-insert_renum(Arr, _) -> Arr.			%Gap or end of list
-
-insert_shift_arr(Arr0, N, Here) ->		%Put This at N shifting up
+insert_array(Arr0, N, Here) ->			%Put this at N shifting up
     case array:get(N, Arr0) of
 	nil -> array:set(N, Here, Arr0);	%Just fill hole
 	Next ->					%Take value for next slot
 	    Arr1 = array:set(N, Here, Arr0),
-	    insert_shift_arr(Arr1, N+1, Next)
+	    insert_array(Arr1, N+1, Next)
     end.
 
 do_insert_last(Arr, V) -> do_insert_last(Arr, 1, V).
@@ -253,11 +263,11 @@ unpack([#tref{i=N}=T|As], St) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
     case luerl_lib:to_ints(unpack_args(As)) of
 	[I] ->
-	    Unp = unpack_table(Arr, Tab, I, length_loop(Arr)),
+	    Unp = do_unpack(Arr, Tab, I, length_loop(Arr)),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
 	    {Unp,St};
 	[I,J] ->
-	    Unp = unpack_table(Arr, Tab, I, J),
+	    Unp = do_unpack(Arr, Tab, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
 	nil -> badarg_error(unpack, [T|As])	%Not numbers
@@ -278,7 +288,7 @@ unpack_args([I,J|_]) -> [I,J].			%Only use two arguments
 %% and limits as integers and explicitly use '==' to compare with
 %% float values in table.
 
-unpack_table(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
+do_unpack(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
 
 unpack_tab(_, _, N, J) when N > J -> [];	%Done
 unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
