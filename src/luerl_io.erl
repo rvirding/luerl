@@ -50,7 +50,7 @@ table() ->
 flush(_, St) -> {[true],St}.
 
 write(As, St) ->
-    case luerl_lib:conv_list(As, [lstring]) of
+    case luerl_lib:conv_list(As, [lua_string]) of
 	nil -> lua_error({badarg,write,As});
 	Ss ->
 	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),

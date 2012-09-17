@@ -274,11 +274,11 @@ conv_list([A|As], [To|Tos], Rs0) ->
 		      integer -> to_int(A);
 		      string -> to_list(A);
 		      %% Lua types.
-		      lany -> A;
-		      linteger -> tointeger(A);
-		      lnumber -> tonumber(A);
-		      lstring -> tostring(A);
-		      lbool -> ?IS_TRUE(A)
+		      lua_any -> A;
+		      lua_integer -> tointeger(A);
+		      lua_number -> tonumber(A);
+		      lua_string -> tostring(A);
+		      lua_bool -> ?IS_TRUE(A)
 		  end,
 	    case Ret of
 		nil -> nil;			%Propagate nil

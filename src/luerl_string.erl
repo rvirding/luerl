@@ -67,7 +67,7 @@ table() ->					%String table
     ].
 
 byte(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,integer,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
 	[S|Is] ->
 	    Bs = do_byte(S, byte_size(S), Is),
 	    {Bs,St};
@@ -103,7 +103,7 @@ char(As, St) ->
 find([A1,A2], St) -> find([A1,A2,1.0], St);
 find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
 find(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,lstring,integer,lbool]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,integer,lua_bool]) of
 	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St};
 	_ -> lua_error({badarg,find,As})	%nil, [_] or []
     end.
@@ -191,7 +191,7 @@ build({$g,_,_,_}, [A|As]) ->
 gmatch(As, _) -> lua_error({badarg,gmatch,As}).
 
 gsub(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,lstring,lany,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,integer]) of
 	[S,P,R,N] when N > 0 ->
 	    gsub(S, byte_size(S), P, R, N, St);
 	[S,P,R] ->				%'all' bigger than any number
@@ -308,7 +308,7 @@ lower(As, St) ->
 
 match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,lstring,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,integer]) of
 	[S,P,I] -> {match(S, byte_size(S), P, I),St};
 	_ -> lua_error({badarg,match,As})
     end.
@@ -359,7 +359,7 @@ match_cas(Cas, S) -> [ match_ca(Ca, S) || Ca <- Cas ].
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
-    case luerl_lib:conv_list(As, [lstring,integer,lstring]) of
+    case luerl_lib:conv_list(As, [lua_string,integer,lua_string]) of
 	[S,I,Sep] ->
 	    if I > 0 ->
 		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
@@ -380,7 +380,7 @@ reverse(As, _) -> lua_error({badarg,reverse,As}).
 %% sub(Args, State) -> {[Res],State}.
 
 sub(As, St) ->
-    case luerl_lib:conv_list(As, [lstring,integer,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
 	[S,I|Js] ->
 	    Len = byte_size(S),
 	    Sub = do_sub(S, Len, I, Js),	%Just I, or both I and J
