@@ -58,8 +58,7 @@ table() ->
 
 concat([#tref{i=N}|As], St) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:conv_list(concat_args(As),
-			     [lua_string,lua_integer,lua_integer]) of
+    case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
 	[Sep,I] ->
 	    {[concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
@@ -92,7 +91,7 @@ concat_table(Arr, Tab, I, J) ->
 
 concat_tab(_, _, N, J) when N > J -> [];	%Done
 concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
-    concat_arr(Arr, round(N), J);		%Need integers keys now
+    concat_arr(Arr, N, J);
 concat_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
     case luerl_lib:to_list(V) of
 	nil -> lua_error({illegal_val,concat,V});
