@@ -38,7 +38,7 @@
 
 -export([install/1,length/2,test_insert/2,test_insert/3,test_concat/1]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
 
 install(St) ->
     luerl_eval:alloc_table(table(), St).
@@ -58,13 +58,15 @@ table() ->
 
 concat([#tref{i=N}|As], St) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    case luerl_lib:conv_list(concat_args(As), [lstring,linteger,linteger]) of
+    case luerl_lib:conv_list(concat_args(As),
+			     [lua_string,lua_integer,lua_integer]) of
 	[Sep,I] ->
 	    {[concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
-	    {[concat(Arr, Tab, Sep, I, J)],St}
+	    {[concat(Arr, Tab, Sep, I, J)],St};
+	_ -> badarg_error(concat, As)
     end;
-concat(As, _) -> lua_error({badarg,concat,As}).
+concat(As, _) -> badarg_error(concat, As).
 
 test_concat(As) -> concat_args(As).
 
@@ -127,13 +129,13 @@ insert([#tref{i=N},P0,V]=As, St0) ->
     Ts0 = St0#luerl.tabs,
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
-	nil -> lua_error({badarg,insert,As});
+	nil -> badarg_error(insert, As);
 	P1 ->
 	    {Arr1,Tab1} = do_insert(Arr0, Tab0, P1, V),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
 	    {[],St0#luerl{tabs=Ts1}}
     end;
-insert(As, _) -> lua_error({badarg,insert,As}).
+insert(As, _) -> badarg_error(insert, As).
 
 %% Facit
 %% t={} t={'aa','bb','cc',[6]='zz'} table.insert(t, 8, 'E')
@@ -191,17 +193,6 @@ do_insert_last(Arr, N, V) ->			%Find first nil
 	_ -> do_insert_last(Arr, N+1, V)
     end.
 
-%% pack - pack arguments in to a table.
-
-pack(As, St0) ->
-    T = pack_loop(As, 0.0),			%Indexes are floats!
-    {Tab,St1} = luerl_eval:alloc_table(T, St0),
-    {[Tab],St1}.
-
-pack_loop([E|Es], N) ->				%In order for an orddict!
-    [{N+1,E}|pack_loop(Es, N+1)];
-pack_loop([], N) -> [{<<"n">>,N}].
-
 %% remove - Remove an element from a list shifting following elements.
 
 remove([#tref{i=N}], St0) ->
@@ -214,13 +205,13 @@ remove([#tref{i=N},P0]=As, St0) ->
     Ts0 = St0#luerl.tabs,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
-	nil -> lua_error({badarg,remove,As});
+	nil -> badarg_error(remove, As);
 	P1 ->
 	    {Val,Arr1} = do_remove(Arr0, P1),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 	    {[Val],St0#luerl{tabs=Ts1}}
     end;
-remove(As, _) -> lua_error({badarg,remove,As}).
+remove(As, _) -> badarg_error(remove, As).
 
 do_remove_last(Arr) -> do_remove_last(Arr, 1, nil, []).
 
@@ -246,6 +237,17 @@ remove_renum([{K,V}|Arr], N) when K =:= N+1 ->
     [{N,V}|remove_renum(Arr, N+1)];
 remove_renum(Arr, _) -> Arr.			%Gap or end of list
 
+%% pack - pack arguments in to a table.
+
+pack(As, St0) ->
+    T = pack_loop(As, 0.0),			%Indexes are floats!
+    {Tab,St1} = luerl_eval:alloc_table(T, St0),
+    {[Tab],St1}.
+
+pack_loop([E|Es], N) ->				%In order for an orddict!
+    [{N+1,E}|pack_loop(Es, N+1)];
+pack_loop([], N) -> [{<<"n">>,N}].
+
 %% unpack - unpack table into return values.
 
 unpack([#tref{i=N}=T|As], St) ->
@@ -259,15 +261,18 @@ unpack([#tref{i=N}=T|As], St) ->
 	    Unp = unpack_table(Arr, Tab, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
-	_ -> lua_error({badarg,unpack,[T|As]})
+	nil -> badarg_error(unpack, [T|As])	%Not numbers
     end;
-unpack([], _) -> lua_error({badarg,unpack,[]}).
+unpack([], _) -> badarg_error(unpack, []).
+
+%% unpack_args(Args) -> Args.
+%% Fix args for unpack getting defaults right and handling 'nil'.
 
 unpack_args([]) -> unpack_args([1.0]);		%Just start from the beginning
 unpack_args([nil|As]) -> unpack_args([1.0|As]);
 unpack_args([I]) -> [I];			%Only one argument
 unpack_args([I,nil|_]) -> [I];			%Goto the default end
-unpack_args([I,J|_]) -> [I,J].			%Two arguments
+unpack_args([I,J|_]) -> [I,J].			%Only use two arguments
 
 %% This and concat_table are very similar.
 %% First scan over table up to 0 then the array. We have the indexes
@@ -278,7 +283,7 @@ unpack_table(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
 
 unpack_tab(_, _, N, J) when N > J -> [];	%Done
 unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
-    unpack_arr(Arr, round(N), J);		%Need integer keys now
+    unpack_arr(Arr, N, J);
 unpack_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
     [V|unpack_tab(Arr, Tab, N+1, J)];
 unpack_tab(Arr, [{K,_}|_]=Tab, N, J) when K > N ->	%Gap
@@ -303,7 +308,7 @@ sort([#tref{i=N},Func|_], St0) ->
 	   end,
     St1 = do_sort(Comp, St0, N),
     {[],St1};
-sort(As, _) -> lua_error({badarg,sort,As}).
+sort(As, _) -> badarg_error(sort, As).
 
 do_sort(Comp, St0, N) ->
     #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.tabs),
