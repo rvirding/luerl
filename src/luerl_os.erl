@@ -38,6 +38,7 @@ install(St) ->
 
 table() ->
     [{<<"clock">>,{function,fun clock/2}},
+     {<<"date">>,{function,fun date/2}},
      {<<"difftime">>,{function,fun difftime/2}},
      {<<"getenv">>,{function,fun getenv/2}},
      {<<"time">>,{function,fun time/2}}].
@@ -56,6 +57,12 @@ getenv(As, _) -> lua_error({badarg,getenv,As}).
 clock(_, St) ->					%This is wrong!
     {Mega,S,Micro} = now(),
     {[1.0e6*Mega+S+Micro*1.0e-6],St}.
+
+date(_, St) ->
+    {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
+    Str = io_lib:fwrite("~w-~.2.Ow-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
+			[Ye,Mo,Da,Ho,Mi,Sec]),
+    {[iolist_to_binary(Str)],St}.
 
 difftime([A1,A2|_], St) ->
     {[A2-A1],St}.

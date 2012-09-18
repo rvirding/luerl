@@ -1,5 +1,6 @@
 *~
 .DS_Store
+ebin
 *.beam
 src/luerl_scan.erl
 src/luerl_parse.erl

@@ -1,15 +1,51 @@
 Implementation Notes
 --------------------
 
-All tables are orddicts. We use this information when building/
-processing tables. Seems like Lua internaly stores elements as a
-(unordered) sequence of key-value elements.
+So far luerl is a straight interpreter and no compilation is
+done. This means that many simple optimisations are not done.
+
+We are almost able to represent the Lua syntax as an LALR(1)
+grammar. The only place this doesn't work is when a statement can be a
+function call as it clashes when it can also be a varlist. We get
+around this by using the more general prefixexp and doing a post-test
+to check that it is a functioncall. This works together with the
+varlist.
+
+All tables are combinations of orddicts and arrays. In each table an
+array is used for integer keys >= 1 while an orddict is used for all
+other keys. We use this information when building/ processing
+tables. Seems like Lua internaly stores elements as a (unordered)
+sequence of key-value elements, except maybe for the table part.
+
+Using the array module for positive integer keys seems a reasonable
+choice. Direct read/write access is fast, but "shifting" access for
+example in table.insert/remove is not that efficient. Most table
+functions work after a fashion even in the "undefined" case all the
+elements don't have keys only in 1..n, but it seems like the order in
+which elements were added affects the outcome. We don't have any such
+information available. We do try to do something reasonable that sort
+of mirrors the Lua functions. Should we or should we be strict?
 
 The table table can be either an ordict, an array or use the process
 dictionary; these are accessed through macros. To use ETS would need a
 bigger change as copying the whole table for each access would be very
-inefficient. Either use bags and have one per table or sue sets and
+inefficient. Either use bags and have one per table or use sets and
 have the ETS key as {Tab,Key}.
+
+To handle multiple return values we always return a list of values.
+The only place this is not done is in luerl_eval.erl when getting
+values from the environment where we can only have one value. This
+means a lot of calls to first_value/1 in luerl_eval.erl, but the
+consistency is worth it.
+
+Similarily all the arguments in a function call are passed in a list.
+The function then unpacks the list into its arguments, including
+'...'.
+
+All of the predefined libraries have an install/1 function. This is
+called when initialising Luerl; it does any library specific
+initialisation necessary and returns a table containing the functions
+in the library.
 
 Lua implementation "features"
 -----------------------------

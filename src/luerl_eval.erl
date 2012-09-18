@@ -35,16 +35,20 @@
 -include("luerl.hrl").
 
 %% Basic interface.
--export([init/0,chunk/2,funchunk/2,funchunk/3,gc/1]).
+-export([init/0,call/2,call/3,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
--export([alloc_table/2,functioncall/3,getmetamethod/3,getmetamethod/4]).
+-export([alloc_table/2,functioncall/3,get_table_key/3,
+	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
 -export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
-	 set_env_name_env/4]).
+	 get_local_key/2,set_env_name_env/4]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/1,badarg_error/2]).
+
+%% -compile(inline).				%For when we are optimising
+%% -compile({inline,[is_true_value/1,first_value/1]}).
 
 %%-define(DP(F,As), io:format(F, As)).
 -define(DP(F, A), ok).
@@ -93,79 +97,155 @@ pop_env(#luerl{env=[_|Es]}=St) ->
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
 %% free_table(Tref, State) -> State.
+%%  The InitialTable is [{Key,Value}], there is no longer any need to
+%%  have it as an orddict.
 
-alloc_table(St) -> alloc_table(orddict:new(), St).
+alloc_table(St) -> alloc_table([], St).
 
 alloc_table(Itab, #luerl{tabs=Ts0,free=[N|Ns]}=St) ->
-    Ts1 = ?SET_TABLE(N, #table{t=Itab,m=nil}, Ts0),
+    T = init_table(Itab),
+    %% io:fwrite("it1: ~p\n", [{N,T}]),
+    Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,free=Ns}};
 alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
-    Ts1 = ?SET_TABLE(N, #table{t=Itab,m=nil}, Ts0),
+    T = init_table(Itab),
+    %% io:fwrite("it2: ~p\n", [{N,T}]),
+    Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
 
+init_table(Itab) ->
+    T0 = orddict:new(),
+    A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
+    Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
+	       ({K,V}, {T,A}) when is_number(K) ->
+		   case ?IS_INTEGER(K, I) of
+		       true when I >= 1 -> {T,array:set(I, V, A)};
+		       _NegFalse -> {orddict:store(K, V, T),A}
+		   end;
+	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
+	   end,
+    {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
+    #table{a=A1,t=T1,m=nil}.
+
 free_table(#tref{i=N}, #luerl{tabs=Ts0,free=Ns}=St) ->
+    %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
     Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{tabs=Ts1,free=[N|Ns]}.
 
 %% set_table_name(Tref, Name, Value, State) -> State.
 %% set_table_key(Tref, Key, Value, State) -> State.
-%% get_table_name(Tref, Name, State) -> {Val,State}.
-%% get_table_key(Tref, Key, State) -> {Val,State}.
+%% get_table_name(Tref, Name, State) -> {[Val],State}.
+%% get_table_key(Tref, Key, State) -> {[Val],State}.
 %%  Access tables, as opposed to the environment (which are also
-%%  tables). Setting a value to 'nil' will clear it from the table.
+%%  tables). Setting a value to 'nil' will clear it from the array but
+%%  not from the table; however, we won't add a nil value. NOTE: WE
+%%  ALWAYS RETURN A LIST OF VALUES GET AS METAMETHOD MY DO SO AND WE
+%%  DON'T WANT TO PRE-SUPPOSE HOW THE VALUE IS TO BE USED!
 
 set_table_name(Tab, Name, Val, St) ->
     set_table_key(Tab, atom_to_binary(Name, latin1), Val, St).
 
-set_table_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
-    #table{t=Tab0,m=Meta} = ?GET_TABLE(N, Ts0),	%Get the table
+set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
+    case ?IS_INTEGER(Key, I) of
+	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
+	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
+    end;
+set_table_key(#tref{}=Tref, Key, Val, St) ->
+    set_table_key_key(Tref, Key, Val, St);
+set_table_key(Tab, Key, _, _) ->
+    lua_error({illegal_index,Tab,Key}).
+
+set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
+    #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case orddict:find(Key, Tab0) of
-	{ok,_} ->
-%% 	    Tab1 = if Val =:= nil -> orddict:erase(Key, Tab0);
-%% 		      true -> orddict:store(Key, Val, Tab0)
-%% 		   end,
+	{ok,_} ->			    %Key exists
+	    %% Don't delete key for nil here!
 	    Tab1 = orddict:store(Key, Val, Tab0),
-	    Ts1 = ?SET_TABLE(N, #table{t=Tab1,m=Meta}, Ts0),
+	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{tabs=Ts1};
-	error ->
+	error ->				%Key does not exist
 	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
-		    Tab1 = orddict:store(Key, Val, Tab0),
-		    Ts1 = ?SET_TABLE(N, #table{t=Tab1,m=Meta}, Ts0),
+		    %% Only add non-nil value.
+		    Tab1 = if Val =:= nil -> Tab0;
+			      true -> orddict:store(Key, Val, Tab0)
+			   end,
+		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{tabs=Ts1};
 		Meth when element(1, Meth) =:= function ->
 		    functioncall(Meth, [Key,Val], St);
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
-    end;
-set_table_key(Tab, Key, _, _) ->
-    lua_error({illegal_index,Tab,Key}).
+    end.
+
+set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{tabs=Ts0}=St) ->
+    #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
+    case array:get(I, Arr0) of
+	nil ->					%Key does not exist
+	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
+		nil ->
+		    %% Only add non-nil value, slightly faster (?)
+		    Arr1 = if Val =:= nil -> Arr0;
+			      true -> array:set(I, Val, Arr0)
+			   end,
+		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+		    St#luerl{tabs=Ts1};
+		Meth when element(1, Meth) =:= function ->
+		    functioncall(Meth, [Key,Val], St);
+		Meth -> set_table_key(Meth, Key, Val, St)
+	    end;
+	_ ->					%Key exists
+	    %% Can do this as 'nil' is default value of array.
+	    Arr1 = array:set(I, Val, Arr0),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+	    St#luerl{tabs=Ts1}
+    end.
 
 get_table_name(Tab, Name, St) ->
     get_table_key(Tab, atom_to_binary(Name, latin1), St).
 
-get_table_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
-    #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(Key, Tab) of
-	{ok,Val} -> {Val,St};
-	error ->
-	    %% Key not present so try metamethod
-	    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
-		nil -> {nil,St};
-		Meth when element(1, Meth) =:= function ->
-		    {Vs,St1} = functioncall(Meth, [T,Key], St),
-		    {first_value(Vs),St1};	%Only one value
-		Meth ->				%Recurse down the metatable
-		    get_table_key(Meth, Key, St)
-	    end
+get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
+    case ?IS_INTEGER(Key, I) of
+	true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
+	_NegFalse -> get_table_key_key(Tref, Key, St)
     end;
+get_table_key(#tref{}=Tref, Key, St) ->
+    get_table_key_key(Tref, Key, St);
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key});
 	Meth when element(1, Meth) =:= function ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
-	    {first_value(Vs),St1};		%Only one value
+	    {Vs,St1};
 	Meth ->					%Recurse down the metatable
+	    get_table_key(Meth, Key, St)
+    end.
+
+get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
+    #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
+    case orddict:find(Key, Tab) of
+	{ok,Val} -> {[Val],St};
+	error ->
+	    %% Key not present so try metamethod
+	    get_table_metamethod(T, Meta, Key, Ts, St)
+    end.
+
+get_table_int_key(#tref{i=N}=T, Key, I, #luerl{tabs=Ts}=St) ->
+    #table{a=A,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
+    case array:get(I, A) of
+	nil ->
+	    %% Key not present so try metamethod
+	    get_table_metamethod(T, Meta, Key, Ts, St);
+	Val -> {[Val],St}
+    end.
+
+get_table_metamethod(T, Meta, Key, Ts, St) ->
+    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
+	nil -> {[nil],St};
+	Meth when element(1, Meth) =:= function ->
+	    {Vs,St1} = functioncall(Meth, [T,Key], St),
+	    {Vs,St1};
+	Meth ->				%Recurse down the metatable
 	    get_table_key(Meth, Key, St)
     end.
 
@@ -175,7 +255,8 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 %% get_local_key(Key, State) -> Value | nil.
 %%  Set variable values in the local environment. Variables are not
 %%  cleared when their value is set to 'nil' as this would remove the
-%%  local variable.
+%%  local variable. NOTE: ONLY RETURN A SINGLE VALUE AS THIS IS ALL A
+%%  KEY MAY HAVE!
 
 set_local_name(Name, Val, St) ->
     set_local_key(atom_to_binary(Name, latin1), Val, St).
@@ -220,15 +301,18 @@ get_local_key(Key, #luerl{tabs=Ts,env=[#tref{i=E}|_]}) ->
 %% get_env_key_env(Key, Tables, Env) -> Value | nil.
 %%  Set/get variable values in the environment tables. Variables are
 %%  not cleared when their value is set to 'nil' as this would move
-%%  them in the environment stack.
+%%  them in the environment stack. NOTE: ONLY RETURN A SINGLE VALUE AS
+%%  THIS IS ALL A KEY MAY HAVE!
 
 set_env_name(Name, Val, St) ->
     set_env_key(atom_to_binary(Name, latin1), Val, St).
 
 set_env_name_env(Name, Val, Ts, Env) ->
+    %% io:fwrite("sek: ~p\n", [{Env}]),
     set_env_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
 set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
+    %% io:fwrite("sek: ~p\n", [{Env}]),
     Ts1 = set_env_key_env(K, Val, Ts0, Env),
     St#luerl{tabs=Ts1}.
 
@@ -237,6 +321,7 @@ set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
 		    Tab#table{t=orddict:store(K, Val, T)} end,
     ?UPD_TABLE(_G, Store, Ts);
 set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
+    %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
     case orddict:is_key(K, Tab) of
 	true ->
@@ -259,10 +344,31 @@ get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
     end;
 get_env_key_env(_, _, []) -> nil.		%The default value
 
-%% chunk(Stats, State) -> {Return,State}.
+%% chunk(Chunk, State) -> {Return,State}.
+%% chunk(Chunk, Args, State) -> {Return,State}.
 
-chunk(Stats, St0) ->
-    {Ret,St1} = function_block(fun (S) -> {[],stats(Stats, S)} end, St0),
+chunk(Chunk, St) -> chunk(Chunk, [], St).
+chunk(Chunk, Args, St) -> call(Chunk, Args, St).
+
+%% call(Chunk, State) -> {Return,State}.
+%% call(Chunk, Args, State) -> {Return,State}.
+
+call(Chunk, St) -> call(Chunk, [], St).
+
+call({functiondef,L,_,Ps,B}, Args, St0) ->
+    %% Generate function and call it.
+    {[Func],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Func, Args, St1),
+    %% Should do GC here.
+    {Ret,St2};
+call({functiondef,L,Ps,B}, Args, St0) ->
+    %% Generate function and call it.
+    {[Func],St1} = exp({functiondef,L,Ps,B}, St0),
+    {Ret,St2} = functioncall(Func, Args, St1),
+    %% Should do GC here.
+    {Ret,St2};
+call({function,_}=Func, Args, St0) ->
+    {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
 
@@ -282,7 +388,6 @@ funchunk(Func, St0, _Pars) ->           %Todo: Parameters.
     funchunk(Func, St0).                %Note: from ERLANG. And the functiondef
                                         %is a wrap around ALL chunks except
                                         %those that already were functions.
-
 
 %% block(Stats, State) -> State.
 %%  Evaluate statements in a block. The with_block function requires
@@ -304,8 +409,10 @@ with_block(Do, St0) ->
     Locf0 = St0#luerl.locf,			%"Global" locf value
     {T,St1} = alloc_env(St0),			%Allocate the local table
     St2 = push_env(T, St1),			%Put it in the environment
+    %% io:fwrite("wb: ~p\n", [{Locf0}]),
     {Ret,St3} = Do(St2#luerl{locf=false}),	%Do its thing
     Locf1 = St3#luerl.locf,			%"Local" locf value
+    %% io:fwrite("wb->~p\n", [{Locf1}]),
     St4  = case Locf1 of			%Check if we can free table
 	       true -> pop_env(St3);
 	       false -> pop_env(free_table(T, St3))
@@ -330,13 +437,14 @@ stat({return,L,Es}, #luerl{tag=Tag}=St0) ->
 stat({label,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,label});
 stat({break,L}, #luerl{tag=T}=St) ->
+    %% io:fwrite("br: ~p\n", [{St#luerl.locf}]),
     throw({break,L,T,St});			%Easier match with explicit tag
 stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
 stat({block,_,B}, St) ->
     block(B, St);
-stat({functiondef,L,Fname,Ps,B}, St) ->
-    St1 = set_var(Fname, {function,L,St#luerl.env,Ps,B}, St),
+stat({functiondef,L,Fname,Ps,B}, St0) ->
+    St1 = set_var(Fname, {function,L,St0#luerl.env,Ps,B}, St0),
     St1#luerl{locf=true};
 stat({'while',_,Exp,Body}, St) ->
     do_while(Exp, Body, St);
@@ -378,8 +486,8 @@ assign_loop([], _, St) -> St.
 set_var({'.',_,Exp,Rest}, Val, St0) ->
     {[Next|_],St1} = prefixexp_first(Exp, St0),
     var_rest(Rest, Val, Next, St1);
-set_var({'NAME',_,Name}, Val, St) ->
-    set_env_name(Name, Val, St).
+set_var({'NAME',_,N}, Val, St) ->
+    set_env_name(N, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
     {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
@@ -390,8 +498,8 @@ var_rest(Exp, Val, SoFar, St) ->
 var_last({'NAME',_,N}, Val, SoFar, St) ->
     set_table_name(SoFar, N, Val, St);
 var_last({key_field,_,Exp}, Val, SoFar, St0) ->
-    {[Key|_],St1} = exp(Exp, St0),
-    set_table_key(SoFar, Key, Val, St1);
+    {Key,St1} = exp(Exp, St0),
+    set_table_key(SoFar, first_value(Key), Val, St1);
 var_last({method,_,{'NAME',_,N}}, {function,L,Env,Pars,B}, SoFar, St) ->
     %% Method a function, make a "method" by adding self parameter.
     set_table_name(SoFar, N, {function,L,Env,[{'NAME',L,self}|Pars],B}, St).
@@ -405,8 +513,8 @@ do_while(Exp, Body, St0) ->
 
 while_loop(Exp, Body, St0) ->
     {Test,St1} = exp(Exp, St0),
-    case is_true(Test) of
-       true ->
+    case is_true_value(Test) of
+	true ->
 	    St2 = block(Body, St1),
 	    while_loop(Exp, Body, St2);
 	false -> {[],St1}
@@ -425,7 +533,7 @@ do_repeat(Body, Exp, St0) ->
 
 repeat_loop(Body, St0) ->
     {Ret,St1} = with_block(Body, St0),
-    case is_true(Ret) of
+    case is_true_value(Ret) of
 	true -> {[],St1};
 	false -> repeat_loop(Body, St1)
     end.
@@ -443,6 +551,7 @@ loop_block(Do, St) ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
 			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    %% io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
 			    {[],St2}
 		    end
 	    end,
@@ -450,48 +559,57 @@ loop_block(Do, St) ->
 
 %% do_if(Tests, Else, State) -> State.
 
-do_if(Tests, Else, St0) ->
+do_if(Tests, Else, St) ->
     %% io:format("di: ~p\n", [{Tests,Else}]),
-    if_tests(Tests, Else, St0).
+    %% if_tests(Tests, Else, St).
+
+    %% io:format("di: ~p\n", [{St#luerl.locf}]),
+    St1 = if_tests(Tests, Else, St),
+    %% io:format("di->~p\n", [{St1#luerl.locf}]),
+    St1.
 
 if_tests([{Exp,Block}|Ts], Else, St0) ->
-    {[Test|_],St1} = exp(Exp, St0),		%What about the environment
-    if Test =:= false; Test =:= nil ->		%Test failed, try again
-	    if_tests(Ts, Else, St1);
-       true ->					%Test succeeded, do block
-	    block(Block, St1)
+    {Test,St1} = exp(Exp, St0),			%What about the environment
+    case is_true_value(Test) of
+	true ->					%Test succeeded, do block
+	    block(Block, St1);
+	false ->				%Test failed, try again
+	    if_tests(Ts, Else, St1)
     end;
-if_tests([], Else, St0) ->
-    block(Else, St0).
+if_tests([], Else, St) -> block(Else, St).
 
 %% do_numfor(Line, Var, Init, Limit, Step, Block, State) -> State.
 
-do_numfor(_, {'NAME',_,Name}, Init, Limit, Step, Block, St0) ->
-    NumFor = fun (St) -> numeric_for(Name, Init, Limit, Step, Block, St) end,
+do_numfor(_, {'NAME',_,N}, Init, Limit, Step, Block, St0) ->
+    NumFor = fun (St) -> numeric_for(N, Init, Limit, Step, Block, St) end,
+    %% io:fwrite("dn: ~p\n", [{N,St0#luerl.locf}]),
     {_,St1} = loop_block(NumFor, St0),
+    %% io:fwrite("dn->~p\n", [{N,St1#luerl.locf}]),
     St1.
 
 numeric_for(Name, Init, Limit, Step, Block, St) ->
     %% Create a local block to run the whole for loop.
     Do = fun (St0) ->
-		 {[I0,L0,S0],St1} = explist([Init,Limit,Step], St0),
-		 I1 = luerl_lib:tonumber(I0),
-		 L1 = luerl_lib:tonumber(L0),
-		 S1 = luerl_lib:tonumber(S0),
-		 if (I1 == nil) or (L1 == nil) or (S1 == nil) ->
-			 badarg_error(for, [I0,L0,S0]);
-		    true ->
-			 numfor_loop(Name, I1, L1, S1, Block, St1)
+		 {Es,St1} = explist([Init,Limit,Step], St0),
+		 case luerl_lib:tonumbers(Es) of
+		     [I,L,S|_] ->		%Ignore extra values
+			 numfor_loop(Name, I, L, S, Block, St1);
+		     nil ->
+			 badarg_error(for, Es)
 		 end
 	 end,
     with_block(Do, St).
 
 numfor_loop(Name, I, L, S, B, St0)
   when S > 0, I =< L ; S =< 0, I >= L ->
-    St1 = set_local_name(Name, I, St0),
     %% Create a local block for each iteration of the loop.
-    St2 = block(B, St1),
-    numfor_loop(Name, I+S, L, S, B, St2);
+    Do = fun (S0) ->
+		 %% Use local assign to put argument into environment.
+		 S1 = set_local_name(Name, I, S0),
+		 {[],stats(B, S1)}
+	 end,
+    {_,St1} = with_block(Do, St0),
+    numfor_loop(Name, I+S, L, S, B, St1);
 numfor_loop(_, _, _, _, _, St) -> {[],St}.	%We're done
 
 %% do_genfor(Line, Names, Exps, Block, State) -> State.
@@ -516,19 +634,23 @@ generic_for(Names, Exps, Block, St) ->
 
 genfor_loop(Names, F, S, Var, Block, St0) ->
     {Vals,St1} = functioncall(F, [S,Var], St0),
-    case is_true(Vals) of
+    case is_true_value(Vals) of
 	true ->	    				%We go on
-	    St2 = assign_local_loop(Names, Vals, St1),
 	    %% Create a local block for each iteration of the loop.
-	    St3 = block(Block, St2),
-	    genfor_loop(Names, F, S, hd(Vals), Block, St3);
+	    Do = fun (S0) ->
+			 %% Use local assign to put arguments into environment.
+			 S1 = assign_local_loop(Names, Vals, S0),
+			 {[],stats(Block, S1)}
+		 end,
+	    {_,St2} = with_block(Do, St1),
+	    genfor_loop(Names, F, S, hd(Vals), Block, St2);
 	false -> {[],St1}			%Done
     end.
 
-local({functiondef,L,{'NAME',_,Name},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
+local({functiondef,L,{'NAME',_,N},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
-    Ts1 = set_local_name_env(Name, nil, Ts0, Env),
-    Ts2 = set_local_name_env(Name, {function,L,Env,Ps,B}, Ts1, Env),
+    Ts1 = set_local_name_env(N, nil, Ts0, Env),
+    Ts2 = set_local_name_env(N, {function,L,Env,Ps,B}, Ts1, Env),
     St#luerl{tabs=Ts2,locf=true};
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
@@ -554,9 +676,9 @@ assign_local_loop([], _, Ts, _) -> Ts.
 explist([E], St) -> exp(E, St);			%Appended values to output
 explist([E|Es], St0) ->
     %% io:format("el: ~p\n", [E]),
-    {[Val|_],St1} = exp(E, St0),		%Only take the first value
-    {Vals,St2} = explist(Es, St1),
-    {[Val|Vals],St2};
+    {V,St1} = exp(E, St0),
+    {Vs,St2} = explist(Es, St1),
+    {[first_value(V)|Vs],St2};			%Only take the first value
 explist([], St) -> {[],St}.
 
 %% exp(Exp, State) -> {Vals,State}.
@@ -568,9 +690,9 @@ exp({true,_}, St) -> {[true],St};
 exp({'NUMBER',_,N}, St) -> {[N],St};
 exp({'STRING',_,S}, St) -> {[S],St};
 exp({'...',_}, St) ->				%Get '...', error if undefined
-    case get_local_key('...', St) of
+    case get_env_key('...', St) of		%Only returns single value!
 	nil -> illegal_val_error('...');
-	Val -> {Val,St}
+	Val -> {Val,St}				%Already a list
     end;
 exp({functiondef,L,Ps,B}, St) ->
     {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
@@ -580,64 +702,87 @@ exp({table,_,Fs}, St0) ->
     {[T],St2};
 %% 'and' and 'or' short-circuit so need special handling.
 exp({op,_,'and',L0,R0}, St0) ->
-    {[L1|_],St1} = exp(L0, St0),
-    if ?IS_TRUE(L1) ->
-	    {[R1|_],St2} = exp(R0, St1),
-	    {[R1],St2};
-       true -> {[L1],St1}
+    {L1,St1} = exp(L0, St0),
+    case is_true_value(L1) of
+	true ->
+	    {R1,St2} = exp(R0, St1),
+	    {R1,St2};				%Do we need first value?
+	false -> {L1,St1}
     end;
 exp({op,_,'or',L0,R0}, St0) ->
-    {[L1|_],St1} = exp(L0, St0),
-    if ?IS_TRUE(L1) -> {[L1],St1};
-	true ->
-	    {[R1|_],St2} = exp(R0, St1),
-	    {[R1],St2}
+    {L1,St1} = exp(L0, St0),
+    case is_true_value(L1) of
+	true -> {L1,St1};
+	false ->
+	    {R1,St2} = exp(R0, St1),
+	    {R1,St2}				%Do we need first value?
     end;
 %% All the other operators are strict.
 exp({op,_,Op,L0,R0}, St0) ->
-    {[L1|_],St1} = exp(L0, St0),
-    {[R1|_],St2} = exp(R0, St1),
-    op(Op, L1, R1, St2);
+    {L1,St1} = exp(L0, St0),
+    {R1,St2} = exp(R0, St1),
+    op(Op, first_value(L1), first_value(R1), St2);
 exp({op,_,Op,A0}, St0) ->
-    {[A1|_],St1} = exp(A0, St0),
-    op(Op, A1, St1);
+    {A1,St1} = exp(A0, St0),
+    op(Op, first_value(A1), St1);
 exp(E, St) ->
     prefixexp(E, St).
 
 %% prefixexp(PrefixExp, State) -> {[Vals],State}.
-%% Step down the prefixexp sequence evaluating as we go.
+%% Step down the prefixexp sequence evaluating as we go. We special
+%% checking for functions/methods to give better errors, after an idea
+%% by @slepher.
 
+prefixexp({'.',_,{'NAME',_,N}=Exp,{functioncall,_,_}=Rest}, St0) ->
+    {Next,St1} = prefixexp_first(Exp, St0),
+    case first_value(Next) of
+	nil -> lua_error({undef_function,N});
+	Fval -> prefixexp_rest(Rest, Fval, St1)
+    end;
 prefixexp({'.',_,Exp,Rest}, St0) ->
-    {[Next|_],St1} = prefixexp_first(Exp, St0),
-    prefixexp_rest(Rest, Next, St1);
+    {Next,St1} = prefixexp_first(Exp, St0),
+    prefixexp_rest(Rest, first_value(Next), St1);
 prefixexp(P, St) -> prefixexp_first(P, St).
 
 prefixexp_first({'NAME',_,N}, St) -> {[get_env_name(N, St)],St};
 prefixexp_first({single,_,E}, St0) ->		%Guaranteed only one value
     %% io:format("pf: ~p\n", [E]),
-    {[R|_],St1} = exp(E, St0),
-    {[R],St1}.
+    {R,St1} = exp(E, St0),
+    {[first_value(R)],St1}.			%Only one value!
 
+prefixexp_rest({'.',_,{'NAME',_,N}=Exp,{functioncall,_,_}=Rest},
+	       SoFar, St0) ->
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    case first_value(Next) of
+	nil -> lua_error({undef_function,N});
+	Fval -> prefixexp_rest(Rest, Fval, St1)
+    end;
 prefixexp_rest({'.',_,Exp,Rest}, SoFar, St0) ->
-    {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
-    prefixexp_rest(Rest, Next, St1);
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    prefixexp_rest(Rest, first_value(Next), St1);
 prefixexp_rest(Exp, SoFar, St) ->
     prefixexp_element(Exp, SoFar, St).
 
 prefixexp_element({functioncall,_,Args0}, SoFar, St0) ->
     {Args1,St1} = explist(Args0, St0),
+    %%io:fwrite("pe1: ~p\n", [{SoFar,Args1}]),
     functioncall(SoFar, Args1, St1);
 prefixexp_element({'NAME',_,N}, SoFar, St0) ->
     {V,St1} = get_table_name(SoFar, N, St0),
-    {[V],St1};
+    {V,St1};
 prefixexp_element({key_field,_,Exp}, SoFar, St0) ->
-    {[Key|_],St1} = exp(Exp, St0),
-    {V,St2} = get_table_key(SoFar, Key, St1),
-    {[V],St2};
+    {Key,St1} = exp(Exp, St0),
+    {V,St2} = get_table_key(SoFar, first_value(Key), St1),
+    {V,St2};
 prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
     {Func,St1} = get_table_name(SoFar, N, St0),
-    {Args1,St2} = explist(Args0, St1),
-    functioncall(Func, [SoFar|Args1], St2).
+    case first_value(Func) of
+	nil -> lua_error({undef_function,N});
+	Fval ->
+	    {Args1,St2} = explist(Args0, St1),
+	    %%io:fwrite("pe2: ~p\n", [{Func,[SoFar|Args1]}]),
+	    functioncall(Fval, [SoFar|Args1], St2)
+    end.
 
 functioncall({function,_,Env,Ps,B}, Args, St0) ->
     Env0 = St0#luerl.env,			%Caller's environment
@@ -694,15 +839,15 @@ function_block(Do, St) ->
 			    Old = St0#luerl.env,
 			    St2 = unwind_stack(St1#luerl.env, Old, St1),
 			    {Ret,St2};
-			throw:{break,L,Tag,_} ->
-			    lua_error({illegal_op,L,break})
+			throw:{break,_,Tag,_} ->
+			    lua_error({illegal_op,break})
 		    end
 	    end,
     with_block(Block, St).
 
 %% unwind_stack(From, To, State) -> State.
-%%  If locf else is false then we can unwind env stack freeing tables
-%%  as we go, otherwise if locf is true we can not do this.
+%%  If locf is false then we can unwind env stack freeing tables as we
+%%  go, otherwise if locf is true we can not do this.
 
 %% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
 unwind_stack(_, _, #luerl{locf=true}=St) -> St;
@@ -717,22 +862,38 @@ unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
     unwind_stack(From, Top, Ts1, [N|Ns]).
 
 %% tableconstructor(Fields, State) -> {TableData,State}.
+%%  We have to be a bit cunning here, the fields may end in a '...' in
+%%  which case we have to "append" it elements similar to exp_fields
+%%  but they have already been evaluated.
 
 tableconstructor(Fs, St0) ->
-    Fun = fun ({exp_field,_,Ve}, {I,S0}) ->
-		  {[V|_],S1} = exp(Ve, S0),
-		  {{I,V},{I+1,S1}};
-	      ({name_field,_,{'NAME',_,N},Ve}, {I,S0}) ->
-		  {[V|_],S1} = exp(Ve, S0),
-		  K = atom_to_binary(N, latin1),
-		  {{K,V},{I,S1}};
-	      ({key_field,_,Ke,Ve}, {I,S0}) ->
-		  {[K|_],S1} = exp(Ke, S0),
-		  {[V|_],S2} = exp(Ve, S1),
-		  {{K,V},{I,S2}}
-	  end,
-    {T,{_,St1}} = lists:mapfoldl(Fun, {1.0,St0}, Fs),
-    {orddict:from_list(T),St1}.
+    %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.env}]),
+    %% io:fwrite("tc: ~p\n", [{Fs,St0#luerl.locf}]),
+    {Tes,St1} = tc_fields(Fs, 1.0, [], St0),
+    %% io:fwrite("tc->~p\n", [{St1#luerl.locf}]),
+    %% io:fwrite("tc->~p\n", [{Tes}]),
+    {Tes,St1}.
+
+tc_fields([{exp_field,_,Ve}], I, Tes, St0) ->
+    {Fs,St1} = exp(Ve, St0),			%Get the last field!
+    tc_tail(Fs, I, Tes, St1); 
+tc_fields([{exp_field,_,Ve}|Fs], I, Tes, St0) ->
+    {V,St1} = exp(Ve, St0),
+    tc_fields(Fs, I+1, [{I,first_value(V)}|Tes], St1);
+tc_fields([{name_field,_,{'NAME',_,N},Ve}|Fs], I, Tes, St0) ->
+    {V,St1} = exp(Ve, St0),
+    K = atom_to_binary(N, latin1),
+    tc_fields(Fs, I, [{K,first_value(V)}|Tes], St1);
+tc_fields([{key_field,_,Ke,Ve}|Fs], I, Tes, St0) ->
+    {K,St1} = exp(Ke, St0),
+    {V,St2} = exp(Ve, St1),
+    tc_fields(Fs, I, [{first_value(K),first_value(V)}|Tes], St2);
+tc_fields([], _, Tes, St) -> {lists:reverse(Tes),St}.
+
+tc_tail(Fs, I0, Tes, St) ->
+    Fun = fun (Ve, I) -> {{I,Ve},I+1} end,
+    {Tail,_} = lists:mapfoldl(Fun, I0, Fs),
+    {lists:reverse(Tes, Tail),St}.
 
 %% op(Op, Arg, State) -> {[Ret],State}.
 %% op(Op, Arg1, Arg2, State) -> {[Ret],State}.
@@ -798,7 +959,7 @@ numeric_op(_Op, O, E, Raw, St0) ->
        true ->
 	    Meta = getmetamethod(O, E, St0),
 	    {Ret,St1} = functioncall(Meta, [O], St0),
-	    {[is_true(Ret)],St1}
+	    {[is_true_value(Ret)],St1}
     end.
 
 numeric_op(_Op, O1, O2, E, Raw, St0) ->
@@ -808,18 +969,18 @@ numeric_op(_Op, O1, O2, E, Raw, St0) ->
        true ->
 	    Meta = getmetamethod(O1, O2, E, St0),
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true(Ret)],St1}
+	    {[is_true_value(Ret)],St1}
     end.
 
 eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[true],St};
 eq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
-    {[is_true(Ret)],St1}.
+    {[is_true_value(Ret)],St1}.
 
 neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[false],St};
 neq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
-    {[not is_true(Ret)],St1}.
+    {[not is_true_value(Ret)],St1}.
 
 eq_meta(O1, O2, St0) ->
     case getmetamethod(O1, <<"__eq">>, St0) of
@@ -837,7 +998,7 @@ lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 < O2],St};
 lt_op(_Op, O1, O2, St0) ->
     Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
     {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-    {[is_true(Ret)],St1}.
+    {[is_true_value(Ret)],St1}.
 
 le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
@@ -845,12 +1006,12 @@ le_op(_Op, O1, O2, St0) ->
     case getmetamethod(O1, O2, <<"__le">>, St0) of
 	Meta when Meta =/= nil ->
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true(Ret)],St1};
+	    {[is_true_value(Ret)],St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
 	    Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
 	    {Ret,St1} = functioncall(Meta, [O2,O1], St0),
-	    {[not is_true(Ret)],St1}
+	    {[not is_true_value(Ret)],St1}
     end.
 
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
@@ -882,18 +1043,17 @@ getmetamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-%% is_true(Rets) -> boolean()>
+%% is_true_value(Rets) -> boolean().
 
-is_true([nil|_]) -> false;
-is_true([false|_]) -> false;
-is_true([_|_]) -> true;
-is_true([]) -> false.
+is_true_value([nil|_]) -> false;
+is_true_value([false|_]) -> false;
+is_true_value([_|_]) -> true;
+is_true_value([]) -> false.
+
+%% first_value(Rets) -> Value.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
-
-badarg_error(What, Args) ->
-    lua_error({badarg,What,Args}).
 
 illegal_val_error(Val) ->
     lua_error({illegal_val,Val}).
@@ -931,10 +1091,11 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    mark(Todo, More, Seen0, Ts);
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
-	    #table{t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
+	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
 	    %% Have to be careful where add Tab and Meta as Tab is a
 	    %% [{Key,Val}] and Meta is a nil|#tref{i=M}. We want lists.
-	    mark([Meta|Todo], [[{in_table,T}],Tab,[{in_table,-T}]|More], Seen1, Ts)
+	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
+		 Seen1, Ts)
     end;
 mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
     mark(Todo, [Env|More], Seen, Ts);

@@ -33,7 +33,7 @@
 
 -export([install/1]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/1,badarg_error/2]). %Shorten these
 
 install(St) ->
     luerl_eval:alloc_table(table(), St).
@@ -54,6 +54,7 @@ table() ->
      {<<"loadfile">>,{function,fun loadfile/2}},
      {<<"next">>,{function,fun next/2}},
      {<<"pairs">>,{function,fun pairs/2}},
+     {<<"pcall">>,{function,fun pcall/2}},
      {<<"print">>,{function,fun print/2}},
      {<<"rawequal">>,{function,fun rawequal/2}},
      {<<"rawget">>,{function,fun rawget/2}},
@@ -67,7 +68,7 @@ table() ->
     ].
 
 assert(As, St) ->
-    case luerl_lib:is_true(As) of
+    case luerl_lib:is_true_value(As) of
 	true -> {As,St};
 	false ->
 	    M = case As of
@@ -86,53 +87,92 @@ collectgarbage(_, St) ->			%Ignore everything else
 
 eprint(Args, St) ->
     lists:foreach(fun (#tref{i=N}) ->
-			  #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-			  io:format("~w ", [Tab]);
+			  T = ?GET_TABLE(N, St#luerl.tabs),
+			  io:format("~w ", [T]);
 		      (A) -> io:format("~w ", [A])
 		  end, Args),
     io:nl(),
     {[],St}.
 
 error([M|_], _) -> lua_error(M);		%Never returns!
-error(As, _) -> lua_error({badarg,error,As}).
+error(As, _) -> badarg_error(error, As).
 
-ipairs([#tref{}=T|_], St) ->
-    {[{function,fun ipairs_next/2},T,0],St};
-ipairs(As, _) -> lua_error({badarg,ipairs,As}).
+ipairs([#tref{}=Tref|_], St) ->
+    case luerl_eval:getmetamethod(Tref, <<"__ipairs">>, St) of
+	nil -> {[{function,fun ipairs_next/2},Tref,0.0],St};
+	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+    end;
+ipairs(As, _) -> badarg_error(ipairs, As).
     
-ipairs_next([A], St) -> ipairs_next([A,0], St);
-ipairs_next([#tref{i=T},I|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
-    Next = I + 1.0,				%Ensure float!
-    case orddict:find(Next, Tab) of
-	{ok,V} -> {[Next,V],St};
-	error -> {[nil],St}
-    end.
+ipairs_next([A], St) -> ipairs_next([A,0.0], St);
+ipairs_next([#tref{i=T},K|_], St) ->
+    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    case ?IS_INTEGER(K, I) of
+	true when I >= 0 ->
+	    Next = I + 1,
+	    case raw_get_index(Arr, Next) of
+		nil -> {[nil],St};
+		V -> {[float(Next),V],St}
+	    end;
+	_NegFalse -> lua_error({invalid_key,ipairs,K})
+    end;
+ipairs_next(As, _) -> badarg_error(ipairs, As).
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    #table{a=Arr,t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
     if K == nil ->
-	    case Tab of
-		[{F,V}|_] -> {[F,V],St};
-		[] -> {[nil],St}
+	    %% Find the first, start with the array.
+	    %% io:format("n: ~p\n", [{Arr,Tab}]),
+	    next_index(0, Arr, Tab, St);
+       is_number(K) ->
+	    case ?IS_INTEGER(K, I0) of
+		true when I0 >= 1 ->
+		    next_index(I0, Arr, Tab, St);
+		_NegFalse -> next_key(K, Tab, St)	%Not integer or negative
 	    end;
-       true ->
-	    case next_loop(K, Tab) of
-		[{Next,V}|_] -> {[Next,V],St};
-		[] -> {[nil],St};
-		error -> lua_error({invalid_key,K})
-	    end
+       true -> next_key(K, Tab, St)
     end;
-next(As, _) -> lua_error({badarg,next,As}).
+next(As, _) -> badarg_error(next, As).
 
-next_loop(K, [{K,_}|Tab]) -> Tab;
-next_loop(K, [_|Tab]) -> next_loop(K, Tab);
-next_loop(_, []) ->  error.
+next_index(I0, Arr, Tab, St) ->
+    case next_index_loop(I0+1, Arr, array:size(Arr)) of
+	{I1,V} -> {[float(I1),V],St};
+	none ->
+	    %% Nothing in the array, take table instead.
+	    {first_key(Tab),St}
+    end.
 
-pairs([#tref{}=T|_], St) ->
-    {[{function,fun next/2},T,nil],St};
-pairs(As, _) -> lua_error({badarg,pairs,As}).
+next_index_loop(I, Arr, S) when I < S ->
+    case array:get(I, Arr) of
+	nil -> next_index_loop(I+1, Arr, S);
+	V -> {I,V}
+    end;
+next_index_loop(_, _, _) -> none.
+
+first_key([{K,V}|_]) -> [K,V];
+first_key([]) -> [nil].
+
+next_key(K, Tab, St) ->
+    case next_key_loop(K, Tab) of
+	[{Next,V}|_] -> {[Next,V],St};
+	[] -> {[nil],St};
+	none -> lua_error({invalid_key,next,K})
+    end.
+
+next_key_loop(K, [{K,_}|Tab]) -> next_key_loop(Tab);
+next_key_loop(K, [_|Tab]) -> next_key_loop(K, Tab);
+next_key_loop(_, []) ->  none.
+
+next_key_loop([{_,nil}|Tab]) -> next_key_loop(Tab);    %Skip nil values
+next_key_loop(Tab) -> Tab.
+
+pairs([#tref{}=Tref|_], St) ->
+    case luerl_eval:getmetamethod(Tref, <<"__pairs">>, St) of
+	nil -> {[{function,fun next/2},Tref,nil],St};
+	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+    end;
+pairs(As, _) -> badarg_error(pairs, As).
 
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
@@ -144,53 +184,85 @@ print(Args, St0) ->
     {[],St1}.
 
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
-rawequal(As, _) -> lua_error({badarg,rawequal,As}).
+rawequal(As, _) -> badarg_error(rawequal, As).
 
+rawget([#tref{i=N},K|_], St) when is_number(K) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    V = case ?IS_INTEGER(K, I) of
+	    true when I >= 1 ->			%Array index
+		raw_get_index(Arr, I);
+	    _NegFalse ->			%Negative or false
+		raw_get_key(Tab, K)
+	end,
+    {[V],St};
 rawget([#tref{i=N},K|_], St) ->
-    #table{t=T} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
-    case orddict:find(K, T) of
-	{ok,Val} -> Val;
-	error -> nil				%Default value
-    end;
-rawget(As, _) -> lua_error({badarg,rawget,As}).
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    V = raw_get_key(Tab, K),
+    {[V],St};
+rawget(As, _) -> badarg_error(rawget, As).
 
 rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 rawlen([#tref{i=N}|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
-    {length(Tab),St};
-rawlen(As, _) -> lua_error({badarg,rawlen,As}).
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    {[float(array:size(Arr))],St};
+rawlen(As, _) -> badarg_error(rawlen, As).
 
-rawset([#tref{i=N},Key,Val|_], #luerl{tabs=Ts0}=St) ->
-    Upd = if Val =:= nil ->
-		  fun (#table{t=T}=Tab) ->
-			  Tab#table{t=orddict:erase(Key, T)} end;
-	     true ->
-		  fun (#table{t=T}=Tab) ->
-			  Tab#table{t=orddict:store(Key, Val, T)} end
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) when is_number(K) ->
+    #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    Ts1 = case ?IS_INTEGER(K, I) of
+	      true when I >= 1 ->
+		  Arr1 = raw_set_index(Arr0, I, V),
+		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
+	      _NegFalse ->			%Negative or false
+		  Tab1 = raw_set_key(Tab0, K, V),
+		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
 	  end,
-    Ts1 = ?UPD_TABLE(N, Upd, Ts0),
-    St#luerl{tabs=Ts1};
-rawset(As, _) -> lua_error({badarg,rawset,As}).
+    {[Tref],St#luerl{tabs=Ts1}};
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) ->
+    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    Tab1 = raw_set_key(Tab0, K, V),
+    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+    {[Tref],St#luerl{tabs=Ts1}};
+rawset(As, _) -> badarg_error(rawset, As).
 
-select([<<$#>>|As], St) -> {[length(As)],St};
+%% raw_get_index(Array, Index) -> nil | Value.
+%% raw_get_key(Table, Key) -> nil | Value.
+
+raw_get_index(Arr, I) -> array:get(I, Arr).
+
+raw_get_key(Tab, K) ->
+    case orddict:find(K, Tab) of
+	{ok,V} -> V;
+	error -> nil
+    end.
+
+raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
+
+raw_set_key(Tab, K, nil) -> orddict:erase(K, Tab);
+raw_set_key(Tab, K, V) -> orddict:store(K, V, Tab).
+
+select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->
-    case luerl_lib:tonumber(A) of
-	N when is_number(N), N > 0 -> {select_front(round(N), As),St};
-	N when is_number(N), N < 0 -> {select_back(-round(N), As),St};
-	_ -> lua_error({badarg,select,[A|As]})
+    %%io:fwrite("sel:~p\n", [[A|As]]),
+    Len = length(As),
+    case luerl_lib:to_int(A) of
+	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
+	N when is_integer(N), N < 0 -> {select_back(-N, As, Len),St};
+	_ -> badarg_error(select, [A|As])
     end;
-select(As, _) -> lua_error({badarg,select,As}).
+select(As, _) -> badarg_error(select, As).
 
-select_front(N, As) when N < length(As) ->
+select_front(N, As, Len) when N =< Len ->
     lists:nthtail(N-1, As);
-select_front(_, _) -> [].
+select_front(_, _, _) -> [].
 
-select_back(N, As) ->
-    L = length(As),
-    lists:sublist(As, L-N+1, N).
+select_back(N, As, Len) when N =< Len ->
+    lists:nthtail(Len-N, As);
+select_back(_, As, _) -> As.
 
 tonumber([Arg], St) -> {[luerl_lib:tonumber(Arg)],St};
-tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St}.
+tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St};
+tonumber(As, _) -> badarg_error(tonumber, As).
 
 tostring([Arg|_], St) ->
     case luerl_eval:getmetamethod(Arg, <<"__tostring">>, St) of
@@ -212,9 +284,10 @@ tostring(N) when is_number(N) ->
 	end,
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
-tostring(#tref{}=T) -> iolist_to_binary(io_lib:write(T));
-tostring({function,_,_,_,_}) -> iolist_to_binary(io_lib:write(function));
-tostring({function,_}) -> iolist_to_binary(io_lib:write(function));
+tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
+tostring({function,L,_,_,_}) ->
+    iolist_to_binary(["function: ",io_lib:write(L)]);
+tostring({function,F}) -> iolist_to_binary(["function: ",io_lib:write(F)]);
 tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
@@ -235,10 +308,10 @@ type(_) -> <<"unknown">>.
 %% Meta table functions.
 
 getmetatable([#tref{i=T}|_], #luerl{tabs=Ts}=St) ->
-    #table{m=M} = ?GET_TABLE(T, Ts),		%Get the table
-    {[M],St};
-getmetatable([{userdata,_}|_], #luerl{meta=Meta}=St) ->
-    {[Meta#meta.userdata],St};
+    #table{m=Meta} = ?GET_TABLE(T, Ts),		%Get the table
+    {[Meta],St};
+getmetatable([#userdata{m=Meta}|_], St) ->
+    {[Meta],St};
 getmetatable(S, #luerl{meta=Meta}=St) when is_binary(S) ->
     {[Meta#meta.string],St};
 getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
@@ -251,14 +324,14 @@ setmetatable([#tref{i=N}=A1,#tref{}=A2|_], St) ->
 setmetatable([#tref{i=N}=A1,nil|_], St) ->
     Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=nil} end, St#luerl.tabs),
     {[A1],St#luerl{tabs=Ts}};
-setmetatable(As, _) -> lua_error({badarg,setmetatable,As}).
+setmetatable(As, _) -> badarg_error(setmetatable, As).
 
 %% Load string and files.
 
 load(As, St) ->
     case luerl_lib:conv_list(As, [string]) of
 	[S] -> do_load(S, St);
-	nil -> lua_error({badarg,load,As})
+	nil -> badarg_error(load, As)
     end.
 
 loadfile(As, St) ->
@@ -270,17 +343,18 @@ loadfile(As, St) ->
 		    Msg = iolist_to_binary(file:format_error(E)),
 		    {[nil,Msg],St}
 	    end;
-	nil -> lua_error({badarg,loadfile,As})
+	nil -> badarg_error(loadfile, As)
     end.
 
 do_load(S, St) ->
     case parse_string(S) of
 	{ok,C} ->
-	    F = fun (_, St0) ->
+	    F = fun (As, St0) ->
+			%io:fwrite("l: ~p\n", [{C,As}]),
 			Env0 = St0#luerl.env,	%Caller's environment
 			%% Evaluate at top-level,
 			Env = [lists:last(Env0)],
-			{Ret,St1} = luerl_eval:chunk(C, St0#luerl{env=Env}),
+			{Ret,St1} = luerl_eval:chunk(C, As, St0#luerl{env=Env}),
 			St2 = St1#luerl{env=Env0},
 			{Ret,St2}
 		end,
@@ -296,7 +370,7 @@ dofile(As, St) ->
 	    {ok,Bin} = file:read_file(File),
 	    {ok,C} = parse_string(binary_to_list(Bin)),
 	    luerl_eval:chunk(C, St);
-	_ -> lua_error({badarg,dofile,As})
+	_ -> badarg_error(dofile, As)
     end.
 
 parse_string(S) ->
@@ -307,4 +381,19 @@ parse_string(S) ->
 		{error,E} -> {error,E}
 	    end;
 	{error,E,_} -> {error,E}
+    end.
+
+pcall([F|As], St0) ->
+    try
+	{Rs,St1} = luerl_eval:functioncall(F, As, St0),
+	{[true|Rs],St1}
+    catch
+%% 	Class:Error ->
+%% 	    io:fwrite("pc: ~p\n", [{Class,Error}]),
+%% 	    {[false,<<>>],St0};
+	%% Only catch Lua errors here, signal system errors.
+	error:{lua_error,E} ->
+	    %% Basic formatting for now.
+	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
+	    {[false,Msg],St0}
     end.

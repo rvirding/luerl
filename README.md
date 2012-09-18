@@ -70,8 +70,6 @@ All functions optionally accept a **Lua State** parameter. The Lua State is the 
 
     eval --> {ok, Result} | {error, Reason}
 
-The 'compile' functions double the 'load' function, with but a different name.
-
 #### luerl:eval(String|Binary|Form[, State]) -> {ok, Result} | {error, Reason}.
  Evaluate a Lua expression passed in as a string or binary, and return its result.
 
@@ -84,30 +82,22 @@ The 'compile' functions double the 'load' function, with but a different name.
 #### luerl:dofile(Path[, State]) -> {Result, NewState}.
  Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
 
-#### load(String|Binary) -> {ok, Form} | {error, Reason} .
+#### luerl:load(String|Binary) -> {ok, Form} | {error, Reason} .
  Parse a Lua chunk as string or binary, and return a compiled chunk.
 
-#### loadfile(Path) -> {ok,Form}.
+#### luerl:loadfile(Path) -> {ok,Form}.
  Parse a Lua file, and return a compiled chunk.
 
-#### compile(String|Binary) -> {ok, Form} | {error, Reason} .
- Parse a Lua chunk as string or binary, and return a compiled chunk.
- Same as load/1.
-
-#### compilefile(Path) -> {ok,Form}.
- Parse a Lua file, and return a compiled chunk.
- Same as loadfile/1.
-
-#### start() -> State.
+#### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
-#### call(Form[, State]) -> {Result,State}
- Execute a compiled chunk.
+#### luerl:call(Form, Args[, State]) -> {Result,State}
+ Call a compiled chunk or function.
 
-#### stop(State) -> GCedState.
+#### luerl:stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
 
-#### gc(State) -> State.
+#### luerl:gc(State) -> State.
  Runs the (experimental) garbage collector on a state and returns the new state.
  
 N.B. This interface is subject to change!
@@ -123,7 +113,7 @@ Examples
 
 #### separately parse, then execute
     {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
-    State = luerl:start(),
+    State = luerl:init(),
     {_Ret, _NewState} = luerl:do(Chunk, State),
 
 
@@ -153,6 +143,7 @@ Currently implemented functions in the libraries
 - loadfile
 - next
 - pairs
+- pcall
 - print
 - rawequal
 - rawget
@@ -163,44 +154,74 @@ Currently implemented functions in the libraries
 - tonumber
 - tostring
 - type
+- io\.flush
+- io\.write
+- math\.abs
+- math\.acos
+- math\.asin
+- math\.atan
+- math\.atan2
+- math\.ceil
+- math\.cos
+- math\.cosh
+- math\.deg
+- math\.exp
+- math\.floor
+- math\.fmod
+- math\.frexp
+- math\.huge
+- math\.ldexp
+- math\.log
+- math\.log10
+- math\.max
+- math\.min
+- math\.modf
+- math\.pi
+- math\.pow
+- math\.rad
+- math\.random
+- math\.randomseed
+- math\.sin
+- math\.sinh
+- math\.sqrt
+- math\.tan
+- math\.tanh
+- os\.clock
+- os\.date
+- os\.difftime
+- os\.getenv
+- os\.time
+- string\.byte
+- string\.char
+- string\.find
+- string\.format (very limited as yet)
+- string\.gmatch
+- string\.gsub
+- string\.len
+- string\.lower
+- string\.match
+- string\.rep
+- string\.reverse
+- string\.sub
+- string\.upper
+- table\.concat
+- table\.insert
+- table\.pack
+- table\.remove
+- table\.sort
+- table\.unpack
 
-- math.abs
-- math.acos
-- math.asin
-- math.atan
-- math.atan2
-- math.ceil
-- math.cos
-- math.cosh
-- math.deg
-- math.exp
-- math.floor
-- math.log
-- math.max
-- math.min
-- math.pi
-- math.pow
-- math.rad
-- math.sin
-- math.sinh
-- math.sqrt
-- math.tan
-- math.tanh
+Known Bugs
+----------
 
-- os.difftime
-- os.getenv
-- os.time
+Functions defined in a loop, _while_, _repeat_ and _for_, **and** when the
+loop is exited with a _break_ will generate an error when called. For
+example the functions defined in
 
-- string.byte
-- string.char
-- string.format (very limited as yet)
-- string.len
-- string.lower
-- string.rep
-- string.reverse
-- string.sub
-- string.upper
+    for i=1,10 do
+      a[i] = {set = function(x) i=x end, get = function () return i end}
+      if i == 3 then break end
+    end
 
-- table.concat
-- table.pack
-- table.unpack
+**N.B.** This only occurs if the loop is actually exited with the
+break, otherwise there is no problem.
