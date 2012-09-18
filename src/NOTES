@@ -17,6 +17,15 @@ other keys. We use this information when building/ processing
 tables. Seems like Lua internaly stores elements as a (unordered)
 sequence of key-value elements, except maybe for the table part.
 
+Using the array module for positive integer keys seems a reasonable
+choice. Direct read/write access is fast, but "shifting" access for
+example in table.insert/remove is not that efficient. Most table
+functions work after a fashion even in the "undefined" case all the
+elements don't have keys only in 1..n, but it seems like the order in
+which elements were added affects the outcome. We don't have any such
+information available. We do try to do something reasonable that sort
+of mirrors the Lua functions. Should we or should we be strict?
+
 The table table can be either an ordict, an array or use the process
 dictionary; these are accessed through macros. To use ETS would need a
 bigger change as copying the whole table for each access would be very
