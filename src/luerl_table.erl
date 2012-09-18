@@ -36,7 +36,9 @@
 
 -include("luerl.hrl").
 
--export([install/1,length/2,test_insert/2,test_insert/4,test_concat/1]).
+-export([install/1,length/2]).
+
+-export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
 
 -import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
 
@@ -122,7 +124,9 @@ concat_join([], _) -> <<>>.
 insert([#tref{i=N},V], St0) ->
     Ts0 = St0#luerl.tabs,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    %% io:fwrite("ins: ~p\n", [{Arr0,V}]),
     Arr1 = do_insert_last(Arr0, V),
+    %% io:fwrite("ins> ~p\n", [Arr1]),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
     {[],St0#luerl{tabs=Ts1}};
 insert([#tref{i=N},P0,V]=As, St0) ->
@@ -155,10 +159,30 @@ insert(As, _) -> badarg_error(insert, As).
 test_insert(T, V) -> do_insert_last(T, V).
 test_insert(A, T, N, V) -> do_insert(A, T, N, V).
 
+%% do_insert_last(Array, V) -> Array.
+%%  Step downwards from size over 'nil' slots and trim size when done.
+
+do_insert_last(Arr, V) ->
+    case array:size(Arr) of
+	0 -> array:set(1, V, Arr);
+	S -> do_insert_last(Arr, S+1, V)
+    end.
+
+do_insert_last(Arr, 0, _) -> Arr;
+do_insert_last(Arr0, N, V) ->
+    case array:get(N-1, Arr0) of
+	nil ->
+	    do_insert_last(Arr0, N-1, V);
+	_ ->
+	    Arr1 = array:set(N, V, Arr0),	%Set the value
+	    array:resize(N+1, Arr1)		%Trim down size
+    end.
+
 %% do_insert(Array, Table, N, V) -> {Array,Table}.
-%% Don't ask, it tries to emulate the "real" Lua. We have the indexes
-%% and limits as integers and explicitly use '==' to compare with
-%% float values in table.
+%%  Don't ask, it tries to emulate the "real" Lua, where we can insert
+%%  elements outside of the "proper" 1..n table. We have the indexes
+%%  and limits as integers and explicitly use '==' to compare with
+%%  float values in table.
 
 do_insert(Arr, Tab, N, V) when N >= 1 ->	%Go to the array part
     {insert_array(Arr, N, V),Tab};
@@ -194,57 +218,72 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 	    insert_array(Arr1, N+1, Next)
     end.
 
-do_insert_last(Arr, V) -> do_insert_last(Arr, 1, V).
-
-do_insert_last(Arr, N, V) ->			%Find first nil
-    case array:get(N, Arr) of
-	nil -> array:set(N, V, Arr);
-	_ -> do_insert_last(Arr, N+1, V)
-    end.
-
-%% remove - Remove an element from a list shifting following elements.
+%% remove(Table [,Pos]) -> Value.
+%%  Remove an element from a list shifting following elements.
 
 remove([#tref{i=N}], St0) ->
     Ts0 = St0#luerl.tabs,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
-    {Val,Arr1} = do_remove_last(Arr0),
+    {Ret,Arr1} = do_remove_last(Arr0),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    {[Val],St0#luerl{tabs=Ts1}};
+    {Ret,St0#luerl{tabs=Ts1}};
 remove([#tref{i=N},P0]=As, St0) ->
     Ts0 = St0#luerl.tabs,
-    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
 	nil -> badarg_error(remove, As);
 	P1 ->
-	    {Val,Arr1} = do_remove(Arr0, P1),
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    {[Val],St0#luerl{tabs=Ts1}}
+	    {Ret,Arr1,Tab1} = do_remove(Arr0, Tab0, P1),
+	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
+	    {Ret,St0#luerl{tabs=Ts1}}
     end;
 remove(As, _) -> badarg_error(remove, As).
 
-do_remove_last(Arr) -> do_remove_last(Arr, 1, nil, []).
+test_remove(Arr) -> do_remove_last(Arr).
 
-do_remove_last([{K,nil}|_], _, _, _) ->		%Shouldn't be a nil
-    error({boom,K,nil});
-do_remove_last([{N,V}=P|Arr], N, _, Acc) ->
-    do_remove_last(Arr, N+1, V, [P|Acc]);
-do_remove_last(Arr, _, V, [_|Acc]) ->		%Gap or end of list
-    {V,lists:reverse(Acc, Arr)};
-do_remove_last(Arr, _, V, []) -> {V,Arr}.
+%% do_remove_last(Array) -> {Return,Array}.
+%%  Step downwards from size over 'nil' slots and trim size when done.
 
-do_remove(Arr, N) when N < 1 -> {nil,Arr};
-do_remove(Arr, N) -> do_remove(Arr, N, []).
+do_remove_last(Arr) ->
+    case array:size(Arr) of
+	0 -> {[],Arr};
+	S -> do_remove_last(Arr, S)
+    end.
 
-do_remove([{N,V}|Arr], N, Acc) ->
-    {V,lists:reverse(Acc, remove_renum(Arr, N))};
-do_remove([{K,_}=P|Arr], N, Acc) when K < N ->
-    do_remove(Arr, N, [P|Acc]);
-do_remove(Arr, _, Acc) ->			%Gap or end of list
-    {nil,lists:reverse(Acc, Arr)}.
+do_remove_last(Arr0, N) ->
+    case array:get(N, Arr0) of
+	nil ->
+	    do_remove_last(Arr0, N-1);
+	Val ->
+	    Arr1 = array:set(N, nil, Arr0),	%Set the value
+	    {[Val],array:resize(N, Arr1)}	%Trim down size
+    end.
 
-remove_renum([{K,V}|Arr], N) when K =:= N+1 ->
-    [{N,V}|remove_renum(Arr, N+1)];
-remove_renum(Arr, _) -> Arr.			%Gap or end of list
+%% do_remove(Array, Table, N) -> {Return,Array,Table}.
+%%  Don't ask, it tries to emulate the "real" Lua, where we can't
+%%  remove elements elements outside of the "proper" 1..n table. We
+%%  have the indexes and limits as integers and explicitly use '==' to
+%%  compare with float values in table.
+
+do_remove(Arr, Tab, N) when N < 1 ->
+    {[],Arr,Tab};				%No return value
+do_remove(Arr0, Tab, N) ->
+    {Ret,Arr1} = remove_array(Arr0, N),
+    {Ret,Arr1,Tab}.
+
+remove_array(Arr, N) ->
+    Ret = case array:get(N, Arr) of
+	      nil -> [];
+	      Here -> [Here]
+	  end,
+    {Ret,remove_array_1(Arr, N)}.
+
+remove_array_1(Arr0, N) ->
+    There = array:get(N+1, Arr0),		%Next value
+    Arr1 = array:set(N, There, Arr0),
+    if There =:= nil -> Arr1;			%End if next a nil
+       true -> remove_array_1(Arr1, N+1)
+    end.
 
 %% pack - pack arguments in to a table.
 
@@ -305,7 +344,8 @@ unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
     [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
-%% sort - sort the elements of the list after their values.
+%% sort(Table [,SortFun])
+%%  Sort the elements of the list after their values.
 
 sort([#tref{i=N}], St0) ->
     Comp = fun (A, B, St) -> lt_comp(A, B, St) end,
