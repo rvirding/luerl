@@ -161,7 +161,7 @@ frexp(As, St) ->				%M,E such that X = M*2^E
     end.
 
 ldexp(As, St) ->
-    case luerl_lib:conv_list(As, [lnumber,linteger]) of
+    case luerl_lib:conv_list(As, [lua_number,lua_integer]) of
 	[M,E] ->
 	    {[M*math:pow(2, E)],St};
 %% 	    <<X/float>> = <<0:1,E:11,M:52>>,
