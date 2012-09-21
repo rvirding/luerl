@@ -22,10 +22,10 @@ $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
 	erlc -o $(BEAMDIR) $<
 
 %.erl: %.xrl
-	erl -noinput -run leex file "$<" -run init stop -noshell
+	erlc -o $(SRCDIR) $<
 
 %.erl: %.yrl
-	erl -noinput -run yecc file "$<" -run init stop -noshell
+	erlc -o $(SRCDIR) $<
 
 hello: all
 	@ erl -pa ./ebin -s hello run -s init stop -noshell
