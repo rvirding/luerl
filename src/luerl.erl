@@ -86,7 +86,7 @@ load(Chunk) when is_list(Chunk) ->
     {ok,Ts,_} = luerl_scan:string(Chunk),
     luerl_parse:chunk(Ts).
 
-%% compilefile(Path) -> {ok,Form}.
+%% loadfile(Path) -> {ok,Form}.
 loadfile(Path) ->
     {ok,Bin} = file:read_file(Path),
     {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
