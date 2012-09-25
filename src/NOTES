@@ -47,6 +47,11 @@ called when initialising Luerl; it does any library specific
 initialisation necessary and returns a table containing the functions
 in the library.
 
+We create a unique tag which is saved in the environment. This is used
+so we can implement 'break' with a simple throw. The thrown value
+includes the tag so we can uniquely catch it and not get confused with
+a throw/error/exit from the erlang code.
+
 Lua implementation "features"
 -----------------------------
 
