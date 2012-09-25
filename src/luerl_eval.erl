@@ -317,16 +317,16 @@ set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
     St#luerl{tabs=Ts1}.
 
 set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
-    Store = fun (#table{t=T}=Tab) ->
-		    Tab#table{t=orddict:store(K, Val, T)} end,
+    Store = fun (#table{t=Tab}=T) ->
+		    T#table{t=orddict:store(K, Val, Tab)} end,
     ?UPD_TABLE(_G, Store, Ts);
 set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
     %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
     case orddict:is_key(K, Tab) of
 	true ->
-	    Store = fun (#table{t=T}=Tab0) ->
-			    Tab0#table{t=orddict:store(K, Val, T)} end,
+	    Store = fun (#table{t=Tab}=T) ->
+			    T#table{t=orddict:store(K, Val, Tab)} end,
 	    ?UPD_TABLE(E, Store, Ts);
 	false -> set_env_key_env(K, Val, Ts, Es)
     end.
@@ -484,14 +484,14 @@ assign_loop([], _, St) -> St.
 %%  much of the prefixexp code but must have our own thing at the end.
 
 set_var({'.',_,Exp,Rest}, Val, St0) ->
-    {[Next|_],St1} = prefixexp_first(Exp, St0),
-    var_rest(Rest, Val, Next, St1);
+    {Next,St1} = prefixexp_first(Exp, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
 set_var({'NAME',_,N}, Val, St) ->
     set_env_name(N, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
-    {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
-    var_rest(Rest, Val, Next, St1);
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
 var_rest(Exp, Val, SoFar, St) ->
     var_last(Exp, Val, SoFar, St).
 
