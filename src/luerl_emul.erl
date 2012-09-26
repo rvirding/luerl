@@ -38,15 +38,15 @@
 -include("luerl.hrl").
 
 %% Basic interface.
--export([init/0,call/2,call/3,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
+-export([init/0,call/2,call/3,chunk/2,chunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/2,functioncall/3,get_table_key/3,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
--export([alloc_table/1,set_local_keys/3,set_local_keys_tab/3,
-	 get_local_key/2,set_env_name_env/4]).
+-export([alloc_table/1,get_global_name/2,get_global_key/2,
+	free_table/2,set_local_var/3]).
 
 -import(luerl_lib, [lua_error/1,badarg_error/2]).
 
@@ -106,6 +106,8 @@ get_global_key(Key, #luerl{g=G}=St) ->
 %% push_frame(Size, State) -> State.
 %% pop_frame(State) -> State.
 %% pop_free_frame(State) -> State.
+%%  Pop_frame just pops top frame from stack while pop_free_frame also
+%%  frees it for reuse.
 
 push_frame(Sz, #luerl{st=Fps,ft=Ft0,ff=[N|Ns]}=St) ->
     Ft1 = array:set(N, erlang:make_tuple(Sz, nil), Ft0),
@@ -114,8 +116,8 @@ push_frame(Sz, #luerl{st=Fps,ft=Ft0,ff=[],fn=N}=St) ->
     Ft1 = array:set(N, erlang:make_tuple(Sz, nil), Ft0),
     St#luerl{st=[#fref{i=N}|Fps],ft=Ft1,fn=N+1}.
 
-pop_frame(#luerl{st=[#fref{i=N}|Fps],ff=Ns}=St) ->
-    St#luerl{st=Fps,ff=[N|Ns]}.
+pop_frame(#luerl{st=[_|Fps]}=St) ->		%Pop the frame
+    St#luerl{st=Fps}.
 
 pop_free_frame(#luerl{st=[#fref{i=N}|Fps],ft=Ft0,ff=Ns}=St) ->
     Ft1 = array:reset(N, Ft0),			%Free the frame
@@ -276,104 +278,10 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 	    get_table_key(Meth, Key, St)
     end.
 
-%% set_local_name(Name, Val, State) -> State.
-%% set_local_key(Key, Value, State) -> State.
-%% set_local_keys(Keys, Values, State) -> State.
-%% get_local_key(Key, State) -> Value | nil.
-%%  Set variable values in the local environment. Variables are not
-%%  cleared when their value is set to 'nil' as this would remove the
-%%  local variable. NOTE: ONLY RETURN A SINGLE VALUE AS THIS IS ALL A
-%%  KEY MAY HAVE!
-
-set_local_name(Name, Val, St) ->
-    set_local_key(atom_to_binary(Name, latin1), Val, St).
-
-set_local_key(Key, Val, #luerl{tabs=Ts0,env=Env}=St) ->
-    Ts1 = set_local_key_env(Key, Val, Ts0, Env),
-    St#luerl{tabs=Ts1}.
-
-set_local_name_env(Name, Val, Ts, Env) ->
-    set_local_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
-
-set_local_key_env(K, Val, Ts, [#tref{i=E}|_]) ->
-    Store = fun (#table{t=Tab}=T) -> T#table{t=orddict:store(K, Val, Tab)} end,
-    ?UPD_TABLE(E, Store, Ts).
-
-set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[#tref{i=E}|_]}=St) ->
-    Store = fun (#table{t=Tab}=T) ->
-		    T#table{t=set_local_keys_tab(Ks, Vals, Tab)} end,
-    Ts1 = ?UPD_TABLE(E, Store, Ts0),
-    St#luerl{tabs=Ts1}.
-
-set_local_keys_tab([K|Ks], [Val|Vals], T0) ->
-    T1 = orddict:store(K, Val, T0),
-    set_local_keys_tab(Ks, Vals, T1);
-set_local_keys_tab([K|Ks], [], T0) ->
-    T1 = orddict:store(K, nil, T0),		%Default value nil
-    set_local_keys_tab(Ks, [], T1);
-set_local_keys_tab([], _, T) -> T.		%Ignore extra values
-
-get_local_key(Key, #luerl{tabs=Ts,env=[#tref{i=E}|_]}) ->
-    #table{t=Tab} = ?GET_TABLE(E, Ts),
-    case orddict:find(Key, Tab) of
-	{ok,Val} -> Val;
-	error -> nil
-    end.
-
-%% set_env_name(Name, Val, State) -> State.
-%% set_env_key(Key, Value, State) -> State.
-%% set_env_key_env(Key, Value, Tables, Env) -> Tables.
-%% get_env_name(Name, State) -> Val.
-%% get_env_key(Key, State) -> Value | nil.
-%% get_env_key_env(Key, Tables, Env) -> Value | nil.
-%%  Set/get variable values in the environment tables. Variables are
-%%  not cleared when their value is set to 'nil' as this would move
-%%  them in the environment stack. NOTE: ONLY RETURN A SINGLE VALUE AS
-%%  THIS IS ALL A KEY MAY HAVE!
-
-set_env_name(Name, Val, St) ->
-    set_env_key(atom_to_binary(Name, latin1), Val, St).
-
-set_env_name_env(Name, Val, Ts, Env) ->
-    %% io:fwrite("sek: ~p\n", [{Env}]),
-    set_env_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
-
-set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
-    %% io:fwrite("sek: ~p\n", [{Env}]),
-    Ts1 = set_env_key_env(K, Val, Ts0, Env),
-    St#luerl{tabs=Ts1}.
-
-set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
-    Store = fun (#table{t=Tab}=T) ->
-		    T#table{t=orddict:store(K, Val, Tab)} end,
-    ?UPD_TABLE(_G, Store, Ts);
-set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
-    %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
-    #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
-    case orddict:is_key(K, Tab) of
-	true ->
-	    Store = fun (#table{t=Tab}=T0) ->
-			    T0#table{t=orddict:store(K, Val, Tab)} end,
-	    ?UPD_TABLE(E, Store, Ts);
-	false -> set_env_key_env(K, Val, Ts, Es)
-    end.
-
-get_env_name(Name, St) -> get_env_key(atom_to_binary(Name, latin1), St).
-
-get_env_key(K, #luerl{tabs=Ts,env=Env}) ->
-    get_env_key_env(K, Ts, Env).
-
-get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
-    #table{t=Tab} = ?GET_TABLE(E, Ts),		%Get environment table
-    case orddict:find(K, Tab) of		%Check if variable in the env
-	{ok,Val} -> Val;
-	error -> get_env_key_env(K, Ts, Es)
-    end;
-get_env_key_env(_, _, []) -> nil.		%The default value
-
 %% set_var(Var, Val, State) -> State.
 %% set_local_var(Var, Val, State) -> State.
 %% get_var(Var, State) -> Value | nil.
+%% NOTE: ONLY RETURN A SINGLE VALUE AS THIS IS ALL A VAR MAY HAVE!
 
 set_var({local_var,_,_,I}, Val, #luerl{st=Fps,ft=Ft0}=St) ->
     Ft1 = set_local_var(I, Val, Fps, Ft0),
@@ -397,6 +305,7 @@ get_var({local_var,_,_,I}, #luerl{st=Fps,ft=Ft}) ->
 get_var({stack_var,_,_,D,I}, #luerl{st=Fps,ft=Ft}) ->
     get_stack_var(D, I, Fps, Ft);
 get_var({global_var,_,N}, #luerl{tabs=Ts,g=#tref{i=G}}) ->
+    %% Is _G a normal table with metatable etc?
     #table{t=Tab} = ?GET_TABLE(G, Ts),
     case orddict:find(atom_to_binary(N, latin1), Tab) of
 	{ok,Val} -> Val;
@@ -447,23 +356,6 @@ call({function,_}=Func, Args, St0) ->
     %% Should do GC here.
     {Ret,St1}.
 
-%% funchunk(Function, State) -> {Return,State}.
-
-funchunk({functiondef,_Line,Sz,_Name,_Pars,Body}, St0) ->
-    {Ret,St1} = function_block(Sz,fun (S) -> {[],stats(Body, S)} end, St0),
-    %% Should do GC here.
-    {Ret,St1};
-
-funchunk({functiondef,_Line,Sz,_Pars,Body}, St0) ->
-    {Ret,St1} = function_block(Sz, fun (S) -> {[],stats(Body, S)} end, St0),
-    %% Should do GC here.
-    {Ret,St1}.
-
-funchunk(Func, St0, _Pars) ->           %Todo: Parameters.
-    funchunk(Func, St0).                %Note: from ERLANG. And the functiondef
-                                        %is a wrap around ALL chunks except
-                                        %those that already were functions.
-
 %% block(Size, Stats, State) -> State.
 %%  Evaluate statements in a block. The with_block function requires
 %%  that its action returns a result, which is irrelevant here.
@@ -473,9 +365,6 @@ block(Sz, Stats, St0) ->
     Do = fun (S) -> {[],stats(Stats, S)} end,
     {_,St1} = with_block(Sz, Do, St0),
     St1.
-
-block(_, _) ->
-    error({boom,block}).
 
 %% with_block(Size, Do, State) -> {Return,State}.
 %%  A block creates a new local environment which we would like to
@@ -490,14 +379,11 @@ with_block(Sz, Do, St0) ->
     {Ret,St2} = Do(St1#luerl{locf=false}),	%Do its thing
     Locf1 = St2#luerl.locf,			%"Local" locf value
     %% io:fwrite("wb->~p\n", [{Locf1}]),
-    St3  = case Locf1 of			%Check if we can free table
+    St3  = case Locf1 of			%Check if we can free frame
 	       true -> pop_frame(St2);
 	       false -> pop_free_frame(St2)
 	   end,
     {Ret,St3#luerl{locf=Locf1 or Locf0}}.
-
-with_block(_, _) ->
-    error({boom,with_block}).
 
 %% stats(Stats, State) -> State.
 
