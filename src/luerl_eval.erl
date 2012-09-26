@@ -367,6 +367,10 @@ call({functiondef,L,Ps,B}, Args, St0) ->
     {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
+call({function,_,_,_,_}=Func, Args, St0) ->
+    {Ret,St1} = functioncall(Func, Args, St0),
+    %% Should do GC here.
+    {Ret,St1};
 call({function,_}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
