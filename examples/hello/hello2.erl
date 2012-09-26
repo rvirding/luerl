@@ -72,7 +72,7 @@ run() ->
 
     % create state
     New = luerl:init(),
-    {_,New2} = luerl:do("print 'hello generix'"),
+    {_,_New2} = luerl:do("print 'hello generix'"),
     
     % change state
     {_,State} = luerl:do("a = 1000"),
