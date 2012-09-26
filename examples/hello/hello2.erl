@@ -30,12 +30,12 @@ run() ->
    
 
     % execute a file
-    luerl:evalfile("./examples/hello/hello2-1.lua"),
-    luerl:dofile("./examples/hello/hello2-1.lua"),
+    luerl:evalfile("./hello2-1.lua"),
+    luerl:dofile("./hello2-1.lua"),
 
     % execute a file, get a result
-    {ok,B} = luerl:evalfile("./examples/hello/hello2-2.lua"),
-    {B,_} = luerl:dofile("./examples/hello/hello2-2.lua"),
+    {ok,B} = luerl:evalfile("./hello2-2.lua"),
+    {B,_} = luerl:dofile("./hello2-2.lua"),
     io:format("2137 * 42 = ~p?~n", [B]),
 
 
@@ -47,7 +47,7 @@ run() ->
     luerl:call(Chunk1, []),
 
     % separately parse, then execute a file
-    {ok,Chunk2} = luerl:loadfile("./examples/hello/hello2-3.lua"),
+    {ok,Chunk2} = luerl:loadfile("./hello2-3.lua"),
     luerl:eval(Chunk2),
     luerl:do(Chunk2),
     luerl:call(Chunk2, []),
@@ -61,7 +61,7 @@ run() ->
     io:format("And I say: ~p~n", [C]),
 
     % separately parse, then execute a file, get a result
-    {ok,Chunk4} = luerl:loadfile("./examples/hello/hello2-4.lua"),
+    {ok,Chunk4} = luerl:loadfile("./hello2-4.lua"),
     {ok,D} = luerl:eval(Chunk4),
     {D,_} = luerl:do(Chunk4),
     {D,_} = luerl:call(Chunk4, []),
@@ -97,20 +97,20 @@ run() ->
     io:format("a = ~p~n", [Z]),
    
     % execute a file using passed in state
-    luerl:evalfile("./examples/hello/hello2-5.lua", State3),
-    luerl:dofile("./examples/hello/hello2-5.lua", State3),
+    luerl:evalfile("./hello2-5.lua", State3),
+    luerl:dofile("./hello2-5.lua", State3),
 
     % execute a file that changes the State
-    {_,State4} = luerl:dofile("./examples/hello/hello2-6.lua", State3),
+    {_,State4} = luerl:dofile("./hello2-6.lua", State3),
     luerl:do("print(a)", State4),
 
     % execute a file, get a result
-    {ok,F} = luerl:evalfile("./examples/hello/hello2-7.lua", State4),
-    {F,State5} = luerl:dofile("./examples/hello/hello2-7.lua", State4),
+    {ok,F} = luerl:evalfile("./hello2-7.lua", State4),
+    {F,State5} = luerl:dofile("./hello2-7.lua", State4),
     io:format("#1 F: ~s~n", [F]),
 
     % execute a file that changes the State, and get a value back
-    {F,State6} = luerl:dofile("./examples/hello/hello2-7.lua", State5),
+    {F,State6} = luerl:dofile("./hello2-7.lua", State5),
     io:format("#2 F: ~s = ", [F]),
     luerl:do("print('#3 F: ' .. a)", State6),
 
@@ -122,7 +122,7 @@ run() ->
     luerl:call(Chunk11,[],State6),
 
     % separately parse, then execute a file
-    {ok,Chunk12} = luerl:loadfile("./examples/hello/hello2-8.lua"),
+    {ok,Chunk12} = luerl:loadfile("./hello2-8.lua"),
     luerl:eval(Chunk12,State6),
     luerl:do(Chunk12,State6),
     luerl:call(Chunk12,[],State6),
@@ -136,7 +136,7 @@ run() ->
     io:format("And again I said: ~s~n", [G]),
 
     % separately parse, then execute a file, get a result
-    {ok,Chunk14} = luerl:loadfile("./examples/hello/hello2-9.lua"),
+    {ok,Chunk14} = luerl:loadfile("./hello2-9.lua"),
     {ok,H} = luerl:eval(Chunk14, State7),
     {H,State8} = luerl:do(Chunk14, State7),
     {H,State8} = luerl:call(Chunk14, [], State7),

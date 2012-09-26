@@ -12,7 +12,7 @@ run() ->
     luerl:do("print(\"Hello, Robert(o)!\")"),
 
     % execute a file
-    luerl:dofile("./examples/hello/hello.lua"),
+    luerl:dofile("./hello.lua"),
 
     % separately parse, then execute
     {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
