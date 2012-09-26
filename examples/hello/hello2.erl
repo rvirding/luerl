@@ -42,42 +42,36 @@ run() ->
     % separately parse, then execute
     {ok,Chunk1} = luerl:load("print(\"Hello, Chunk!\")"),
     {ok,Chunk1} = luerl:load(<<"print(\"Hello, Chunk!\")">>),
-    {ok,Chunk1} = luerl:compile("print(\"Hello, Chunk!\")"),
-    {ok,Chunk1} = luerl:compile(<<"print(\"Hello, Chunk!\")">>),
     luerl:eval(Chunk1),
     luerl:do(Chunk1),
-    luerl:call(Chunk1),
+    luerl:call(Chunk1, []),
 
     % separately parse, then execute a file
     {ok,Chunk2} = luerl:loadfile("./examples/hello/hello2-3.lua"),
-    {ok,Chunk2} = luerl:compilefile("./examples/hello/hello2-3.lua"),
     luerl:eval(Chunk2),
     luerl:do(Chunk2),
-    luerl:call(Chunk2),
+    luerl:call(Chunk2, []),
 
     % separately parse, then execute, get a result
     {ok,Chunk3} = luerl:load("return 'Marvelous wheater today, isn°t it!'"),
     {ok,Chunk3} = luerl:load(<<"return 'Marvelous wheater today, isn°t it!'">>),
-    {ok,Chunk3} = luerl:compile("return 'Marvelous wheater today, isn°t it!'"),
-    {ok,Chunk3} = luerl:compile(<<"return 'Marvelous wheater today, isn°t it!'">>),
     {ok,C} = luerl:eval(Chunk3),
     {C,_} = luerl:do(Chunk3),
-    {C,_} = luerl:call(Chunk3),
+    {C,_} = luerl:call(Chunk3, []),
     io:format("And I say: ~p~n", [C]),
 
     % separately parse, then execute a file, get a result
     {ok,Chunk4} = luerl:loadfile("./examples/hello/hello2-4.lua"),
-    {ok,Chunk4} = luerl:compilefile("./examples/hello/hello2-4.lua"),
     {ok,D} = luerl:eval(Chunk4),
     {D,_} = luerl:do(Chunk4),
-    {D,_} = luerl:call(Chunk4),
+    {D,_} = luerl:call(Chunk4, []),
     io:format("And he says: ~p~n", [D]),
 
 
     % Same as above, passing State in.
 
     % create state
-    New = luerl:start(),
+    New = luerl:init(),
     {_,New2} = luerl:do("print 'hello generix'"),
     
     % change state
@@ -123,35 +117,29 @@ run() ->
     % separately parse, then execute
     {ok,Chunk11} = luerl:load("print(\"Hello, \" .. a .. \"!\")"),
     {ok,Chunk11} = luerl:load(<<"print(\"Hello, \" .. a .. \"!\")">>),
-    {ok,Chunk11} = luerl:compile("print(\"Hello, \" .. a .. \"!\")"),
-    {ok,Chunk11} = luerl:compile(<<"print(\"Hello, \" .. a .. \"!\")">>),
     luerl:eval(Chunk11,State6),
     luerl:do(Chunk11,State6),
-    luerl:call(Chunk11,State6),
+    luerl:call(Chunk11,[],State6),
 
     % separately parse, then execute a file
     {ok,Chunk12} = luerl:loadfile("./examples/hello/hello2-8.lua"),
-    {ok,Chunk12} = luerl:compilefile("./examples/hello/hello2-8.lua"),
     luerl:eval(Chunk12,State6),
     luerl:do(Chunk12,State6),
-    luerl:call(Chunk12,State6),
+    luerl:call(Chunk12,[],State6),
 
     % separately parse, then execute, get a result
     {ok,Chunk13} = luerl:load("a = a .. ' (this is Greek)'; return a"),
     {ok,Chunk13} = luerl:load(<<"a = a .. ' (this is Greek)'; return a">>),
-    {ok,Chunk13} = luerl:compile("a = a .. ' (this is Greek)'; return a"),
-    {ok,Chunk13} = luerl:compile(<<"a = a .. ' (this is Greek)'; return a">>),
     {ok,G} = luerl:eval(Chunk13, State6),
     {G,State7} = luerl:do(Chunk13, State6),
-    {G,State7} = luerl:call(Chunk13, State6),
+    {G,State7} = luerl:call(Chunk13, [], State6),
     io:format("And again I said: ~s~n", [G]),
 
     % separately parse, then execute a file, get a result
     {ok,Chunk14} = luerl:loadfile("./examples/hello/hello2-9.lua"),
-    {ok,Chunk14} = luerl:compilefile("./examples/hello/hello2-9.lua"),
     {ok,H} = luerl:eval(Chunk14, State7),
     {H,State8} = luerl:do(Chunk14, State7),
-    {H,State8} = luerl:call(Chunk14, State7),
+    {H,State8} = luerl:call(Chunk14, [], State7),
     io:format("Well: ~s~n", [H]),
 
     io:format("done~n").
