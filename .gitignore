@@ -1,4 +1,6 @@
 *~
+.swp
+.*.swp
 .DS_Store
 ebin
 *.beam
