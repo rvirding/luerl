@@ -35,6 +35,11 @@
 -record(luerl, {tabs,free,next,			%Table structure
 		meta=[],			%Data type metatables
 		env,				%Environment
+		%%
+		st=[],				%Stack
+		ft,ff,fn,			%Frame table, free, next
+		g,				%Global table
+		%%
 		locf=false,			%Started local function
 		tag				%Unique tag
 	       }).
@@ -55,6 +60,9 @@
 -record(table, {a,t=[],m=nil}).			%Table type, array, tab, meta
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
+
+-record(fref, {i}).				%Frame reference, index
+
 
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).

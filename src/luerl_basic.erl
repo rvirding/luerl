@@ -36,7 +36,7 @@
 -import(luerl_lib, [lua_error/1,badarg_error/2]). %Shorten these
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 %% Caller will convert this list to the correct format.
@@ -81,7 +81,7 @@ assert(As, St) ->
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
     {[],St};					%No-op for the moment
-%%    {[],luerl_eval:gc(St)};
+%%    {[],luerl_emul:gc(St)};
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
@@ -98,9 +98,9 @@ error([M|_], _) -> lua_error(M);		%Never returns!
 error(As, _) -> badarg_error(error, As).
 
 ipairs([#tref{}=Tref|_], St) ->
-    case luerl_eval:getmetamethod(Tref, <<"__ipairs">>, St) of
+    case luerl_emul:getmetamethod(Tref, <<"__ipairs">>, St) of
 	nil -> {[{function,fun ipairs_next/2},Tref,0.0],St};
-	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 ipairs(As, _) -> badarg_error(ipairs, As).
     
@@ -168,9 +168,9 @@ next_key_loop([{_,nil}|Tab]) -> next_key_loop(Tab);    %Skip nil values
 next_key_loop(Tab) -> Tab.
 
 pairs([#tref{}=Tref|_], St) ->
-    case luerl_eval:getmetamethod(Tref, <<"__pairs">>, St) of
+    case luerl_emul:getmetamethod(Tref, <<"__pairs">>, St) of
 	nil -> {[{function,fun next/2},Tref,nil],St};
-	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 pairs(As, _) -> badarg_error(pairs, As).
 
@@ -265,10 +265,10 @@ tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St};
 tonumber(As, _) -> badarg_error(tonumber, As).
 
 tostring([Arg|_], St) ->
-    case luerl_eval:getmetamethod(Arg, <<"__tostring">>, St) of
+    case luerl_emul:getmetamethod(Arg, <<"__tostring">>, St) of
 	nil -> {[tostring(Arg)],St};
 	M when element(1, M) =:= function ->
-	    {R,St1} = luerl_eval:functioncall(M, [Arg], St),
+	    {R,St1} = luerl_emul:functioncall(M, [Arg], St),
 	    {R,St1}
     end.
 
@@ -285,9 +285,10 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring({function,L,_,_,_}) ->
+tostring({function,L,_,_,_,_}) ->		%Functions defined in Lua
     iolist_to_binary(["function: ",io_lib:write(L)]);
-tostring({function,F}) -> iolist_to_binary(["function: ",io_lib:write(F)]);
+tostring({function,F}) ->			%Internal functions
+    iolist_to_binary(["function: ",io_lib:write(F)]);
 tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
@@ -299,7 +300,7 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
-type({function,_,_,_,_}) -> <<"function">>;	%Functions defined in Lua
+type({function,_,_,_,_,_}) -> <<"function">>;	%Functions defined in Lua
 type({function,_}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
 type(#userdata{}) -> <<"userdata">>;
@@ -354,7 +355,7 @@ do_load(S, St) ->
 			Env0 = St0#luerl.env,	%Caller's environment
 			%% Evaluate at top-level,
 			Env = [lists:last(Env0)],
-			{Ret,St1} = luerl_eval:chunk(C, As, St0#luerl{env=Env}),
+			{Ret,St1} = luerl_emul:chunk(C, As, St0#luerl{env=Env}),
 			St2 = St1#luerl{env=Env0},
 			{Ret,St2}
 		end,
@@ -369,7 +370,7 @@ dofile(As, St) ->
 	[File|_] ->
 	    {ok,Bin} = file:read_file(File),
 	    {ok,C} = parse_string(binary_to_list(Bin)),
-	    luerl_eval:chunk(C, St);
+	    luerl_emul:chunk(C, St);
 	_ -> badarg_error(dofile, As)
     end.
 
@@ -385,7 +386,7 @@ parse_string(S) ->
 
 pcall([F|As], St0) ->
     try
-	{Rs,St1} = luerl_eval:functioncall(F, As, St0),
+	{Rs,St1} = luerl_emul:functioncall(F, As, St0),
 	{[true|Rs],St1}
     catch
 %% 	Class:Error ->
