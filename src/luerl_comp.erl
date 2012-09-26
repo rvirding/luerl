@@ -58,16 +58,19 @@ string(S) ->
 	       lint=#lint{}			%Lint data
 	      }).
 
+%% chunk(Chunk) -> {ok,Code} | {error,Reason}.
+
 chunk({functiondef,L,Ps,B}) ->
     St0 = #comp{},
     {Cf,_} = exp({functiondef,L,Ps,B}, false, St0),
-    Cf;
-chunk(Code) ->
-    St0 = #comp{},
-    %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
-    {Is0,_} = block(Code, St0),
-    Is1 = fix_labels(Is0),
-    list_to_tuple(Is1).
+    {ok,Cf}.
+
+%% chunk(Code) ->
+%%     St0 = #comp{},
+%%     %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
+%%     {Is0,_} = block(Code, St0),
+%%     Is1 = fix_labels(Is0),
+%%     list_to_tuple(Is1).
 
 with_block(Do, St0) ->
     St1 = push_frame(St0),			%Push a new variable scope
@@ -236,9 +239,17 @@ frame_size(#comp{fs=Fs}) -> length(hd(Fs)).
 %% add_local_var(Var, State) -> State.
 %% add_local_vars(Vars, State) -> State.
 %% find_var(Var, State) -> {stack,Depth,Index} | global.
+%%  When we add an already existing variable we jst reuse its
+%%  slot. This is space efficient and safe in one block. NOTE: THIS IS
+%%  NOT SAFE WE WANT TO KEEP NESTED BLOCKS ONE FRAME!!
 
 add_local_var(N, #comp{fs=[F0|Fs]}=St) ->
-    F1 = orddict:store(N, length(F0)+1, F0),
+    %% F1 = orddict:store(N, length(F0)+1, F0),
+    F1 = case orddict:find(N, F0) of
+	     {ok,_} -> F0;			%Reuse existing slot
+	     error ->				%New slot
+		 orddict:store(N, length(F0)+1, F0)
+	 end,
     St#comp{fs=[F1|Fs]}.
 
 add_local_vars(Ns, St) ->
