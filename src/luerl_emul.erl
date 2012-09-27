@@ -60,11 +60,12 @@
 %% Initialise the basic state.
 
 init() ->
-    St0 = #luerl{meta=#meta{},env=[],locf=false,tag=make_ref()},
+    %% Initialise the general stuff.
+    St0 = #luerl{meta=#meta{},locf=false,tag=make_ref()},
     %% Initialise the table handling.
     St1 = St0#luerl{tabs=?MAKE_TABLE(),free=[],next=0},
     %% Initialise the stack and frame handling.
-    St2 = St1#luerl{st=[],ft=array:new(),ff=[],fn=0},
+    St2 = St1#luerl{stk=[],ft=array:new(),ff=[],fn=0},
     %% Allocate the _G table and initialise the environment
     {_G,St3} = luerl_basic:install(St2),	%Global environment
     St4 = St3#luerl{g=_G},
@@ -109,19 +110,19 @@ get_global_key(Key, #luerl{g=G}=St) ->
 %%  Pop_frame just pops top frame from stack while pop_free_frame also
 %%  frees it for reuse.
 
-push_frame(Sz, #luerl{st=Fps,ft=Ft0,ff=[N|Ns]}=St) ->
+push_frame(Sz, #luerl{stk=Fps,ft=Ft0,ff=[N|Ns]}=St) ->
     Ft1 = array:set(N, erlang:make_tuple(Sz, nil), Ft0),
-    St#luerl{st=[#fref{i=N}|Fps],ft=Ft1,ff=Ns};
-push_frame(Sz, #luerl{st=Fps,ft=Ft0,ff=[],fn=N}=St) ->
+    St#luerl{stk=[#fref{i=N}|Fps],ft=Ft1,ff=Ns};
+push_frame(Sz, #luerl{stk=Fps,ft=Ft0,ff=[],fn=N}=St) ->
     Ft1 = array:set(N, erlang:make_tuple(Sz, nil), Ft0),
-    St#luerl{st=[#fref{i=N}|Fps],ft=Ft1,fn=N+1}.
+    St#luerl{stk=[#fref{i=N}|Fps],ft=Ft1,fn=N+1}.
 
-pop_frame(#luerl{st=[_|Fps]}=St) ->		%Pop the frame
-    St#luerl{st=Fps}.
+pop_frame(#luerl{stk=[_|Fps]}=St) ->		%Pop the frame
+    St#luerl{stk=Fps}.
 
-pop_free_frame(#luerl{st=[#fref{i=N}|Fps],ft=Ft0,ff=Ns}=St) ->
+pop_free_frame(#luerl{stk=[#fref{i=N}|Fps],ft=Ft0,ff=Ns}=St) ->
     Ft1 = array:reset(N, Ft0),			%Free the frame
-    St#luerl{st=Fps,ft=Ft1,ff=[N|Ns]}.
+    St#luerl{stk=Fps,ft=Ft1,ff=[N|Ns]}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -283,10 +284,10 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 %% get_var(Var, State) -> Value | nil.
 %% NOTE: ONLY RETURN A SINGLE VALUE AS THIS IS ALL A VAR MAY HAVE!
 
-set_var({local_var,_,_,I}, Val, #luerl{st=Fps,ft=Ft0}=St) ->
+set_var({local_var,_,_,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = set_local_var(I, Val, Fps, Ft0),
     St#luerl{ft=Ft1};
-set_var({stack_var,_,_,D,I}, Val, #luerl{st=Fps,ft=Ft0}=St) ->
+set_var({stack_var,_,_,D,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = set_stack_var(D, I, Val, Fps, Ft0),
     St#luerl{ft=Ft1};
 set_var({global_var,_,N}, Val, #luerl{tabs=Ts0,g=#tref{i=G}}=St) ->
@@ -296,13 +297,13 @@ set_var({global_var,_,N}, Val, #luerl{tabs=Ts0,g=#tref{i=G}}=St) ->
     Ts1 = ?UPD_TABLE(G, Store, Ts0),
     St#luerl{tabs=Ts1}.
 
-set_local_var({local_var,_,_,I}, Val, #luerl{st=Fps,ft=Ft0}=St) ->
+set_local_var({local_var,_,_,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = set_local_var(I, Val, Fps, Ft0),
     St#luerl{ft=Ft1}.
 
-get_var({local_var,_,_,I}, #luerl{st=Fps,ft=Ft}) ->
+get_var({local_var,_,_,I}, #luerl{stk=Fps,ft=Ft}) ->
     get_local_var(I, Fps, Ft);
-get_var({stack_var,_,_,D,I}, #luerl{st=Fps,ft=Ft}) ->
+get_var({stack_var,_,_,D,I}, #luerl{stk=Fps,ft=Ft}) ->
     get_stack_var(D, I, Fps, Ft);
 get_var({global_var,_,N}, #luerl{tabs=Ts,g=#tref{i=G}}) ->
     %% Is _G a normal table with metatable etc?
@@ -515,8 +516,8 @@ loop_block(Do, St) ->
 		    catch
 			throw:{break,_,Tag,St1} ->
 			    %% Unwind the stack and freeing tables.
-			    Old = St0#luerl.env,
-			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    Old = St0#luerl.stk,
+			    St2 = unwind_stack(St1#luerl.stk, Old, St1),
 			    %% io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
 			    {[],St2}
 		    end
@@ -613,7 +614,7 @@ local({assign,_,Vs,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
     assign_local_loop(Vs, Vals, St1).
 
-assign_local_loop(Vs, Vals, #luerl{st=Fps,ft=Ft0}=St) ->
+assign_local_loop(Vs, Vals, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = assign_local_loop(Vs, Vals, Fps, Ft0),
     St#luerl{ft=Ft1}.
 
@@ -653,7 +654,7 @@ exp({local_var,_,'...',_}=VarArg, St) ->	%Get '...', error if undefined
 	Val -> {Val,St}				%Already a list
     end;
 exp({functiondef,L,Sz,Ps,B}, St) ->
-    {[{function,L,Sz,St#luerl.st,Ps,B}],St#luerl{locf=true}};
+    {[{function,L,Sz,St#luerl.stk,Ps,B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
@@ -745,15 +746,15 @@ prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
     end.
 
 functioncall({function,_,Sz,Stk,Ps,B}, Args, St0) ->
-    Stk0 = St0#luerl.st,			%Caller's stack
-    St1 = St0#luerl{st=Stk},			%Set function's stack
+    Stk0 = St0#luerl.stk,			%Caller's stack
+    St1 = St0#luerl{stk=Stk},			%Set function's stack
     Do = fun (S0) ->
 		 %% Use local assign to put argument into environment.
 		 S1 = assign_par_loop(Ps, Args, S0),
 		 {[],stats(B, S1)}
 	 end,
     {Ret,St2} = function_block(Sz, Do, St1),
-    St3 = St2#luerl{st=Stk0},			%Restore caller's stack
+    St3 = St2#luerl{stk=Stk0},			%Restore caller's stack
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
@@ -769,7 +770,7 @@ functioncall(Func, As, St) ->
 %% assign_par_loop(Names, Vals, State) -> State.
 %% Could probably merge this and assign_local_loop.
 
-assign_par_loop(Vs, Vals, #luerl{st=Fps,ft=Ft0}=St) ->
+assign_par_loop(Vs, Vals, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = assign_par_loop_1(Vs, Vals, Fps, Ft0),
     St#luerl{ft=Ft1}.
 
@@ -796,8 +797,8 @@ function_block(Sz, Do, St) ->
 		    catch
 			throw:{return,_,Tag,Ret,St1} ->
 			    %% Unwind the stack and freeing tables.
-			    Old = St0#luerl.st,
-			    St2 = unwind_stack(St1#luerl.st, Old, St1),
+			    Old = St0#luerl.stk,
+			    St2 = unwind_stack(St1#luerl.stk, Old, St1),
 			    {Ret,St2};
 			throw:{break,_,Tag,_} ->
 			    lua_error({illegal_op,break})
@@ -809,11 +810,11 @@ function_block(Sz, Do, St) ->
 %%  If locf is false then we can unwind env stack freeing tables as we
 %%  go, otherwise if locf is true we can not do this.
 
-%% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
+%% unwind_stack(_, To, St) -> St#luerl{stk=To};	%For testing
 unwind_stack(_, _, #luerl{locf=true}=St) -> St;
 unwind_stack(From, [Top|_]=To, #luerl{ft=Ft0,ff=Ns0}=St) ->
     {Ft1,Ns1} = unwind_stack(From, Top, Ft0, Ns0),
-    St#luerl{ft=Ft1,ff=Ns1,st=To}.
+    St#luerl{ft=Ft1,ff=Ns1,stk=To}.
 
 unwind_stack([Top|_], Top, Ft, Ns) -> {Ft,Ns};	%Done!
 unwind_stack([#fref{i=N}|From], Top, Ft0, Ns) ->
@@ -1019,58 +1020,98 @@ illegal_val_error(Val) ->
     lua_error({illegal_val,Val}).
 
 %% gc(State) -> State.
-%% The garbage collector. Its main job is to reclaim unused tables. It
-%% is a mark/sweep collector which passes over all objects and marks
-%% tables which it has seen. All unseen tables are then freed and
-%% their index added to the free list.
+%%  The garbage collector. Its main job is to reclaim unused tables
+%%  and frames. It is a mark/sweep collector which passes over all
+%%  objects and marks tables and frames which it has seen. All unseen
+%%  tables and frames are then freed and their indexes added to the
+%%  free lists.
 
-gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
-    Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata|Env],
-    Seen = mark(Root, [], [], Ts0),
-    %% io:format("gc: ~p\n", [Seen]),
+gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,g=G,stk=Stk,ft=Ft0,ff=Ff0}=St) ->
+    %% The root set consisting of global table and stack.
+    Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata,G|Stk],
+    %% Mark all seen tables and frames, i.e. return them.
+    {SeenT,SeenF} = mark(Root, [], [], [], Ts0, Ft0),
+    io:format("gc: ~p\n", [{SeenT,SeenF}]),
     %% Free unseen tables and add freed to free list.
-    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
-    Free1 = ?FOLD_TABLES(fun (K, _, F) ->
-				 case ordsets:is_element(K, Seen) of
-				     true -> F;
-				     false -> [K|F]
-				 end
-			 end, Free0, Ts0),
-    St#luerl{tabs=Ts1,free=Free1}.
+    {Free1,Ts1} = filter_tables(SeenT, Free0, Ts0),
+    {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
+    St#luerl{tabs=Ts1,free=Free1,ft=Ft1,ff=Ff1}.
 
-%% mark(ToDo, MoreTodo, Seen, Tabs) -> Seen.
+%% mark(ToDo, MoreTodo, SeenTabs, SeenFrames, Tabs, Frames) ->
+%%     {SeenTabs,SeenFrames}.
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
-mark([{in_table,_}=T|Todo], More, Seen, Ts) ->
+mark([{in_table,_}=T|Todo], More, St, Sf, Ts, Ft) ->
     %%io:format("gc: ~p\n", [T]),
-    mark(Todo, More, Seen, Ts);
-mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
-    case ordsets:is_element(T, Seen0) of
+    mark(Todo, More, St, Sf, Ts, Ft);
+mark([#tref{i=T}|Todo], More, St0, Sf, Ts, Ft) ->
+    case ordsets:is_element(T, St0) of
 	true ->					%Already done
-	    mark(Todo, More, Seen0, Ts);
-	false ->				%Must do it
-	    Seen1 = ordsets:add_element(T, Seen0),
+	    mark(Todo, More, St0, Sf, Ts, Ft);
+	false ->				%Mark it and add to todo
+	    St1 = ordsets:add_element(T, St0),
 	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
-	    %% Have to be careful where add Tab and Meta as Tab is a
-	    %% [{Key,Val}] and Meta is a nil|#tref{i=M}. We want lists.
-	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
-		 Seen1, Ts)
+	    %% Have to be careful where add Tab and Meta as Tab is
+	    %% [{Key,Val}], Arr is array and Meta is
+	    %% nil|#tref{i=M}. We want lists.
+	    Aes = array:sparse_to_list(Arr),
+	    mark([Meta|Todo], [[{in_table,T}],Tab,Aes,[{in_table,-T}]|More],
+		 St1, Sf, Ts, Ft)
     end;
-mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
-    mark(Todo, [Env|More], Seen, Ts);
+mark([#fref{i=F}|Todo], More, St, Sf0, Ts, Ft) ->
+    case ordsets:is_element(F, Sf0) of
+	true ->					%Already done
+	    mark(Todo, More, St, Sf0, Ts, Ft);
+	false ->				%Mark it and add to todo
+	    Sf1 = ordsets:add_element(F, Sf0),
+	    Ses = tuple_to_list(array:get(F, Ft)),
+	    mark(Todo, [Ses|More], St, Sf1, Ts, Ft)
+    end;
+mark([{function,_,_,Stk,_,_}|Todo], More, St, Sf, Ts, Ft) ->
+    mark(Todo, [Stk|More], St, Sf, Ts, Ft);
 %% Catch these as they would match table key-value pair.
-mark([{function,_}|Todo], More, Seen, Ts) ->
-    mark(Todo, More, Seen, Ts);
-mark([#thread{}|Todo], More, Seen, Ts) ->
-    mark(Todo, More, Seen, Ts);
-mark([#userdata{m=Meta}|Todo], More, Seen, Ts) ->
-    mark([Meta|Todo], More, Seen, Ts);
-mark([{K,V}|Todo], More, Seen, Ts) ->		%Table key-value pair
+mark([{function,_}|Todo], More, St, Sf, Ts, Ft) ->
+    mark(Todo, More, St, Sf, Ts, Ft);
+mark([#thread{}|Todo], More, St, Sf, Ts, Ft) ->
+    mark(Todo, More, St, Sf, Ts, Ft);
+mark([#userdata{m=Meta}|Todo], More, St, Sf, Ts, Ft) ->
+    mark([Meta|Todo], More, St, Sf, Ts, Ft);
+mark([{K,V}|Todo], More, St, Sf, Ts, Ft) ->	%Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
-    mark([K,V|Todo], More, Seen, Ts);
-mark([_|Todo], More, Seen, Ts) ->		%Can ignore everything else
-    mark(Todo, More, Seen, Ts);
-mark([], [M|More], Seen, Ts) ->
-    mark(M, More, Seen, Ts);
-mark([], [], Seen, _) -> Seen.
+    mark([K,V|Todo], More, St, Sf, Ts, Ft);
+mark([_|Todo], More, St, Sf, Ts, Ft) ->		%Can ignore everything else
+    mark(Todo, More, St, Sf, Ts, Ft);
+mark([], [M|More], St, Sf, Ts, Ft) ->
+    mark(M, More, St, Sf, Ts, Ft);
+mark([], [], St, Sf, _, _) -> {St,Sf}.
+
+%% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
+%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%%  Filter tables/frames and return updated free lists and
+%%  tables/frames.
+
+filter_tables(Seen, Free0, Ts0) ->
+    Free1 = ?FOLD_TABLES(fun (K, _, Free) ->
+				 case ordsets:is_element(K, Seen) of
+				     true -> Free;
+				     false -> [K|Free]
+				 end
+			 end, Free0, Ts0),
+    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
+    {Free1,Ts1}.
+
+filter_frames(Seen, Free0, Ft0) ->
+    Free1 = array:sparse_foldl(fun (F, _, Free) ->
+				     case ordsets:is_element(F, Seen) of
+					 true -> Free;
+					 false -> [F|Free]
+				     end
+			     end, Free0, Ft0),
+    Ft1 = array:sparse_map(fun (F, Fd) ->
+				   case ordsets:is_element(F, Seen) of
+				       true -> Fd;
+				       false -> undefined
+				   end
+			   end, Ft0),
+    {Free1,Ft1}.

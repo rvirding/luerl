@@ -33,15 +33,16 @@
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
 -record(luerl, {tabs,free,next,			%Table structure
-		meta=[],			%Data type metatables
-		env,				%Environment
 		%%
-		st=[],				%Stack
-		ft,ff,fn,			%Frame table, free, next
 		g,				%Global table
+		stk=[],				%Stack
+		ft,ff,fn,			%Frame table, free, next
 		%%
+		meta=[],			%Data type metatables
 		locf=false,			%Started local function
-		tag				%Unique tag
+		tag,				%Unique tag
+		%%
+		env				%Environment, for luerl_eval
 	       }).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure

@@ -80,8 +80,8 @@ assert(As, St) ->
 
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
-    {[],St};					%No-op for the moment
-%%    {[],luerl_emul:gc(St)};
+    {[],luerl_emul:gc(St)};
+    %% {[],St};					%No-op for the moment
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
