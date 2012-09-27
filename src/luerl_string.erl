@@ -41,8 +41,8 @@
 %%-compile([bin_opt_info]).			%For when we are optimising
 
 install(St0) ->
-    {T,St1} = luerl_eval:alloc_table(table(), St0),
-    {M,St2} = luerl_eval:alloc_table(metatable(T), St1),
+    {T,St1} = luerl_emul:alloc_table(table(), St0),
+    {M,St2} = luerl_emul:alloc_table(metatable(T), St1),
     Meta0 = St2#luerl.meta,
     Meta1 = Meta0#meta{string=M},
     {T,St2#luerl{meta=Meta1}}.
@@ -254,14 +254,14 @@ gsub_repl(Cas, S, #tref{}=T, St0) ->
 	[Ca] -> Key = match_ca(Ca, S);
 	[Ca,Ca1|_] -> Key = match_ca(Ca1, S)
     end,
-    {Rs,St1} = luerl_eval:get_table_key(T, Key, St0),
+    {Rs,St1} = luerl_emul:get_table_key(T, Key, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     case Cas0 of				%Export both Ca and Args
 	[Ca] -> Args = [match_ca(Ca, S)];
 	[Ca|Cas] -> Args = match_cas(Cas, S)
     end,
-    {Rs,St1} = luerl_eval:functioncall(Repl, Args, St0),
+    {Rs,St1} = luerl_emul:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
 gsub_repl(Cas, S, Repl, St) ->			%Replace string
     case luerl_lib:to_list(Repl) of

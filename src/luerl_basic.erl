@@ -347,19 +347,29 @@ loadfile(As, St) ->
 	nil -> badarg_error(loadfile, As)
     end.
 
-do_load(S, St) ->
-    case parse_string(S) of
+do_passes([Fun|Funs], St0) ->
+    case Fun(St0) of
+	{ok,St1} -> do_passes(Funs, St1);
+	Error -> Error
+    end;
+do_passes([], St) -> {ok,St}.
+
+comp_passes() ->
+    [fun (S) ->
+	     %% Make return values "conformant".
+	     case luerl_scan:string(S) of
+		 {ok,Ts,_} -> {ok,Ts};
+		 {error,Error,_} -> {error,Error}
+	     end
+     end,
+     fun (Ts) -> luerl_parse:chunk(Ts) end,
+     fun (Chunk) -> luerl_comp:chunk(Chunk) end].
+
+do_load(Str, St) ->
+    case do_passes(comp_passes(), Str) of
 	{ok,C} ->
-	    F = fun (As, St0) ->
-			%io:fwrite("l: ~p\n", [{C,As}]),
-			Env0 = St0#luerl.env,	%Caller's environment
-			%% Evaluate at top-level,
-			Env = [lists:last(Env0)],
-			{Ret,St1} = luerl_emul:chunk(C, As, St0#luerl{env=Env}),
-			St2 = St1#luerl{env=Env0},
-			{Ret,St2}
-		end,
-	    {[{function,F}],St};
+	    Fun = fun (As, S) -> luerl_emul:chunk(C, As, S) end,
+	    {[{function,Fun}],St};
 	{error,{_,Mod,E}} ->
 	    Msg = iolist_to_binary(Mod:format_error(E)),
 	    {[nil,Msg],St}
@@ -369,19 +379,11 @@ dofile(As, St) ->
     case luerl_lib:tostrings(As) of
 	[File|_] ->
 	    {ok,Bin} = file:read_file(File),
-	    {ok,C} = parse_string(binary_to_list(Bin)),
-	    luerl_emul:chunk(C, St);
-	_ -> badarg_error(dofile, As)
-    end.
-
-parse_string(S) ->
-    case luerl_scan:string(S) of
-	{ok,Ts,_} ->
-	    case luerl_parse:chunk(Ts) of
-		{ok,C} -> {ok,C};
-		{error,E} -> {error,E}
+	    case do_passes(comp_passes(), binary_to_list(Bin)) of
+		{ok,Code} -> luerl_emul:chunk(Code, [], St);
+		_ -> badarg_error(dofile, As)
 	    end;
-	{error,E,_} -> {error,E}
+	_ -> badarg_error(dofile, As)
     end.
 
 pcall([F|As], St0) ->

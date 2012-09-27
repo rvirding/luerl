@@ -38,7 +38,7 @@
 -import(luerl_lib, [lua_error/1]).		%Shorten this
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 

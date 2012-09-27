@@ -43,7 +43,7 @@
 -import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -289,7 +289,7 @@ remove_array_1(Arr0, N) ->
 
 pack(As, St0) ->
     T = pack_loop(As, 0.0),			%Indexes are floats!
-    {Tab,St1} = luerl_eval:alloc_table(T, St0),
+    {Tab,St1} = luerl_emul:alloc_table(T, St0),
     {[Tab],St1}.
 
 pack_loop([E|Es], N) ->				%In order for an orddict!
@@ -353,7 +353,7 @@ sort([#tref{i=N}], St0) ->
     {[],St1};
 sort([#tref{i=N},Func|_], St0) ->
     Comp = fun (A, B, St) ->
-		   luerl_eval:functioncall(Func, [A,B], St)
+		   luerl_emul:functioncall(Func, [A,B], St)
 	   end,
     St1 = do_sort(Comp, St0, N),
     {[],St1};
@@ -379,10 +379,10 @@ do_sort(Comp, St0, N) ->
 lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St0) ->
-    case luerl_eval:getmetamethod(O1, O2, <<"__lt">>, St0) of
+    case luerl_emul:getmetamethod(O1, O2, <<"__lt">>, St0) of
 	nil -> lua_error({illegal_comp,sort});
 	Meta ->
-	    {Ret,St1} = luerl_eval:functioncall(Meta, [O1,O2], St0),
+	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),
 	    {[luerl_lib:is_true_value(Ret)],St1}
     end.
 
@@ -391,8 +391,8 @@ lt_comp(O1, O2, St0) ->
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
 length(#tref{i=N}=T, St) ->
-    Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
+    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St),
+    if ?IS_TRUE(Meta) -> luerl_emul:functioncall(Meta, [T], St);
        true ->
 	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
 	    {[float(length_loop(Arr))],St}

@@ -67,9 +67,9 @@ do(B, St) when is_binary(B) ->
     do(binary_to_list(B), St);
 do(S, St) when is_list(S) ->
     {ok,C} = load(S),
-    luerl_eval:chunk(C, [], St);
+    luerl_emul:chunk(C, [], St);
 do(C, St) ->					%Pre-parsed/compiled chunk
-    luerl_eval:chunk(C, [], St).
+    luerl_emul:chunk(C, [], St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
 dofile(Path) ->
@@ -77,23 +77,39 @@ dofile(Path) ->
 
 dofile(Path, St) ->
     {ok,C} = loadfile(Path),
-    luerl_eval:chunk(C, [], St).
+    luerl_emul:chunk(C, [], St).
 
 %% load(String|Binary) -> {ok,Form}.
-load(Chunk) when is_binary(Chunk) ->
-    load(binary_to_list(Chunk));
-load(Chunk) when is_list(Chunk) ->
-    {ok,Ts,_} = luerl_scan:string(Chunk),
-    luerl_parse:chunk(Ts).
+load(Bin) when is_binary(Bin) ->
+    load(binary_to_list(Bin));
+load(Str) when is_list(Str) ->
+    do_passes(comp_passes(), Str).
 
 %% loadfile(Path) -> {ok,Form}.
 loadfile(Path) ->
     {ok,Bin} = file:read_file(Path),
-    {ok,Ts,_} = luerl_scan:string(binary_to_list(Bin)),
-    luerl_parse:chunk(Ts).
+    do_passes(comp_passes(), binary_to_list(Bin)).
+
+do_passes([Fun|Funs], St0) ->
+    case Fun(St0) of
+	{ok,St1} -> do_passes(Funs, St1);
+	Error -> Error
+    end;
+do_passes([], St) -> {ok,St}.
+
+comp_passes() ->
+    [fun (S) ->
+	     %% Make return values "conformant".
+	     case luerl_scan:string(S) of
+		 {ok,Ts,_} -> {ok,Ts};
+		 {error,Error,_} -> {error,Error}
+	     end
+     end,
+     fun (Ts) -> luerl_parse:chunk(Ts) end,
+     fun (Chunk) -> luerl_comp:chunk(Chunk) end].
 
 %% init() -> State.
-init() -> luerl_eval:init().
+init() -> luerl_emul:init().
 
 %% call(Form, Terms, State) -> {Result,State}
 
@@ -101,16 +117,16 @@ call(C, Ts) -> call(C, Ts, init()).
 
 call(C, Ts, St0) ->
     {Lts,St1} = encode_list(Ts, St0),
-    {Lrs,St2} = luerl_eval:chunk(C, Lts, St1),
+    {Lrs,St2} = luerl_emul:chunk(C, Lts, St1),
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 
 %% stop(State) -> GCedState.
 stop(St) -> 
-    luerl_eval:gc(St).
+    luerl_emul:gc(St).
 
 %% gc(State) -> State.
-gc(St) -> luerl_eval:gc(St).
+gc(St) -> luerl_emul:gc(St).
 
 %% encode_list([Term], State) -> {[LuerlTerm],State}.
 %% encode(Term, State) -> {LuerlTerm,State}.
@@ -133,7 +149,7 @@ encode(L, St0) when is_list(L) ->
 					  {V1,S1} = encode(V0, S0),
 					  {{I,V1},{I+1,S1}}
 			      end, {1.0,St0}, L),
-    {T,St2} = luerl_eval:alloc_table(Es, St1),
+    {T,St2} = luerl_emul:alloc_table(Es, St1),
     {T,St2};					%No more to do for now
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
