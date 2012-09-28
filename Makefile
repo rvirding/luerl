@@ -15,7 +15,7 @@ YRL_INTERM   := $(YRL_MODULES:%=$(SRCDIR)/%.erl)
 MODULES      := $(XRL_MODULES) $(YRL_MODULES) $(ERL_MODULES)
 OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
 
-all: $(OBJECTS) hello.beam 
+all: $(OBJECTS)
 
 $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
 	@ mkdir -p $(BEAMDIR) 
@@ -27,32 +27,21 @@ $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
 %.erl: %.yrl
 	erlc -o $(SRCDIR) $<
 
-hello: all
-	@ erl -pa ./ebin -s hello run -s init stop -noshell
-
-hello.beam: hello.erl
-	@ echo "----------------------------------" 
-	@ echo "Compiling and running ./hello.erl:" 
-	erlc hello.erl
-	erl -pa ./ebin -s hello run -s init stop -noshell
-
-hello2: all
-	@ echo "-------------------------------------------" 
-	@ echo "./examples/hello/hello2.erl:" 
-	erlc -o ebin ./examples/hello/hello2.erl
-	erl -pa ./ebin -s hello2 run -s init stop -noshell
-
 clean:
 	@ rm -rf $(BEAMDIR)
 	@ rm -f *.beam
 	@ rm -f erl_crash.dump
 	@ rm -f $(XRL_INTERM)
 	@ rm -f $(YRL_INTERM)
+	$(MAKE) -C examples clean
 
 echo: 
 	echo $(OBJECTS) 
 
-.PHONY: all
+examples: all
+	$(MAKE) -C examples
+
+.PHONY: all examples clean
 
 # this protects the intermediate .erl files from make's auto deletion
 .SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
