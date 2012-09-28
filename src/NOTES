@@ -11,6 +11,18 @@ around this by using the more general prefixexp and doing a post-test
 to check that it is a functioncall. This works together with the
 varlist.
 
+For the Lua data types we internally use the corresponding Erlang:
+
+nil		- nil
+true/false	- true/false
+strings		- binaries
+tables		- #table{} with array for keys 1..n, ordict for rest
+userdata	- #userdata{}
+function	- #function{} or {function,Fun}
+thread		- #thread{}
+
+See luerl.hrl for the field names of the records.
+
 All tables are combinations of orddicts and arrays. In each table an
 array is used for integer keys >= 1 while an orddict is used for all
 other keys. We use this information when building/ processing
