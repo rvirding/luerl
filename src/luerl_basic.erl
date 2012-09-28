@@ -285,7 +285,7 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring({function,L,_,_,_}) ->
+tostring(#function{l=L}) ->
     iolist_to_binary(["function: ",io_lib:write(L)]);
 tostring({function,F}) -> iolist_to_binary(["function: ",io_lib:write(F)]);
 tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
@@ -299,7 +299,7 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
-type({function,_,_,_,_}) -> <<"function">>;	%Functions defined in Lua
+type(#function{}) -> <<"function">>;		%Functions defined in Lua
 type({function,_}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
 type(#userdata{}) -> <<"userdata">>;
