@@ -40,9 +40,7 @@
 		%%
 		meta=[],			%Data type metatables
 		locf=false,			%Started local function
-		tag,				%Unique tag
-		%%
-		env				%Environment, for luerl_eval
+		tag				%Unique tag
 	       }).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
@@ -64,7 +62,8 @@
 %% There are two function types, this the Lua one, and an Erlang one
 %% with the same name. So no type for it.
 -record(function,{l=0,				%Line number (why?)
-		  env,				%Environment
+		  sz,				%Block size
+		  stk,				%Stack
 		  pars,				%Parameters
 		  b}).				%Code block
 

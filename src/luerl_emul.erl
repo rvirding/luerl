@@ -352,6 +352,10 @@ call({functiondef,L,Sz,_,Ps,B}, Args, St0) ->
     {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
+call(#function{}=Func, Args, St0) ->
+    {Ret,St1} = functioncall(Func, Args, St0),
+    %% Should do GC here.
+    {Ret,St1};
 call({function,_}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -466,9 +470,10 @@ assign_var_last({'NAME',_,N}, Val, SoFar, St) ->
 assign_var_last({key_field,_,Exp}, Val, SoFar, St0) ->
     {Key,St1} = exp(Exp, St0),
     set_table_key(SoFar, first_value(Key), Val, St1);
-assign_var_last({method,_,{'NAME',_,N}}, {function,L,Sz,Stk,Pars,B}, SoFar, St) ->
+assign_var_last({method,_,{'NAME',L,N}}, #function{pars=Pars}=Func,
+		SoFar, St) ->
     %% Method a function, make a "method" by adding self parameter.
-    set_table_name(SoFar, N, {function,L,Sz,Stk,[{'NAME',L,self}|Pars],B}, St).
+    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
 
 %% do_while(TestExp, Size, Body, State) -> State.
 
@@ -654,7 +659,7 @@ exp({local_var,_,'...',_}=VarArg, St) ->	%Get '...', error if undefined
 	Val -> {Val,St}				%Already a list
     end;
 exp({functiondef,L,Sz,Ps,B}, St) ->
-    {[{function,L,Sz,St#luerl.stk,Ps,B}],St#luerl{locf=true}};
+    {[#function{l=L,sz=Sz,stk=St#luerl.stk,pars=Ps,b=B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
@@ -745,7 +750,7 @@ prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
 	    functioncall(Fval, [SoFar|Args1], St2)
     end.
 
-functioncall({function,_,Sz,Stk,Ps,B}, Args, St0) ->
+functioncall(#function{sz=Sz,stk=Stk,pars=Ps,b=B}, Args, St0) ->
     Stk0 = St0#luerl.stk,			%Caller's stack
     St1 = St0#luerl{stk=Stk},			%Set function's stack
     Do = fun (S0) ->
@@ -1068,7 +1073,7 @@ mark([#fref{i=F}|Todo], More, St, Sf0, Ts, Ft) ->
 	    Ses = tuple_to_list(array:get(F, Ft)),
 	    mark(Todo, [Ses|More], St, Sf1, Ts, Ft)
     end;
-mark([{function,_,_,Stk,_,_}|Todo], More, St, Sf, Ts, Ft) ->
+mark([#function{stk=Stk}|Todo], More, St, Sf, Ts, Ft) ->
     mark(Todo, [Stk|More], St, Sf, Ts, Ft);
 %% Catch these as they would match table key-value pair.
 mark([{function,_}|Todo], More, St, Sf, Ts, Ft) ->
