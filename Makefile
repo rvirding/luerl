@@ -17,7 +17,7 @@ OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
 
 all: $(OBJECTS)
 
-$(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
+$(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
 	@ mkdir -p $(BEAMDIR) 
 	erlc -o $(BEAMDIR) $<
 
