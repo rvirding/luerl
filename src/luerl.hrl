@@ -61,6 +61,12 @@
 -record(table, {a,t=[],m=nil}).			%Table type, array, tab, meta
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
+%% There are two function types, this the Lua one, and an Erlang one
+%% with the same name. So no type for it.
+-record(function,{l=0,				%Line number (why?)
+		  env,				%Environment
+		  pars,				%Parameters
+		  b}).				%Code block
 
 -record(fref, {i}).				%Frame reference, index
 

@@ -367,7 +367,7 @@ call({functiondef,L,Ps,B}, Args, St0) ->
     {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
-call({function,_,_,_,_}=Func, Args, St0) ->
+call(#function{}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
@@ -448,7 +448,8 @@ stat({goto,_,_}, _) ->				%Not implemented yet
 stat({block,_,B}, St) ->
     block(B, St);
 stat({functiondef,L,Fname,Ps,B}, St0) ->
-    St1 = set_var(Fname, {function,L,St0#luerl.env,Ps,B}, St0),
+    St1 = set_var(Fname, #function{l=L,env=St0#luerl.env,pars=Ps,b=B},
+		  St0),
     St1#luerl{locf=true};
 stat({'while',_,Exp,Body}, St) ->
     do_while(Exp, Body, St);
@@ -504,9 +505,9 @@ var_last({'NAME',_,N}, Val, SoFar, St) ->
 var_last({key_field,_,Exp}, Val, SoFar, St0) ->
     {Key,St1} = exp(Exp, St0),
     set_table_key(SoFar, first_value(Key), Val, St1);
-var_last({method,_,{'NAME',_,N}}, {function,L,Env,Pars,B}, SoFar, St) ->
+var_last({method,_,{'NAME',_,N}}, #function{l=L,pars=Pars}=Func, SoFar, St) ->
     %% Method a function, make a "method" by adding self parameter.
-    set_table_name(SoFar, N, {function,L,Env,[{'NAME',L,self}|Pars],B}, St).
+    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
 
 %% do_while(TestExp, Body, State) -> State.
 
@@ -654,7 +655,7 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 local({functiondef,L,{'NAME',_,N},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
     Ts1 = set_local_name_env(N, nil, Ts0, Env),
-    Ts2 = set_local_name_env(N, {function,L,Env,Ps,B}, Ts1, Env),
+    Ts2 = set_local_name_env(N, #function{l=L,env=Env,pars=Ps,b=B}, Ts1, Env),
     St#luerl{tabs=Ts2,locf=true};
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
@@ -699,7 +700,7 @@ exp({'...',_}, St) ->				%Get '...', error if undefined
 	Val -> {Val,St}				%Already a list
     end;
 exp({functiondef,L,Ps,B}, St) ->
-    {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
+    {[#function{l=L,env=St#luerl.env,pars=Ps,b=B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
@@ -788,7 +789,7 @@ prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
 	    functioncall(Fval, [SoFar|Args1], St2)
     end.
 
-functioncall({function,_,Env,Ps,B}, Args, St0) ->
+functioncall(#function{env=Env,pars=Ps,b=B}, Args, St0) ->
     Env0 = St0#luerl.env,			%Caller's environment
     St1 = St0#luerl{env=Env},			%Set function's environment
     Do = fun (S0) ->
@@ -801,7 +802,7 @@ functioncall({function,_,Env,Ps,B}, Args, St0) ->
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
-functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
+functioncall(#userdata{d=Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     %% io:format("fc: ~p\n", [{Func,As}]),
@@ -1031,7 +1032,7 @@ getmetamethod(O1, O2, E, St) ->
 getmetamethod(#tref{i=N}, E, #luerl{tabs=Ts}) ->
     #table{m=Meta} = ?GET_TABLE(N, Ts),
     getmetamethod_tab(Meta, E, Ts);
-getmetamethod({userdata,_}, E, #luerl{tabs=Ts,meta=Meta}) ->
+getmetamethod(#userdata{}, E, #luerl{tabs=Ts,meta=Meta}) ->
     getmetamethod_tab(Meta#meta.userdata, E, Ts);
 getmetamethod(S, E, #luerl{tabs=Ts,meta=Meta}) when is_binary(S) ->
     getmetamethod_tab(Meta#meta.string, E, Ts);
@@ -1101,7 +1102,7 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
 		 Seen1, Ts)
     end;
-mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
+mark([#function{env=Env}|Todo], More, Seen, Ts) ->
     mark(Todo, [Env|More], Seen, Ts);
 %% Catch these as they would match table key-value pair.
 mark([{function,_}|Todo], More, Seen, Ts) ->
