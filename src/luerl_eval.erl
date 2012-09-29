@@ -1057,13 +1057,7 @@ gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
     Seen = mark(Root, [], [], Ts0),
     %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
-    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
-    Free1 = ?FOLD_TABLES(fun (K, _, F) ->
-				 case ordsets:is_element(K, Seen) of
-				     true -> F;
-				     false -> [K|F]
-				 end
-			 end, Free0, Ts0),
+    {Free1,Ts1} = filter_tables(Seen, Free0, Ts0),
     St#luerl{tabs=Ts1,free=Free1}.
 
 %% mark(ToDo, MoreTodo, Seen, Tabs) -> Seen.
@@ -1081,8 +1075,10 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    Seen1 = ordsets:add_element(T, Seen0),
 	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
 	    %% Have to be careful where add Tab and Meta as Tab is a
-	    %% [{Key,Val}] and Meta is a nil|#tref{i=M}. We want lists.
-	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
+	    %% [{Key,Val}], Arr is array and Meta is
+	    %% nil|#tref{i=M}. We want lists.
+	    Aes = array:sparse_to_list(Arr),
+	    mark([Meta|Todo], [[{in_table,T}],Tab,Aes,[{in_table,-T}]|More],
 		 Seen1, Ts)
     end;
 mark([#function{env=Env}|Todo], More, Seen, Ts) ->
@@ -1102,3 +1098,18 @@ mark([_|Todo], More, Seen, Ts) ->		%Can ignore everything else
 mark([], [M|More], Seen, Ts) ->
     mark(M, More, Seen, Ts);
 mark([], [], Seen, _) -> Seen.
+
+%% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
+%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%%  Filter tables/frames and return updated free lists and
+%%  tables/frames.
+
+filter_tables(Seen, Free0, Ts0) ->
+    Free1 = ?FOLD_TABLES(fun (K, _, Free) ->
+				 case ordsets:is_element(K, Seen) of
+				     true -> Free;
+				     false -> [K|Free]
+				 end
+			 end, Free0, Ts0),
+    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
+    {Free1,Ts1}.
