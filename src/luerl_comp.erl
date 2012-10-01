@@ -30,7 +30,16 @@
 %% This version of the compiler just handles local/global
 %% variables. The basic AST is preserved but a size field has been
 %% added to blocks and function definitions and all variables are now
-%% explicitly local (and where) or global.
+%% explicitly local (and where) or global. This checking of variables
+%% means that no 'NAME's are returned and variables used as table
+%% lookup keys are now converted to 'STRING's.
+%%
+%% We explicitly mirror the parser rules which generate the AST and do
+%% not try to fold similar structures into common code. While this
+%% means we get more code it also becomes more explicit and clear what
+%% we are doing. It may also allow for specific optimisations. And
+%% example is that we DON'T fold 'var' and 'funcname' even though they
+%% are almost the same.
 
 -module(luerl_comp).
 
@@ -57,174 +66,6 @@ string(S) ->
 	       lab=0,				%Label index
 	       lint=#lint{}			%Lint data
 	      }).
-
-%% chunk(Chunk) -> {ok,Code} | {error,Reason}.
-
-chunk({functiondef,L,Ps,B}) ->
-    St0 = #comp{},
-    {Cf,_} = exp({functiondef,L,Ps,B}, false, St0),
-    {ok,Cf}.
-
-%% chunk(Code) ->
-%%     St0 = #comp{},
-%%     %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
-%%     {Is0,_} = block(Code, St0),
-%%     Is1 = fix_labels(Is0),
-%%     list_to_tuple(Is1).
-
-with_block(Do, St0) ->
-    St1 = push_frame(St0),			%Push a new variable scope
-    {C,St2} = Do(St1#comp{}),
-    %%io:format("wb: ~p\n", [{St2#comp.fs}]),
-    St3 = pop_frame(St2),			%Restore old variable scope
-    {C,frame_size(St2),St3}.
-
-block(Stats, St) ->
-    Do = fun (S) -> stats(Stats, S) end,
-    with_block(Do, St).
-
-stats([S|Ss], St0) ->
-    {Is,St1} = stat(S, St0),
-    {Iss,St2} = stats(Ss, St1),
-    {[Is|Iss],St2};
-stats([], St) -> {[],St}.
-
-stat({';',_}=Semi, St) -> {Semi,St};		%No-op
-stat({assign,L,Vs,Es}, St0) ->
-    {Ces,St1} = explist(Es, St0),
-    {Cvs,St2} = assign_loop(Vs, St1),
-    {{assign,L,Cvs,Ces},St2};
-stat({return,L,Es}, St0) ->
-    {Ces,St1} = explist(Es, St0),
-    {{return,L,Ces},St1};
-stat({break,L}, St) ->				%Interesting
-    {{break,L},St};
-stat({block,L,B}, St0) ->
-    {Cb,Sz,St1} = block(B, St0),
-    {{block,L,Sz,Cb},St1};
-stat({functiondef,L,Fname,Ps,B}, St) ->
-    functiondef(L, Fname, Ps, B, St);
-    %% stat({assign,L,[Fname],[{functiondef,L,Ps,B}]}, St);
-stat({'while',L,Exp,Body}, St0) ->
-    {Ce,Sz,Cb,St1} = do_while(Exp, Body, St0),
-    {{'while',L,Ce,Sz,Cb},St1};
-stat({'repeat',L,Body,Exp}, St0) ->
-    {Sz,Cb,Ce,St1} = do_repeat(Body, Exp, St0),
-    {{'repeat',L,Sz,Cb,Ce},St1};
-stat({'if',L,Tests,Else}, St0) ->
-    {Cts,Ce,St1} = do_if(Tests, Else, St0),
-    {{'if',L,Cts,Ce},St1};
-stat({for,Line,V,I,L,S,B}, St0) ->
-    {Cv,Ci,Cl,Cs,Sz,Cb,St1} = numeric_for(V, I, L, S, B, St0),
-    {{for,Line,Cv,Ci,Cl,Cs,Sz,Cb},St1};
-stat({for,Line,V,I,L,B}, St0) ->			%Default step of 1.0
-    {Cv,Ci,Cl,Cs,Sz,Cb,St1} = numeric_for(V, I, L, {'NUMBER',Line,1.0}, B, St0),
-    {{for,Line,Cv,Ci,Cl,Cs,Sz,Cb},St1};
-stat({for,Line,Ns,Gens,B}, St0) ->
-    {Cvs,Cg,Sz,Cb,St1} = generic_for(Ns, Gens, B, St0),
-    {{for,Line,Cvs,Cg,Sz,Cb},St1};
-stat({local,Local}, St0) ->
-    {Cloc,St1} = local(Local, St0),
-    {{local,Cloc},St1};
-stat(Exp, St0) ->
-    {Ce,St1} = exp(Exp, false, St0),
-    {Ce,St1}.
-
-assign_loop([V|Vs], St0) ->
-    {Cv,St1} = assign_var(V, St0),
-    {Cvs,St2} = assign_loop(Vs, St1),
-    {[Cv|Cvs],St2};
-assign_loop([], St) -> {[],St}.
-
-assign_var({'.',L,Exp,Rest}, St0) ->
-    {Ce,St1} = prefixexp_first(Exp, true, St0),
-    {Cr,St2} = assign_var_rest(Rest, St1),
-    {{'.',L,Ce,Cr},St2};
-assign_var({'NAME',L,N}, St) ->
-    Var = get_var(L, N, St),
-    {Var,St}.
-
-assign_var_rest({'.',L,Exp,Rest}, St0) ->
-    {Ce,St1} = prefixexp_element(Exp, true, St0),
-    {Cr,St2} = assign_var_rest(Rest, St1),
-    {{'.',L,Ce,Cr},St2};
-assign_var_rest(Exp, St) ->
-    assign_var_last(Exp, St).
-
-assign_var_last({'NAME',_,_}=Name, St) ->
-    {Name,St};
-assign_var_last({key_field,L,Exp}, St0) ->
-    {Ce,St1} = exp(Exp, true, St0),
-    {{key_field,L,Ce},St1};
-assign_var_last({method,_,{'NAME',_,_}}=Meth, St) ->
-    {Meth,St}.
-
-functiondef(L, Ps, B, St0) ->
-    {Cp,Cb,Sz,St1} = function_block(Ps, B, St0),
-    {{functiondef,L,Sz,Cp,Cb},St1}.
-
-functiondef(L, Name, Ps, B, St0) ->
-    {Cn,St1} = assign_var(Name, St0),
-    {Cp,Cb,Sz,St2} = function_block(Ps, B, St1),
-    {{functiondef,L,Sz,Cn,Cp,Cb},St2}.
-
-%% do_while(Test, Body, State) -> {Test,Body,State}.
-
-do_while(Exp, B, St0) ->
-    {Ce,St1} = exp(Exp, true, St0),
-    {Cb,Sz,St2} = block(B, St1),
-    {Ce,Sz,Cb,St2}.
-
-%% do_repeat(Body, Test, State) -> {Instrs,State}.
-
-do_repeat(B, Exp, St0) ->
-    RB = fun (S0) ->				%Repeat block
-		 {Cb,S1} = stats(B, S0),
-		 {Ce,S2} = exp(Exp, true, S1),
-		 {{Cb,Ce},S2}
-	 end,
-    {{Cb,Ce},Sz,St1} = with_block(RB, St0),
-    {Sz,Cb,Ce,St1}.
-
-%% do_if(Tests, Else, State) -> {Test,Else,State}.
-
-do_if(Tests, Else, St0) ->
-    {Cts,St1} = do_if_tests(Tests, St0),
-    {Ce,Esz,St2} = block(Else, St1),
-    {Cts,{Esz,Ce},St2}.
-
-do_if_tests([{Exp,B}|Ts], St0) ->
-    {Ce,St1} = exp(Exp, true, St0),
-    {Cb,Sz,St2} = block(B, St1),
-    {Cts,St3} = do_if_tests(Ts, St2),
-    {[{Ce,Sz,Cb}|Cts],St3};
-do_if_tests([], St) -> {[],St}.
-
-%% numeric_for(Var, Init, Limit, Step, Block, State) -> {Instrs,State}.
-%%  This is more or less how the Lua machine does it, but I don't
-%%  really like it.
-
-numeric_for({'NAME',Ln,N}, I, L, S, B, St0) ->
-    {[Ci,Cl,Cs],St1} = explist([I,L,S], St0),
-    For = fun (S0) ->
-		  {V,S1} = make_local_var(Ln, N, S0),
-		  {Cb,S2} = stats(B, S1),
-		  {{V,Cb},S2}
-	  end,
-    {{V,Cb},Sz,St2} = with_block(For, St1),
-    {V,Ci,Cl,Cs,Sz,Cb,St2}.
-
-%% generic_for(Names, Gens, Block, State) -> {Instrs,State}.
-
-generic_for(Ns, Gens, B, St0) ->
-    {Cgs,St1} = explist(Gens, St0),
-    For = fun (S0) ->
-		  {Vs,S1} = add_local_pars(Ns, S0),
-		  {Cb,S2} = stats(B, S1),
-		  {{Vs,Cb},S2}
-	  end,
-    {{Cvs,Cb},Sz,St2} = with_block(For, St1),
-    {Cvs,Cgs,Sz,Cb,St2}.
 
 %% push_frame(State) -> State.
 %% pop_frame(State) -> State.
@@ -285,6 +126,231 @@ get_var(L, N, St) ->
 	global -> {global_var,L,N}		%Global
     end.
 
+%% chunk(Chunk) -> {ok,Code} | {error,Reason}.
+
+chunk({functiondef,L,Ps,B}) ->
+    St0 = #comp{},
+    {Cf,_} = exp({functiondef,L,Ps,B}, St0),
+    {ok,Cf}.
+
+%% chunk(Code) ->
+%%     St0 = #comp{},
+%%     %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
+%%     {Is0,_} = block(Code, St0),
+%%     Is1 = fix_labels(Is0),
+%%     list_to_tuple(Is1).
+
+with_block(Do, St0) ->
+    St1 = push_frame(St0),			%Push a new variable scope
+    {C,St2} = Do(St1#comp{}),
+    %%io:format("wb: ~p\n", [{St2#comp.fs}]),
+    St3 = pop_frame(St2),			%Restore old variable scope
+    {C,frame_size(St2),St3}.
+
+block(Stats, St) ->
+    Do = fun (S) -> stats(Stats, S) end,
+    with_block(Do, St).
+
+stats([{';',_}|Ss], St) -> stats(Ss, St);	%No-op so we drop it
+stats([S|Ss], St0) ->
+    {Is,St1} = stat(S, St0),
+    {Iss,St2} = stats(Ss, St1),
+    {[Is|Iss],St2};
+stats([], St) -> {[],St}.
+
+%% stat(Statement, State) -> {CStat,State}.
+
+stat({';',_}=Semi, St) -> {Semi,St};		%No-op
+stat({assign,L,Vs,Es}, St0) ->
+    {Ces,St1} = explist(Es, St0),
+    {Cvs,St2} = assign_loop(Vs, St1),
+    {{assign,L,Cvs,Ces},St2};
+stat({return,L,Es}, St0) ->
+    {Ces,St1} = explist(Es, St0),
+    {{return,L,Ces},St1};
+stat({break,L}, St) ->				%Interesting
+    {{break,L},St};
+stat({block,L,B}, St0) ->
+    {Cb,Sz,St1} = block(B, St0),
+    {{block,L,Sz,Cb},St1};
+stat({'while',L,Exp,Body}, St0) ->
+    {Ce,Sz,Cb,St1} = do_while(Exp, Body, St0),
+    {{'while',L,Ce,Sz,Cb},St1};
+stat({'repeat',L,Body,Exp}, St0) ->
+    {Sz,Cb,Ce,St1} = do_repeat(Body, Exp, St0),
+    {{'repeat',L,Sz,Cb,Ce},St1};
+stat({'if',L,Tests,Else}, St0) ->
+    {Cts,Ce,St1} = do_if(Tests, Else, St0),
+    {{'if',L,Cts,Ce},St1};
+stat({for,Line,V,I,L,S,B}, St0) ->
+    {Cv,Ci,Cl,Cs,Sz,Cb,St1} = numeric_for(V, I, L, S, B, St0),
+    {{for,Line,Cv,Ci,Cl,Cs,Sz,Cb},St1};
+stat({for,Line,V,I,L,B}, St0) ->			%Default step of 1.0
+    {Cv,Ci,Cl,Cs,Sz,Cb,St1} = numeric_for(V, I, L, {'NUMBER',Line,1.0}, B, St0),
+    {{for,Line,Cv,Ci,Cl,Cs,Sz,Cb},St1};
+stat({for,Line,Ns,Gens,B}, St0) ->
+    {Cvs,Cg,Sz,Cb,St1} = generic_for(Ns, Gens, B, St0),
+    {{for,Line,Cvs,Cg,Sz,Cb},St1};
+stat({functiondef,L,Fname,Ps,B}, St) ->
+    functiondef(L, Fname, Ps, B, St);
+    %% stat({assign,L,[Fname],[{functiondef,L,Ps,B}]}, St);
+stat({local,Local}, St0) ->
+    {Cloc,St1} = local(Local, St0),
+    {{local,Cloc},St1};
+stat(Exp, St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {Ce,St1}.
+
+assign_loop([V|Vs], St0) ->
+    {Cv,St1} = var(V, St0),
+    {Cvs,St2} = assign_loop(Vs, St1),
+    {[Cv|Cvs],St2};
+assign_loop([], St) -> {[],St}.
+
+%% var(VarExp, State) -> {VarExp,State}.
+%%  Step down the prefixexp sequence evaluating as we go, stop at the
+%%  end and return a key and a table where to put data. This is a
+%%  prefixexp with different tail.
+
+var({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = prefixexp_first(Exp, St0),
+    {Cr,St2} = var_rest(Rest, St1),
+    {{'.',L,Ce,Cr},St2};
+var({'NAME',L,N}, St) -> {get_var(L, N, St),St}.
+
+var_rest({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = prefixexp_element(Exp, St0),
+    {Cr,St2} = var_rest(Rest, St1),
+    {{'.',L,Ce,Cr},St2};
+var_rest(Exp, St) ->
+    var_last(Exp, St).
+
+var_last({'NAME',L,N}, St) ->
+    %% Transform this to a key_field with the name string
+    S = name_string(N),
+    {{key_field,L,{'STRING',L,S}},St};
+var_last({key_field,L,Exp}, St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {{key_field,L,Ce},St1}.
+
+%% do_while(Test, Body, State) -> {Test,Body,State}.
+
+do_while(Exp, B, St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {Cb,Sz,St2} = block(B, St1),
+    {Ce,Sz,Cb,St2}.
+
+%% do_repeat(Body, Test, State) -> {Instrs,State}.
+
+do_repeat(B, Exp, St0) ->
+    RB = fun (S0) ->				%Repeat block
+		 {Cb,S1} = stats(B, S0),
+		 {Ce,S2} = exp(Exp, S1),
+		 {{Cb,Ce},S2}
+	 end,
+    {{Cb,Ce},Sz,St1} = with_block(RB, St0),
+    {Sz,Cb,Ce,St1}.
+
+%% do_if(Tests, Else, State) -> {Test,Else,State}.
+
+do_if(Tests, Else, St0) ->
+    {Cts,St1} = do_if_tests(Tests, St0),
+    {Ce,Esz,St2} = block(Else, St1),
+    {Cts,{Esz,Ce},St2}.
+
+do_if_tests([{Exp,B}|Ts], St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {Cb,Sz,St2} = block(B, St1),
+    {Cts,St3} = do_if_tests(Ts, St2),
+    {[{Ce,Sz,Cb}|Cts],St3};
+do_if_tests([], St) -> {[],St}.
+
+%% numeric_for(Var, Init, Limit, Step, Block, State) -> {Instrs,State}.
+%%  This is more or less how the Lua machine does it, but I don't
+%%  really like it.
+
+numeric_for({'NAME',Ln,N}, I, L, S, B, St0) ->
+    {[Ci,Cl,Cs],St1} = explist([I,L,S], St0),
+    For = fun (S0) ->
+		  {V,S1} = make_local_var(Ln, N, S0),
+		  {Cb,S2} = stats(B, S1),
+		  {{V,Cb},S2}
+	  end,
+    {{V,Cb},Sz,St2} = with_block(For, St1),
+    {V,Ci,Cl,Cs,Sz,Cb,St2}.
+
+%% generic_for(Names, Gens, Block, State) -> {Instrs,State}.
+
+generic_for(Ns, Gens, B, St0) ->
+    {Cgs,St1} = explist(Gens, St0),
+    For = fun (S0) ->
+		  {Vs,S1} = add_local_pars(Ns, S0),
+		  {Cb,S2} = stats(B, S1),
+		  {{Vs,Cb},S2}
+	  end,
+    {{Cvs,Cb},Sz,St2} = with_block(For, St1),
+    {Cvs,Cgs,Sz,Cb,St2}.
+
+functiondef(L, Ps, B, St0) ->
+    {Cp,Cb,Sz,St1} = function_block(Ps, B, St0),
+    {{functiondef,L,Sz,Cp,Cb},St1}.
+
+%% functiondef(Line, Name, Pars, Block, State) -> {CFunc,State}.
+%%  Have to handle the case where the function is a "method". All this
+%%  really means is that the function has an extra parameter 'self'
+%%  prepended to the paramter list.
+
+functiondef(L, Name0, Ps0, B, St0) ->
+    %% Check if method and transform method to 'NAME'.
+    case is_method(Name0) of			%Export Name1 and Ps1
+	{yes,Name1} -> Ps1 = [{'NAME',L,self}|Ps0];
+	no -> Name1 = Name0, Ps1 = Ps0
+    end,
+    {Cn,St1} = funcname(Name1, St0),
+    {Cp,Cb,Sz,St2} = function_block(Ps1, B, St1),
+    {{functiondef,L,Cn,Sz,Cp,Cb},St2}.
+
+is_method({'NAME',_,_}) -> no;
+is_method({'.',L,N,Rest0}) ->
+    case is_method(Rest0) of
+        {yes,Rest1} -> {yes,{'.',L,N,Rest1}};
+        no -> no                                %No change
+    end;
+is_method({method,_,{'NAME',_,_}=N}) -> {yes,N}.
+
+%% funcname(FuncNameExp, State) -> {CFuncNameExp,State}.
+
+funcname({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = funcname_first(Exp, St0),
+    {Cr,St2} = funcname_rest(Rest, St1),
+    {{'.',L,Ce,Cr},St2};
+funcname({'NAME',L,N}, St) ->
+    {get_var(L, N, St),St}.
+
+funcname_first({'NAME',L,N}, St) ->
+    {get_var(L, N, St),St}.
+
+funcname_rest({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = funcname_element(Exp, St0),
+    {Cr,St2} = funcname_rest(Rest, St1),
+    {{'.',L,Ce,Cr},St2};
+funcname_rest(Exp, St) ->
+    funcname_last(Exp, St).
+
+funcname_element({'NAME',L,N}, St) ->
+    %% Transform this to key_field with the name string.
+    S = name_string(N),
+    {{key_field,L,{'STRING',L,S}},St}.
+
+funcname_last({'NAME',L,N}, St) ->
+    %% Transform this to key_field with the name string.
+    S = name_string(N),
+    {{key_field,L,{'STRING',L,S}},St};
+funcname_last({method,L,{'NAME',L,N}}, St) ->	%This will never occur
+    %% Transform this to method with the name string.
+    S = name_string(N),
+    {{method,L,{'STRING',L,S}},St}.
+
 %% local(Local, State) -> {Instrs,State}.
 %% Create and assign local variables.
 
@@ -303,111 +369,92 @@ assign_local_loop([{'NAME',L,N}|Ns], St0) ->
     {[Var|Vs],St2};
 assign_local_loop([], St) -> {[],St}.
 
-
-assign_local_loop([{'NAME',_,N}|Vs], Vc, [E], Ec, St0) ->
-    {Ies,St1} = exp(E, false, St0),
-    {Iass,St2} = assign_local_loop(Vs, Vc+1, [], Ec+1, St1),
-    St3 = St2#comp{lvs=[N|St2#comp.lvs]},
-    {Ies ++ Iass ++ [name_op(set_local, N)],St3};
-assign_local_loop([{'NAME',_,N}|Vs], Vc, [E|Es], Ec, St0) ->
-    {Ies,St1} = exp(E, true, St0),
-    {Iass,St2} = assign_local_loop(Vs, Vc+1, Es, Ec+1, St1),
-    St3 = St2#comp{lvs=[N|St2#comp.lvs]},
-    {Ies ++ Iass ++ [name_op(set_local, N)],St3};
-assign_local_loop([{'NAME',_,N}|Vs], Vc, [], Ec, St0) ->
-    {Iass,St1} = assign_local_loop(Vs, Vc+1, [], Ec, St0),
-    St2 = St1#comp{lvs=[N|St1#comp.lvs]},
-    {Iass ++ [name_op(set_local, N)],St2};
-assign_local_loop([], Vc, [E|Es], Ec, St0) ->	%No more variables
-    {Ies,St1} = exp(E, false, St0),		%It will be dropped anyway
-    {Iass,St2} = assign_local_loop([], Vc, Es, Ec, St1),
-    {Ies ++ [pop] ++ Iass,St2};
-assign_local_loop([], Vc, [], Ec, St) -> {[{unpack_vals,Vc,Ec}],St}.
-
-explist(Es, St) -> explist(Es, false, St).	%The default last case
-
-explist([E], Last, St0) ->
-    {I,St1} = exp(E, Last, St0),
+explist([E], St0) ->
+    {I,St1} = exp(E, St0),
     {[I],St1};
-explist([E|Es], Last, St0) ->
-    {Ies,St1} = exp(E, true, St0),
-    {Iess,St2} = explist(Es, Last, St1),
+explist([E|Es], St0) ->
+    {Ies,St1} = exp(E, St0),
+    {Iess,St2} = explist(Es, St1),
     {[Ies|Iess],St2};
-explist([], _, St) -> {[],St}.			%No expressions at all
+explist([], St) -> {[],St}.			%No expressions at all
 
-%% exp(Expression, Single, State) -> {Ins,State}.
+%% exp(Expression, State) -> {Ins,State}.
 %%  Single determines if we are to only return the first value of a
 %%  list of values. Single false does not make us a return a list.
 
-exp({nil,_}=Nil, _, St) -> {Nil,St};
-exp({false,_}=F, _, St) -> {F,St};
-exp({true,_}=T, _, St) -> {T,St};
-exp({'NUMBER',_,_}=N, _, St) -> {N,St};
-exp({'STRING',_,_}=S, _, St) -> {S,St};
-exp({'...',L}, _, St) ->
+exp({nil,_}=Nil, St) -> {Nil,St};
+exp({false,_}=F, St) -> {F,St};
+exp({true,_}=T, St) -> {T,St};
+exp({'NUMBER',_,_}=N, St) -> {N,St};
+exp({'STRING',_,_}=S, St) -> {S,St};
+exp({'...',L}, St) ->
     Var = get_var(L, '...', St),
     {Var,St};
-exp({functiondef,L,Ps,B}, _, St0) ->
+exp({functiondef,L,Ps,B}, St0) ->
     {Cf,St1} = functiondef(L, Ps, B, St0),
     {Cf,St1};
-exp({table,L,Fs}, _, St0) ->
+exp({table,L,Fs}, St0) ->
     {Cfs,St1} = tableconstructor(Fs, St0),
     {{table,L,Cfs},St1};
 %% 'and' and 'or' short-circuit so need special handling.
-%% exp({op,_,'and',A1,A2}, S, St0) ->
+%% exp({op,_,'and',A1,A2}, St0) ->
 %%     {After,St1} = new_label(St0),
-%%     {Ia1s,St2} = exp(A1, true, St1),
-%%     {Ia2s,St3} = exp(A2, S, St2),
+%%     {Ia1s,St2} = exp(A1, St1),
+%%     {Ia2s,St3} = exp(A2, St2),
 %%     %% A bit convoluted with the stack here.
 %%     {Ia1s ++ [dup,{br_false,After},pop] ++ Ia2s ++ [{label,After}], St3};
-%% exp({op,_,'or',A1,A2}, S, St0) ->
+%% exp({op,_,'or',A1,A2}, St0) ->
 %%     {After,St1} = new_label(St0),
-%%     {Ia1s,St2} = exp(A1, true, St1),
-%%     {Ia2s,St3} = exp(A2, S, St2),
+%%     {Ia1s,St2} = exp(A1, St1),
+%%     {Ia2s,St3} = exp(A2, St2),
 %%     %% A bit convoluted with the stack here.
 %%     {Ia1s ++ [dup,{br_true,After},pop] ++ Ia2s ++ [{label,After}], St3};
 %% All the other operators are strict.
-exp({op,L,Op,A1,A2}, _, St0) ->
-    {Ca1,St1} = exp(A1, true, St0),
-    {Ca2,St2} = exp(A2, true, St1),
+exp({op,L,Op,A1,A2}, St0) ->
+    {Ca1,St1} = exp(A1, St0),
+    {Ca2,St2} = exp(A2, St1),
     {{op,L,Op,Ca1,Ca2},St2};
-exp({op,L,Op,A}, _, St0) ->
-    {Ca,St1} = exp(A, true, St0),
+exp({op,L,Op,A}, St0) ->
+    {Ca,St1} = exp(A, St0),
     {{op,L,Op,Ca},St1};
-exp(E, S, St) ->
-    prefixexp(E, S, St).
+exp(E, St) ->
+    prefixexp(E, St).
 
-prefixexp({'.',L,Exp,Rest}, S, St0) ->
-    {Ce,St1} = prefixexp_first(Exp, true, St0),
-    {Cr,St2} = prefixexp_rest(Rest, S, St1),
+%% prefixexp(PrefixExp, State) -> {CPrefixExp,State}.
+
+prefixexp({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = prefixexp_first(Exp, St0),
+    {Cr,St2} = prefixexp_rest(Rest, St1),
     {{'.',L,Ce,Cr},St2};
-prefixexp(P, S, St) -> prefixexp_first(P, S, St).
+prefixexp(P, St) -> prefixexp_first(P, St).
 
-prefixexp_first({'NAME',L,N}, _, St) ->
-    Var = get_var(L, N, St),
-    {Var,St};
-prefixexp_first({single,L,E}, _, St0) ->
-    {Ce,St1} = exp(E, true, St0),
+prefixexp_first({'NAME',L,N}, St) ->
+    {get_var(L, N, St),St};
+prefixexp_first({single,L,E}, St0) ->
+    {Ce,St1} = exp(E, St0),
     {{single,L,Ce},St1}.
 
-prefixexp_rest({'.',L,Exp,Rest}, S, St0) ->
-    {Ce,St1} = prefixexp_element(Exp, true, St0),
-    {Cr,St2} = prefixexp_rest(Rest, S, St1),
+prefixexp_rest({'.',L,Exp,Rest}, St0) ->
+    {Ce,St1} = prefixexp_element(Exp, St0),
+    {Cr,St2} = prefixexp_rest(Rest, St1),
     {{'.',L,Ce,Cr},St2};
-prefixexp_rest(Exp, S, St) ->
-    prefixexp_element(Exp, S, St).
+prefixexp_rest(Exp, St) ->
+    prefixexp_element(Exp, St).
 
-prefixexp_element({'NAME',L,N}, _, St) ->
-    {{'NAME',L,N},St};
-prefixexp_element({key_field,L,Exp}, _, St0) ->
-    {Ce,St1} = exp(Exp, true, St0),
+prefixexp_element({'NAME',L,N}, St) ->
+    %% Transform this to a key_field with the name string
+    S = name_string(N),
+    {{key_field,L,{'STRING',L,S}},St};
+prefixexp_element({key_field,L,Exp}, St0) ->
+    {Ce,St1} = exp(Exp, St0),
     {{key_field,L,Ce},St1};
-prefixexp_element({functioncall,L,Args}, _, St0) ->
+prefixexp_element({functioncall,L,Args}, St0) ->
     {Cas,St1} = explist(Args, St0),
     {{functioncall,L,Cas},St1};
-prefixexp_element({method,Lm,{'NAME',Ln,N},Args}, _, St0) ->
+prefixexp_element({method,Lm,{'NAME',Ln,N},Args}, St0) ->
     {Args1,St1} = explist(Args, St0),
-    {{method,Lm,{'NAME',Ln,N},Args1},St1}.
+    S = name_string(N),
+    {{method,Lm,{'STRING',Ln,S},Args1},St1}.
 
 add_local_pars(Ps, St) ->
     Add = fun ({'NAME',L,N}, St0) -> make_local_var(L, N, St0);
@@ -459,21 +506,21 @@ insert_offs([], _, _) -> [].
 tableconstructor(Fs, St0) ->
     %% N.B. this fun is for a MAPFOLDL!!
     Fun = fun ({exp_field,L,Ve}, S0) ->
-		  {Ce,S1} = exp(Ve, true, S0),	%Value
+		  {Ce,S1} = exp(Ve, S0),	%Value
 		  {{exp_field,L,Ce},S1};
-	      ({name_field,L,Name,Ve}, S0) ->
-		  {Ce,S1} = exp(Ve, true, S0),	%Value
-		  {{name_field,L,Name,Ce},S1};
+	      ({name_field,L,{'NAME',Ln,N},Ve}, S0) ->
+		  {Ce,S1} = exp(Ve, S0),	%Value
+		  S = name_string(N),
+		  {{name_field,L,{'STRING',Ln,S},Ce},S1};
 	      ({key_field,L,Ke,Ve}, S0) ->
-		  {Ck,S1} = exp(Ke, true, S0),	%Key
-		  {Cv,S2} = exp(Ve, true, S1),	%Value
+		  {Ck,S1} = exp(Ke, S0),	%Key
+		  {Cv,S2} = exp(Ve, S1),	%Value
 		  {{key_field,L,Ck,Cv},S2}
 	  end,
     {Cfs,St1} = lists:mapfoldl(Fun, St0, Fs),
     {Cfs,St1}.
 
-%% name_op(Op, Name) -> Instr.
+%% name_string(Name) -> String.
 %%  We do this a lot!
 
-name_op(Op, Name) ->
-    {Op,atom_to_binary(Name, latin1)}.
+name_string(Name) -> atom_to_binary(Name, latin1).

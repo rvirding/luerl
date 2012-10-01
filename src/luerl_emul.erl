@@ -30,6 +30,13 @@
 %% First version of emulator. Compiler so far only explicitly handles
 %% local/global variables.
 %%
+%% We explicitly mirror the parser rules which generate the AST and do
+%% not try to fold similar structures into common code. While this
+%% means we get more code it also becomes more explicit and clear what
+%% we are doing. It may also allow for specific optimisations. And
+%% example is that we DON'T fold 'var' and 'funcname' even though they
+%% are almost the same.
+%%
 %% Issues: how should we handle '...'? Now we treat it as any (local)
 %% variable.
 
@@ -340,23 +347,19 @@ chunk(Chunk, Args, St) -> call(Chunk, Args, St).
 
 call(Chunk, St) -> call(Chunk, [], St).
 
-call({functiondef,L,Sz,Ps,B}, Args, St0) ->
+call({functiondef,_,_,_,_}=Fd, Args, St0) ->
     %% Generate function and call it.
-    {[Func],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
-    {Ret,St2} = functioncall(Func, Args, St1),
+    {Fret,St1} = exp(Fd, St0),
+    {Ret,St2} = functioncall(first_value(Fret), Args, St1),
     %% Should do GC here.
     {Ret,St2};
-call({functiondef,L,Sz,_,Ps,B}, Args, St0) ->
-    %% Generate function and call it.
-    {[Func],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
-    {Ret,St2} = functioncall(Func, Args, St1),
-    %% Should do GC here.
-    {Ret,St2};
-call(#function{}=Func, Args, St0) ->
+call({functiondef,L,_,Sz,Ps,B}, Args, St) ->	%Ignore name
+    call({functiondef,L,Sz,Ps,B}, Args, St);
+call(#function{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call({function,_}=Func, Args, St0) ->
+call({function,_}=Func, Args, St0) ->		%Internal erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
@@ -415,9 +418,6 @@ stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
 stat({block,_,Sz,B}, St) ->
     block(Sz, B, St);
-stat({functiondef,L,Sz,V,Ps,B}, St0) ->
-    {[F],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
-    assign_var(V, F, St1);
 stat({'while',_,Exp,Sz,Body}, St) ->
     do_while(Exp, Sz, Body, St);
 stat({repeat,_,Sz,Body,Exp}, St) ->
@@ -428,6 +428,9 @@ stat({for,_,V,I,L,S,Sz,B}, St) ->		%Numeric for
     do_numfor(V, I, L, S, Sz, B, St);
 stat({for,_,Vs,Gen,Sz,B}, St) ->		%Generic for
     do_genfor(Vs, Gen, Sz, B, St);
+stat({functiondef,L,V,Sz,Ps,B}, St0) ->
+    {[F],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
+    funcname(V, F, St1);
 stat({local,Decl}, St) ->
     %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
@@ -441,39 +444,38 @@ assign(Ns, Es, St0) ->
     assign_loop(Ns, Vals, St1).
 
 assign_loop([Pre|Pres], [E|Es], St0) ->
-    St1 = assign_var(Pre, E, St0),
+    St1 = var(Pre, E, St0),
     assign_loop(Pres, Es, St1);
 assign_loop([Pre|Pres], [], St0) ->		%Set remaining to nil
-    St1 = assign_var(Pre, nil, St0),
+    St1 = var(Pre, nil, St0),
     assign_loop(Pres, [], St1);
 assign_loop([], _, St) -> St.
 
-%% assign_var(PrefixExp, Val, State) -> State.
+%% var(VarExp, Val, State) -> State.
 %%  Step down the prefixexp sequence evaluating as we go, stop at the
 %%  end and return a key and a table where to put data. We can reuse
 %%  much of the prefixexp code but must have our own thing at the end.
 
-assign_var({'.',_,Exp,Rest}, Val, St0) ->
-    {Next,St1} = prefixexp_first(Exp, St0),
-    assign_var_rest(Rest, Val, first_value(Next), St1);
-assign_var(Var, Val, St) ->
+var({'.',_,Exp,Rest}, Val, St0) ->
+    {Next,St1} = var_first(Exp, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
+var(Var, Val, St) ->
     set_var(Var, Val, St).
-    
-assign_var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
-    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
-    assign_var_rest(Rest, Val, first_value(Next), St1);
-assign_var_rest(Exp, Val, SoFar, St) ->
-    assign_var_last(Exp, Val, SoFar, St).
 
-assign_var_last({'NAME',_,N}, Val, SoFar, St) ->
-    set_table_name(SoFar, N, Val, St);
-assign_var_last({key_field,_,Exp}, Val, SoFar, St0) ->
+var_first(Var, St) ->
+    {[get_var(Var, St)], St}.
+
+var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
+var_rest(Exp, Val, SoFar, St) ->
+    var_last(Exp, Val, SoFar, St).
+
+var_last({key_field,_,{'STRING',_,S}}, Val, SoFar, St) ->
+    set_table_key(SoFar, S, Val, St);
+var_last({key_field,_,Exp}, Val, SoFar, St0) ->
     {Key,St1} = exp(Exp, St0),
-    set_table_key(SoFar, first_value(Key), Val, St1);
-assign_var_last({method,_,{'NAME',L,N}}, #function{pars=Pars}=Func,
-		SoFar, St) ->
-    %% Method a function, make a "method" by adding self parameter.
-    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
+    set_table_key(SoFar, first_value(Key), Val, St1).
 
 %% do_while(TestExp, Size, Body, State) -> State.
 
@@ -611,7 +613,35 @@ genfor_loop(Vars, F, S, Var, Sz, B, St0) ->
 	false -> {[],St1}			%Done
     end.
 
-local({functiondef,L,Sz,V,Ps,B}, St0) ->
+%% funcname(FuncnameExp, Val, State) -> State.
+%%  Step down the funcname sequence evaluating as we go, stop at the
+%%  end and return a key and a table where to put data.
+
+funcname({'.',_,Exp,Rest}, Val, St0) ->
+    {Next,St1} = funcname_first(Exp, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname(Var, Val, St) -> set_var(Var, Val, St).
+
+funcname_first(Var, St) ->
+    {[get_var(Var, St)], St}.
+
+funcname_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
+    {Next,St1} = funcname_element(Exp, SoFar, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname_rest(Exp, Val, SoFar, St) ->
+    funcname_last(Exp, Val, SoFar, St).
+
+funcname_element({key_field,_,{'STRING',_,S}}, SoFar, St) ->
+    get_table_key(SoFar, S, St);
+funcname_element({key_field,_,Exp}, SoFar, St0) ->
+    {Key,St1} = exp(Exp, St0),
+    get_table_key(SoFar, first_value(Key), St1).
+
+funcname_last({key_field,_,Exp}, Val, SoFar, St0) ->
+    {Key,St1} = exp(Exp, St0),
+    set_table_key(SoFar, first_value(Key), Val, St1).
+
+local({functiondef,L,V,Sz,Ps,B}, St0) ->
     %% Compiler has fixed name so recursive call finds right name
     {[F],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
     set_var(V, F, St1);
@@ -733,17 +763,16 @@ prefixexp_element({functioncall,_,Args0}, SoFar, St0) ->
     {Args1,St1} = explist(Args0, St0),
     %%io:fwrite("pe1: ~p\n", [{SoFar,Args1}]),
     functioncall(SoFar, Args1, St1);
-prefixexp_element({'NAME',_,N}, SoFar, St0) ->
-    {V,St1} = get_table_name(SoFar, N, St0),
-    {V,St1};
+prefixexp_element({key_field,_,{'STRING',_,S}}, SoFar, St) ->
+    get_table_key(SoFar, S, St);
 prefixexp_element({key_field,_,Exp}, SoFar, St0) ->
     {Key,St1} = exp(Exp, St0),
     {V,St2} = get_table_key(SoFar, first_value(Key), St1),
     {V,St2};
-prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
-    {Func,St1} = get_table_name(SoFar, N, St0),
+prefixexp_element({method,_,{'STRING',_,S},Args0}, SoFar, St0) ->
+    {Func,St1} = get_table_key(SoFar, S, St0),
     case first_value(Func) of
-	nil -> lua_error({undef_function,N});
+	nil -> lua_error({undef_function,S});
 	Fval ->
 	    {Args1,St2} = explist(Args0, St1),
 	    %%io:fwrite("pe2: ~p\n", [{Func,[SoFar|Args1]}]),
@@ -846,10 +875,9 @@ tc_fields([{exp_field,_,Ve}], I, Tes, St0) ->
 tc_fields([{exp_field,_,Ve}|Fs], I, Tes, St0) ->
     {V,St1} = exp(Ve, St0),
     tc_fields(Fs, I+1, [{I,first_value(V)}|Tes], St1);
-tc_fields([{name_field,_,{'NAME',_,N},Ve}|Fs], I, Tes, St0) ->
+tc_fields([{name_field,_,{'STRING',_,S},Ve}|Fs], I, Tes, St0) ->
     {V,St1} = exp(Ve, St0),
-    K = atom_to_binary(N, latin1),
-    tc_fields(Fs, I, [{K,first_value(V)}|Tes], St1);
+    tc_fields(Fs, I, [{S,first_value(V)}|Tes], St1);
 tc_fields([{key_field,_,Ke,Ve}|Fs], I, Tes, St0) ->
     {K,St1} = exp(Ke, St0),
     {V,St2} = exp(Ve, St1),
