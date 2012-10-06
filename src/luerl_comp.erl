@@ -70,6 +70,7 @@ string(S) ->
 %% push_frame(State) -> State.
 %% pop_frame(State) -> State.
 %% frame_size(State) -> Size.
+%%  Handle frames. Frames are orddicts of {Name,Index}.
 
 push_frame(#comp{fs=Fs}=St) -> St#comp{fs=[orddict:new()|Fs]}.
 
@@ -85,7 +86,6 @@ frame_size(#comp{fs=Fs}) -> length(hd(Fs)).
 %%  NOT SAFE WE WANT TO KEEP NESTED BLOCKS ONE FRAME!!
 
 add_local_var(N, #comp{fs=[F0|Fs]}=St) ->
-    %% F1 = orddict:store(N, length(F0)+1, F0),
     F1 = case orddict:find(N, F0) of
 	     {ok,_} -> F0;			%Reuse existing slot
 	     error ->				%New slot
@@ -93,11 +93,7 @@ add_local_var(N, #comp{fs=[F0|Fs]}=St) ->
 	 end,
     St#comp{fs=[F1|Fs]}.
 
-add_local_vars(Ns, St) ->
-    lists:foldl(fun (N, S) -> add_local_var(N, S) end, St, Ns).
-
-find_var(N, #comp{fs=Fs}) ->
-    find_var(N, 1, Fs).
+find_var(N, #comp{fs=Fs}) -> find_var(N, 1, Fs).
 
 find_var(N, D, [Fs|Fss]) ->
     case orddict:find(N, Fs) of
@@ -108,22 +104,32 @@ find_var(_, _, []) -> global.
 
 %% make_local_var(Line, Name, State) -> {{local_var,Line,Name,D,I},State}.
 %% make_local_vars(Line, Vars, State) -> {[Var],State}.
-%% get_var(Line, Name, State) ->
-%%     {local_var,Line,Name,D,I} | {global_var,Line,Name}.
+%% get_var(Line, Name, State) -> {stack_var,Line,Name,D,I} |
+%%                               {local_var,Line,Name,I} |
+%%                               {global_var,Line,Name}.
+
+make_local_var({'NAME',L,N}, St) ->
+    make_local_var(L, N, St).
+
+make_local_vars(Vs, St) ->
+    Make = fun ({'NAME',L,N}, S) -> make_local_var(L, N, S) end,
+    lists:mapfoldl(Make, St, Vs).
 
 make_local_var(L, N, St0) ->
-    St1 = add_local_var(N, St0),
-    {stack,1,I} = find_var(N, St1),
-    {{local_var,L,N,I},St1}.
+    S = atom_to_binary(N, latin1),
+    St1 = add_local_var(S, St0),
+    {stack,1,I} = find_var(S, St1),
+    {{local_var,L,S,I},St1}.
 
 make_local_vars(L, Ns, St) ->
     lists:mapfoldl(fun (N, S) -> make_local_var(L, N, S) end, St, Ns).
 
 get_var(L, N, St) ->
-    case find_var(N, St) of			%Stack or global variable?
-	{stack,1,I} -> {local_var,L,N,I};	%Local
-	{stack,D,I} -> {stack_var,L,N,D,I};	%On the stack
-	global -> {global_var,L,N}		%Global
+    S = atom_to_binary(N, latin1),
+    case find_var(S, St) of			%Stack or global variable?
+	{stack,1,I} -> {local_var,L,S,I};	%Local
+	{stack,D,I} -> {stack_var,L,S,D,I};	%On the stack
+	global -> {global_var,L,S}		%Global
     end.
 
 %% chunk(Chunk) -> {ok,Code} | {error,Reason}.
@@ -132,13 +138,6 @@ chunk({functiondef,L,Ps,B}) ->
     St0 = #comp{},
     {Cf,_} = exp({functiondef,L,Ps,B}, St0),
     {ok,Cf}.
-
-%% chunk(Code) ->
-%%     St0 = #comp{},
-%%     %% {{_,_,Is},_} = function_block([{'...',0}], Code, St0),
-%%     {Is0,_} = block(Code, St0),
-%%     Is1 = fix_labels(Is0),
-%%     list_to_tuple(Is1).
 
 with_block(Do, St0) ->
     St1 = push_frame(St0),			%Push a new variable scope
@@ -191,9 +190,9 @@ stat({for,Line,V,I,L,B}, St0) ->			%Default step of 1.0
 stat({for,Line,Ns,Gens,B}, St0) ->
     {Cvs,Cg,Sz,Cb,St1} = generic_for(Ns, Gens, B, St0),
     {{for,Line,Cvs,Cg,Sz,Cb},St1};
-stat({functiondef,L,Fname,Ps,B}, St) ->
-    functiondef(L, Fname, Ps, B, St);
-    %% stat({assign,L,[Fname],[{functiondef,L,Ps,B}]}, St);
+stat({functiondef,L,Fname,Ps,B}, St0) ->
+    {V,F,St1} = functiondef(L, Fname, Ps, B, St0),
+    {{functiondef,L,V,F},St1};
 stat({local,Local}, St0) ->
     {Cloc,St1} = local(Local, St0),
     {{local,Cloc},St1};
@@ -269,10 +268,10 @@ do_if_tests([], St) -> {[],St}.
 %%  This is more or less how the Lua machine does it, but I don't
 %%  really like it.
 
-numeric_for({'NAME',Ln,N}, I, L, S, B, St0) ->
+numeric_for(Var, I, L, S, B, St0) ->
     {[Ci,Cl,Cs],St1} = explist([I,L,S], St0),
     For = fun (S0) ->
-		  {V,S1} = make_local_var(Ln, N, S0),
+		  {V,S1} = make_local_var(Var, S0),
 		  {Cb,S2} = stats(B, S1),
 		  {{V,Cb},S2}
 	  end,
@@ -284,21 +283,22 @@ numeric_for({'NAME',Ln,N}, I, L, S, B, St0) ->
 generic_for(Ns, Gens, B, St0) ->
     {Cgs,St1} = explist(Gens, St0),
     For = fun (S0) ->
-		  {Vs,S1} = add_local_pars(Ns, S0),
+		  {Vs,S1} = make_local_vars(Ns, S0),
 		  {Cb,S2} = stats(B, S1),
 		  {{Vs,Cb},S2}
 	  end,
     {{Cvs,Cb},Sz,St2} = with_block(For, St1),
     {Cvs,Cgs,Sz,Cb,St2}.
 
-functiondef(L, Ps, B, St0) ->
-    {Cp,Cb,Sz,St1} = function_block(Ps, B, St0),
-    {{functiondef,L,Sz,Cp,Cb},St1}.
-
-%% functiondef(Line, Name, Pars, Block, State) -> {CFunc,State}.
+%% functiondef(Line, Pars, Block, State) -> {CFunc,State}.
+%% functiondef(Line, Name, Pars, Block, State) -> {Var,CFunc,State}.
 %%  Have to handle the case where the function is a "method". All this
 %%  really means is that the function has an extra parameter 'self'
 %%  prepended to the paramter list.
+
+functiondef(L, Ps, B, St0) ->
+    {Cp,Cb,Sz,St1} = function_block(Ps, B, St0),
+    {{functiondef,L,Sz,Cp,Cb},St1}.
 
 functiondef(L, Name0, Ps0, B, St0) ->
     %% Check if method and transform method to 'NAME'.
@@ -306,9 +306,12 @@ functiondef(L, Name0, Ps0, B, St0) ->
 	{yes,Name1} -> Ps1 = [{'NAME',L,self}|Ps0];
 	no -> Name1 = Name0, Ps1 = Ps0
     end,
-    {Cn,St1} = funcname(Name1, St0),
-    {Cp,Cb,Sz,St2} = function_block(Ps1, B, St1),
-    {{functiondef,L,Cn,Sz,Cp,Cb},St2}.
+    {Var,St1} = funcname(Name1, St0),
+    {F,St2} = functiondef(L, Ps1, B, St1),
+    {Var,F,St2}.
+
+    %% {Cp,Cb,Sz,St2} = function_block(Ps1, B, St1),
+    %% {{functiondef,L,Cn,Sz,Cp,Cb},St2}.
 
 is_method({'NAME',_,_}) -> no;
 is_method({'.',L,N,Rest0}) ->
@@ -356,18 +359,13 @@ funcname_last({method,L,{'NAME',L,N}}, St) ->	%This will never occur
 
 local({assign,L,Ns,Es}, St0) ->
     {Ces,St1} = explist(Es, St0),
-    {Cns,St2} = assign_local_loop(Ns, St1),
+    {Cns,St2} = make_local_vars(Ns, St1),
     {{assign,L,Cns,Ces},St2};
-local({functiondef,Lf,{'NAME',_,N}=Name,Ps,B}, St0) ->
+local({functiondef,Lf,Name,Ps,B}, St0) ->
     %% Set name separately first so recursive call finds right Name.
-    St1 = add_local_var(N, St0),		%Make local!
-    functiondef(Lf, Name, Ps, B, St1).
-
-assign_local_loop([{'NAME',L,N}|Ns], St0) ->
-    {Var,St1} = make_local_var(L, N, St0),
-    {Vs,St2} = assign_local_loop(Ns, St1),
-    {[Var|Vs],St2};
-assign_local_loop([], St) -> {[],St}.
+    {_,St1} = make_local_var(Name, St0),	%Make local!
+    {V,F,St2} = functiondef(Lf, Name, Ps, B, St1),
+    {{assign,Lf,[V],[F]},St2}.
 
 explist([E], St0) ->
     {I,St1} = exp(E, St0),
@@ -456,19 +454,19 @@ prefixexp_element({method,Lm,{'NAME',Ln,N},Args}, St0) ->
     S = name_string(N),
     {{method,Lm,{'STRING',Ln,S},Args1},St1}.
 
-add_local_pars(Ps, St) ->
-    Add = fun ({'NAME',L,N}, St0) -> make_local_var(L, N, St0);
-	      ({'...',L}, S) -> make_local_var(L, '...', S)
-	  end,
-    lists:mapfoldl(Add, St, Ps).
-
 function_block(Pars, Stats, St0)->
     St1 = push_frame(St0),
-    {Cps,St2} = add_local_pars(Pars, St1),
+    {Cps,St2} = make_local_pars(Pars, St1),
     {Cs,St3} = stats(Stats, St2),
     %% io:format("fb: ~p\n", [{St3#comp.fs}]),
     St4 = pop_frame(St3),
     {Cps,Cs,frame_size(St3),St4}.
+
+make_local_pars(Ps, St) ->
+    Add = fun ({'NAME',L,N}, St0) -> make_local_var(L, N, St0);
+	      ({'...',L}, S) -> make_local_var(L, '...', S)
+	  end,
+    lists:mapfoldl(Add, St, Ps).
 
 fix_labels(Is) ->
     Ls = get_labels(Is, 1, []),

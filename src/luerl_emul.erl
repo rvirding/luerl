@@ -48,12 +48,13 @@
 -export([init/0,call/2,call/3,chunk/2,chunk/3,gc/1]).
 
 %% Internal functions which can be useful "outside".
--export([alloc_table/2,functioncall/3,get_table_key/3,
+-export([alloc_table/1,alloc_table/2,free_table/2,
+	 functioncall/3,get_table_key/3,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
--export([alloc_table/1,get_global_name/2,get_global_key/2,
-	free_table/2,set_local_var/3]).
+-export([set_global_name/3,set_global_key/3,
+	 get_global_name/2,get_global_key/2]).
 
 -import(luerl_lib, [lua_error/1,badarg_error/2]).
 
@@ -287,7 +288,6 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
     end.
 
 %% set_var(Var, Val, State) -> State.
-%% set_local_var(Var, Val, State) -> State.
 %% get_var(Var, State) -> Value | nil.
 %% NOTE: ONLY RETURN A SINGLE VALUE AS THIS IS ALL A VAR MAY HAVE!
 
@@ -297,25 +297,20 @@ set_var({local_var,_,_,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
 set_var({stack_var,_,_,D,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = set_stack_var(D, I, Val, Fps, Ft0),
     St#luerl{ft=Ft1};
-set_var({global_var,_,N}, Val, #luerl{tabs=Ts0,g=#tref{i=G}}=St) ->
-    Key = atom_to_binary(N, latin1),
+set_var({global_var,_,Key}, Val, #luerl{tabs=Ts0,g=#tref{i=G}}=St) ->
     Store = fun (#table{t=Tab}=T) ->
     		    T#table{t=orddict:store(Key, Val, Tab)} end,
     Ts1 = ?UPD_TABLE(G, Store, Ts0),
     St#luerl{tabs=Ts1}.
 
-set_local_var({local_var,_,_,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
-    Ft1 = set_local_var(I, Val, Fps, Ft0),
-    St#luerl{ft=Ft1}.
-
 get_var({local_var,_,_,I}, #luerl{stk=Fps,ft=Ft}) ->
     get_local_var(I, Fps, Ft);
 get_var({stack_var,_,_,D,I}, #luerl{stk=Fps,ft=Ft}) ->
     get_stack_var(D, I, Fps, Ft);
-get_var({global_var,_,N}, #luerl{tabs=Ts,g=#tref{i=G}}) ->
+get_var({global_var,_,Key}, #luerl{tabs=Ts,g=#tref{i=G}}) ->
     %% Is _G a normal table with metatable etc?
     #table{t=Tab} = ?GET_TABLE(G, Ts),
-    case orddict:find(atom_to_binary(N, latin1), Tab) of
+    case orddict:find(Key, Tab) of
 	{ok,Val} -> Val;
 	error -> nil
     end.
@@ -428,9 +423,9 @@ stat({for,_,V,I,L,S,Sz,B}, St) ->		%Numeric for
     do_numfor(V, I, L, S, Sz, B, St);
 stat({for,_,Vs,Gen,Sz,B}, St) ->		%Generic for
     do_genfor(Vs, Gen, Sz, B, St);
-stat({functiondef,L,V,Sz,Ps,B}, St0) ->
-    {[F],St1} = exp({functiondef,L,Sz,Ps,B}, St0),
-    funcname(V, F, St1);
+stat({functiondef,_,V,F}, St0) ->
+    {[Func],St1} = exp(F, St0),
+    funcname(V, Func, St1);
 stat({local,Decl}, St) ->
     %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
@@ -682,7 +677,7 @@ exp({false,_}, St) -> {[false],St};
 exp({true,_}, St) -> {[true],St};
 exp({'NUMBER',_,N}, St) -> {[N],St};
 exp({'STRING',_,S}, St) -> {[S],St};
-exp({local_var,_,'...',_}=VarArg, St) ->	%Get '...', error if undefined
+exp({local_var,_,<<"...">>,_}=VarArg, St) ->	%Get '...', error if undefined
     %% This must be handled separately!
     case get_var(VarArg, St) of			%Only returns single value!
 	nil -> illegal_val_error('...');
@@ -792,7 +787,7 @@ functioncall(#function{sz=Sz,stk=Stk,pars=Ps,b=B}, Args, St0) ->
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
-functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
+functioncall(#userdata{d=Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     %% io:format("fc: ~p\n", [{Func,As}]),
@@ -808,7 +803,7 @@ assign_par_loop(Vs, Vals, #luerl{stk=Fps,ft=Ft0}=St) ->
     Ft1 = assign_par_loop_1(Vs, Vals, Fps, Ft0),
     St#luerl{ft=Ft1}.
 
-assign_par_loop_1([{local_var,_,'...',I}], Vals, Fps, Ft) ->
+assign_par_loop_1([{local_var,_,<<"...">>,I}], Vals, Fps, Ft) ->
     set_local_var(I, Vals, Fps, Ft);
 assign_par_loop_1([{local_var,_,_,I}|Vs], [Val|Vals], Fps, Ft0) ->
     Ft1 = set_local_var(I, Val, Fps, Ft0),
@@ -1021,7 +1016,7 @@ getmetamethod(O1, O2, E, St) ->
 getmetamethod(#tref{i=N}, E, #luerl{tabs=Ts}) ->
     #table{m=Meta} = ?GET_TABLE(N, Ts),
     getmetamethod_tab(Meta, E, Ts);
-getmetamethod({userdata,_}, E, #luerl{tabs=Ts,meta=Meta}) ->
+getmetamethod(#userdata{}, E, #luerl{tabs=Ts,meta=Meta}) ->
     getmetamethod_tab(Meta#meta.userdata, E, Ts);
 getmetamethod(S, E, #luerl{tabs=Ts,meta=Meta}) when is_binary(S) ->
     getmetamethod_tab(Meta#meta.string, E, Ts);
