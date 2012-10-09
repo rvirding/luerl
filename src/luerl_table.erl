@@ -29,8 +29,8 @@
 
 %% These functions sometimes behave strangely in the Lua 5.2
 %% libraries, but we try to follow them. Most of these functions KNOW
-%% that a table is an orddict! We know that the erlang array has
-%% default value 'nil'.
+%% that a table is a ttdict! We know that the erlang array has default
+%% value 'nil'.
 
 -module(luerl_table).
 
@@ -94,16 +94,15 @@ concat_table(Arr, Tab, I, J) ->
 concat_tab(_, _, N, J) when N > J -> [];	%Done
 concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
     concat_arr(Arr, N, J);
-concat_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
-    case luerl_lib:to_list(V) of
-	nil -> lua_error({illegal_val,concat,V});
-	S -> [S|concat_tab(Arr, Tab, N+1, J)]
-    end;
-concat_tab(Arr, [{K,_}|_], N, _) when K > N ->	%Gap
-    lua_error({illegal_val,concat,nil});
-concat_tab(Arr, [{K,_}|Tab], N, J) when K < N -> %Step over too small keys
-    concat_tab(Arr, Tab, N, J);
-concat_tab(_, [], _, _) -> lua_error({illegal_val,concat,nil}).
+concat_tab(Arr, Tab, N, J) ->
+    case ttdict:find(N, Tab) of
+	{ok,V} ->
+	    case luerl_lib:to_list(V) of
+		nil -> lua_error({illegal_val,concat,V});
+		S -> [S|concat_tab(Arr, Tab, N+1, J)]
+	    end;
+	error -> lua_error({illegal_val,concat,nil})
+    end.
 
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
@@ -187,28 +186,25 @@ do_insert_last(Arr0, N, V) ->
 do_insert(Arr, Tab, N, V) when N >= 1 ->	%Go to the array part
     {insert_array(Arr, N, V),Tab};
 do_insert(Arr0, Tab0, N, V) ->
-    {Next,Tab1} = insert_tab(Tab0, N, V, []),
+    {Next,Tab1} = insert_tab(Tab0, N, V),
     Arr1 = insert_array(Arr0, 1, Next),
     {Arr1,Tab1}.
 
-insert_tab(Tab, N, Here, Acc) when N > 0 ->	%Done them all
-    {Here,lists:reverse(Acc, Tab)};
-insert_tab([{K,_}=E|Tab], N, Here, Acc) when K < N ->
-    insert_tab(Tab, N, Here, [E|Acc]);		%Haven't reached it yet
-insert_tab([{K,V}|Tab], N, Here, Acc0) when K == N -> 
-    Acc1 = if Here =:= nil -> Acc0;
-	      true -> [{K,Here}|Acc0]
+insert_tab(Tab, N, Here) when N > 0 -> {Here,Tab};
+insert_tab(Tab0, N, nil) ->
+    case ttdict:find(N, Tab0) of
+	{ok,V} ->
+	    Tab1 = ttdict:update_val(float(N), nil, Tab0),
+	    insert_tab(Tab1, N+1, V);
+	error -> insert_tab(Tab0, N+1, nil)
+    end;
+insert_tab(Tab0, N, Here) ->
+    Next = case ttdict:find(N, Tab0) of
+	       {ok,V} -> V;
+	       error -> nil
 	   end,
-    insert_tab(Tab, N+1, V, Acc1);
-insert_tab([{K,_}|_]=Tab, N, Here, Acc0) when K > N ->
-    Acc1 = if Here =:= nil -> Acc0;
-	      true -> [{float(N),Here}|Acc0]
-	   end,
-    insert_tab(Tab, N+1, nil, Acc1);
-insert_tab([], N, Here, Acc) ->
-    if Here =:= nil -> {nil,lists:reverse(Acc, [])};
-       true -> {nil,lists:reverse(Acc, [{float(N),Here}])}
-    end.
+    Tab1 = ttdict:store(float(N), Here, Tab0),
+    insert_tab(Tab1, N+1, Next).
 
 insert_array(Arr0, N, Here) ->			%Put this at N shifting up
     case array:get(N, Arr0) of
@@ -292,7 +288,7 @@ pack(As, St0) ->
     {Tab,St1} = luerl_emul:alloc_table(T, St0),
     {[Tab],St1}.
 
-pack_loop([E|Es], N) ->				%In order for an orddict!
+pack_loop([E|Es], N) ->
     [{N+1,E}|pack_loop(Es, N+1)];
 pack_loop([], N) -> [{<<"n">>,N}].
 
@@ -332,13 +328,12 @@ do_unpack(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
 unpack_tab(_, _, N, J) when N > J -> [];	%Done
 unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
     unpack_arr(Arr, N, J);
-unpack_tab(Arr, [{K,V}|Tab], N, J) when K == N ->
-    [V|unpack_tab(Arr, Tab, N+1, J)];
-unpack_tab(Arr, [{K,_}|_]=Tab, N, J) when K > N ->	%Gap
-    [nil|unpack_tab(Arr, Tab, N+1, J)];
-unpack_tab(Arr, [{K,_}|Tab], N, J) when K < N -> %Step over too small keys
-    unpack_tab(Arr, Tab, N, J);
-unpack_tab(Arr, [], N, J) -> [nil|unpack_tab(Arr, [], N+1, J)].
+unpack_tab(Arr, Tab, N, J) ->
+    E = case ttdict:find(N, Tab) of
+	    {ok,V} -> V;
+	    error -> nil
+	end,
+    [E|unpack_tab(Arr, Tab, N+1, J)].
 
 unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->

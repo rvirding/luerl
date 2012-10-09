@@ -97,6 +97,10 @@ eprint(Args, St) ->
 error([M|_], _) -> lua_error(M);		%Never returns!
 error(As, _) -> badarg_error(error, As).
 
+%% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
+%%  Return a function which on successive calls returns successive
+%%  key-value pairs of integer keys.
+
 ipairs([#tref{}=Tref|_], St) ->
     case luerl_emul:getmetamethod(Tref, <<"__ipairs">>, St) of
 	nil -> {[{function,fun ipairs_next/2},Tref,0.0],St};
@@ -117,6 +121,21 @@ ipairs_next([#tref{i=T},K|_], St) ->
 	_NegFalse -> lua_error({invalid_key,ipairs,K})
     end;
 ipairs_next(As, _) -> badarg_error(ipairs, As).
+
+%% pairs(Args, State) -> {[Func,Table,Key],State}.
+%%  Return a function to step over all the key-value pairs in a table.
+
+pairs([#tref{}=Tref|_], St) ->
+    case luerl_emul:getmetamethod(Tref, <<"__pairs">>, St) of
+	nil -> {[{function,fun next/2},Tref,nil],St};
+	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
+    end;
+pairs(As, _) -> badarg_error(pairs, As).
+
+%% next(Args, State) -> {[Key,Value] | [nil], State}.
+%%  Given a table and a key return the next key-value pair in the
+%%  table, or nil if there is no next key. The key 'nil' gives the
+%%  first key-value pair.
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
@@ -150,29 +169,18 @@ next_index_loop(I, Arr, S) when I < S ->
     end;
 next_index_loop(_, _, _) -> none.
 
-first_key([{K,V}|_]) -> [K,V];
-first_key([]) -> [nil].
-
-next_key(K, Tab, St) ->
-    case next_key_loop(K, Tab) of
-	[{Next,V}|_] -> {[Next,V],St};
-	[] -> {[nil],St};
-	none -> lua_error({invalid_key,next,K})
+first_key(Tab) ->
+    case ttdict:first(Tab) of
+	{ok,{K,V}} -> [K,V];
+	error -> [nil]
     end.
 
-next_key_loop(K, [{K,_}|Tab]) -> next_key_loop(Tab);
-next_key_loop(K, [_|Tab]) -> next_key_loop(K, Tab);
-next_key_loop(_, []) ->  none.
-
-next_key_loop([{_,nil}|Tab]) -> next_key_loop(Tab);    %Skip nil values
-next_key_loop(Tab) -> Tab.
-
-pairs([#tref{}=Tref|_], St) ->
-    case luerl_emul:getmetamethod(Tref, <<"__pairs">>, St) of
-	nil -> {[{function,fun next/2},Tref,nil],St};
-	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
-    end;
-pairs(As, _) -> badarg_error(pairs, As).
+next_key(K, Tab, St) ->
+    case ttdict:next(K, Tab) of
+	{ok,{N,nil}} -> next_key(N, Tab, St);	%Skip nil values
+	{ok,{N,V}} -> {[N,V],St};
+	error -> {[nil],St}
+    end.
 
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
@@ -231,15 +239,15 @@ rawset(As, _) -> badarg_error(rawset, As).
 raw_get_index(Arr, I) -> array:get(I, Arr).
 
 raw_get_key(Tab, K) ->
-    case orddict:find(K, Tab) of
+    case ttdict:find(K, Tab) of
 	{ok,V} -> V;
 	error -> nil
     end.
 
 raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
 
-raw_set_key(Tab, K, nil) -> orddict:erase(K, Tab);
-raw_set_key(Tab, K, V) -> orddict:store(K, V, Tab).
+raw_set_key(Tab, K, nil) -> ttdict:erase(K, Tab);
+raw_set_key(Tab, K, V) -> ttdict:store(K, V, Tab).
 
 select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->

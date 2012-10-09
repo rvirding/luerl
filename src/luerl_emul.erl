@@ -152,15 +152,15 @@ alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
 
 init_table(Itab) ->
-    T0 = orddict:new(),
+    T0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
 	       ({K,V}, {T,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
 		       true when I >= 1 -> {T,array:set(I, V, A)};
-		       _NegFalse -> {orddict:store(K, V, T),A}
+		       _NegFalse -> {ttdict:store(K, V, T),A}
 		   end;
-	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
+	       ({K,V}, {T,A}) -> {ttdict:store(K, V, T),A}
 	   end,
     {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
     #table{a=A1,t=T1,m=nil}.
@@ -195,10 +195,10 @@ set_table_key(Tab, Key, _, _) ->
 
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
-    case orddict:find(Key, Tab0) of
+    case ttdict:find(Key, Tab0) of
 	{ok,_} ->			    %Key exists
 	    %% Don't delete key for nil here!
-	    Tab1 = orddict:store(Key, Val, Tab0),
+	    Tab1 = ttdict:store(Key, Val, Tab0),
 	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->				%Key does not exist
@@ -206,7 +206,7 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
 		nil ->
 		    %% Only add non-nil value.
 		    Tab1 = if Val =:= nil -> Tab0;
-			      true -> orddict:store(Key, Val, Tab0)
+			      true -> ttdict:store(Key, Val, Tab0)
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{tabs=Ts1};
@@ -261,7 +261,7 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> {[Val],St};
 	error ->
 	    %% Key not present so try metamethod
@@ -299,7 +299,7 @@ set_var({stack_var,_,_,D,I}, Val, #luerl{stk=Fps,ft=Ft0}=St) ->
     St#luerl{ft=Ft1};
 set_var({global_var,_,Key}, Val, #luerl{tabs=Ts0,g=#tref{i=G}}=St) ->
     Store = fun (#table{t=Tab}=T) ->
-    		    T#table{t=orddict:store(Key, Val, Tab)} end,
+		    T#table{t=ttdict:store(Key, Val, Tab)} end,
     Ts1 = ?UPD_TABLE(G, Store, Ts0),
     St#luerl{tabs=Ts1}.
 
@@ -310,7 +310,7 @@ get_var({stack_var,_,_,D,I}, #luerl{stk=Fps,ft=Ft}) ->
 get_var({global_var,_,Key}, #luerl{tabs=Ts,g=#tref{i=G}}) ->
     %% Is _G a normal table with metatable etc?
     #table{t=Tab} = ?GET_TABLE(G, Ts),
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> Val;
 	error -> nil
     end.
@@ -1026,7 +1026,7 @@ getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab(#tref{i=M}, E, Ts) ->
     #table{t=Mtab} = ?GET_TABLE(M, Ts),
-    case orddict:find(E, Mtab) of
+    case ttdict:find(E, Mtab) of
 	{ok,Mm} -> Mm;
 	error -> nil
     end;
@@ -1084,7 +1084,8 @@ mark([#tref{i=T}|Todo], More, St0, Sf, Ts, Ft) ->
 	    %% [{Key,Val}], Arr is array and Meta is
 	    %% nil|#tref{i=M}. We want lists.
 	    Aes = array:sparse_to_list(Arr),
-	    mark([Meta|Todo], [[{in_table,T}],Tab,Aes,[{in_table,-T}]|More],
+	    Tes = ttdict:to_list(Tab),
+	    mark([Meta|Todo], [[{in_table,T}],Tes,Aes,[{in_table,-T}]|More],
 		 St1, Sf, Ts, Ft)
     end;
 mark([#fref{i=F}|Todo], More, St, Sf0, Ts, Ft) ->
