@@ -54,5 +54,5 @@ write(As, St) ->
 	nil -> lua_error({badarg,write,As});
 	Ss ->
 	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),
-	    {[{userdata,standard_io}],St}
+	    {[#userdata{d=standard_io}],St}
     end.

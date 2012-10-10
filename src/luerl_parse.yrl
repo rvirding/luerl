@@ -124,16 +124,16 @@ for_stat -> 'for' NAME '=' explist do block end :
 for_stat -> 'for' namelist 'in' explist 'do' block 'end' :
 	    generic_for(line('$1'), '$2', '$4', '$6') .
 
-local_decl -> function NAME funcbody :
-		  functiondef(line('$1'),'$2','$3') .
-local_decl -> namelist : {assign,line(hd('$1')),'$1',[]} .
-local_decl -> namelist '=' explist : {assign,line('$2'),'$1','$3'} .
-
 %% funcname ::= Name {'.' Name} [':' Name]
 
 funcname -> dottedname ':' NAME :
 		dot_append(line('$2'), '$1', {method,line('$2'),'$3'}) .
 funcname -> dottedname : '$1' .
+
+local_decl -> function NAME funcbody :
+		  functiondef(line('$1'),'$2','$3') .
+local_decl -> namelist : {assign,line(hd('$1')),'$1',[]} .
+local_decl -> namelist '=' explist : {assign,line('$2'),'$1','$3'} .
 
 dottedname -> NAME : '$1'.
 dottedname -> dottedname '.' NAME : dot_append(line('$2'), '$1', '$3') . 
