@@ -29,6 +29,16 @@
 
 %% This interpreter works straight off the AST and does not do any
 %% form of compilation. Which it really should.
+%%
+%% We explicitly mirror the parser rules which generate the AST and do
+%% not try to fold similar structures into common code. While this
+%% means we get more code it also becomes more explicit and clear what
+%% we are doing. It may also allow for specific optimisations. An
+%% example is that we DON'T fold 'var' and 'funcname' even though they
+%% are almost the same.
+%%
+%% Issues: how should we handle '...'? Now we treat it as any (local)
+%% variable.
 
 -module(luerl_eval).
 
@@ -430,10 +440,6 @@ stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
 stat({block,_,B}, St) ->
     block(B, St);
-stat({functiondef,L,Fname,Ps,B}, St0) ->
-    St1 = set_var(Fname, #function{l=L,env=St0#luerl.env,pars=Ps,b=B},
-		  St0),
-    St1#luerl{locf=true};
 stat({'while',_,Exp,Body}, St) ->
     do_while(Exp, Body, St);
 stat({repeat,_,Body,Exp}, St) ->
@@ -446,6 +452,10 @@ stat({for,Line,V,I,L,B}, St) ->
     do_numfor(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
 stat({for,Line,Ns,Gen,B}, St) ->
     do_genfor(Line, Ns, Gen, B, St);
+stat({functiondef,L,Fname,Ps,B}, St0) ->
+    St1 = funcname(Fname, #function{l=L,env=St0#luerl.env,pars=Ps,b=B},
+		  St0),
+    St1#luerl{locf=true};
 stat({local,Decl}, St) ->
     %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
@@ -459,22 +469,23 @@ assign(Ns, Es, St0) ->
     assign_loop(Ns, Vals, St1).
 
 assign_loop([Pre|Pres], [E|Es], St0) ->
-    St1 = set_var(Pre, E, St0),
+    St1 = var(Pre, E, St0),
     assign_loop(Pres, Es, St1);
 assign_loop([Pre|Pres], [], St0) ->		%Set remaining to nil
-    St1 = set_var(Pre, nil, St0),
+    St1 = var(Pre, nil, St0),
     assign_loop(Pres, [], St1);
 assign_loop([], _, St) -> St.
 
-%% set_var(PrefixExp, Val, State) -> State.
+%% var(PrefixExp, Val, State) -> State.
 %%  Step down the prefixexp sequence evaluating as we go, stop at the
-%%  end and return a key and a table where to put data. We can reuse
-%%  much of the prefixexp code but must have our own thing at the end.
+%%  end and return a key and a table where to put data. By definition
+%%  we reuse much of the prefixexp code but must have our own thing at
+%%  the end.
 
-set_var({'.',_,Exp,Rest}, Val, St0) ->
+var({'.',_,Exp,Rest}, Val, St0) ->
     {Next,St1} = prefixexp_first(Exp, St0),
     var_rest(Rest, Val, first_value(Next), St1);
-set_var({'NAME',_,N}, Val, St) ->
+var({'NAME',_,N}, Val, St) ->
     set_env_name(N, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
@@ -634,6 +645,36 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 	    genfor_loop(Names, F, S, hd(Vals), Block, St2);
 	false -> {[],St1}			%Done
     end.
+
+%% funcname(FuncNameExp, Val, State) -> State.
+%%  Step down the funcname sequence evaluating as we go, stop at the
+%%  end and return a key and a table where to put data.
+
+funcname({'.',_,Exp,Rest}, Val, St0) ->
+    {Next,St1} = funcname_first(Exp, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname({'NAME',_,N}, Val, St) ->
+    set_env_name(N, Val, St).
+
+funcname_first({'NAME',_,N}, St) -> {[get_env_name(N, St)],St}.
+    
+funcname_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
+    {Next,St1} = funcname_element(Exp, SoFar, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname_rest(Exp, Val, SoFar, St) ->
+    funcname_last(Exp, Val, SoFar, St).
+
+funcname_element({'NAME',_,N}, SoFar, St) ->
+    get_table_name(SoFar, N, St).
+
+funcname_last({'NAME',_,N}, Val, SoFar, St) ->
+    set_table_name(SoFar, N, Val, St);
+funcname_last({method,_,{'NAME',_,N}}, #function{l=L,pars=Pars}=Func, SoFar, St) ->
+    %% Method a function, make a "method" by adding self parameter.
+    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
+
+%% local(Local, State) -> State.
+%%  Create and assign local variables.
 
 local({functiondef,L,{'NAME',_,N},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
@@ -1074,11 +1115,12 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
 	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
-	    %% Have to be careful where add Tab and Meta as Tab is a
-	    %% [{Key,Val}], Arr is array and Meta is
-	    %% nil|#tref{i=M}. We want lists.
+	    %% Have to be careful where add Tab and Meta as Tab is an
+	    %% orddict, Arr is array and Meta is nil|#tref{i=M}. We
+	    %% want lists.
 	    Aes = array:sparse_to_list(Arr),
-	    mark([Meta|Todo], [[{in_table,T}],Tab,Aes,[{in_table,-T}]|More],
+	    Tes = orddict:to_list(Tab),
+	    mark([Meta|Todo], [[{in_table,T}],Tes,Aes,[{in_table,-T}]|More],
 		 Seen1, Ts)
     end;
 mark([#function{env=Env}|Todo], More, Seen, Ts) ->
