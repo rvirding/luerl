@@ -81,7 +81,7 @@ assert(As, St) ->
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
     {[],St};					%No-op for the moment
-%%    {[],luerl_eval:gc(St)};
+    %% {[],luerl_eval:gc(St)};
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
@@ -96,6 +96,10 @@ eprint(Args, St) ->
 
 error([M|_], _) -> lua_error(M);		%Never returns!
 error(As, _) -> badarg_error(error, As).
+
+%% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
+%%  Return a function which on successive calls returns successive
+%%  key-value pairs of integer keys.
 
 ipairs([#tref{}=Tref|_], St) ->
     case luerl_eval:getmetamethod(Tref, <<"__ipairs">>, St) of
@@ -117,6 +121,21 @@ ipairs_next([#tref{i=T},K|_], St) ->
 	_NegFalse -> lua_error({invalid_key,ipairs,K})
     end;
 ipairs_next(As, _) -> badarg_error(ipairs, As).
+
+%% pairs(Args, State) -> {[Func,Table,Key],State}.
+%%  Return a function to step over all the key-value pairs in a table.
+
+pairs([#tref{}=Tref|_], St) ->
+    case luerl_eval:getmetamethod(Tref, <<"__pairs">>, St) of
+	nil -> {[{function,fun next/2},Tref,nil],St};
+	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
+    end;
+pairs(As, _) -> badarg_error(pairs, As).
+
+%% next(Args, State) -> {[Key,Value] | [nil], State}.
+%%  Given a table and a key return the next key-value pair in the
+%%  table, or nil if there is no next key. The key 'nil' gives the
+%%  first key-value pair.
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
@@ -150,29 +169,18 @@ next_index_loop(I, Arr, S) when I < S ->
     end;
 next_index_loop(_, _, _) -> none.
 
-first_key([{K,V}|_]) -> [K,V];
-first_key([]) -> [nil].
-
-next_key(K, Tab, St) ->
-    case next_key_loop(K, Tab) of
-	[{Next,V}|_] -> {[Next,V],St};
-	[] -> {[nil],St};
-	none -> lua_error({invalid_key,next,K})
+first_key(Tab) ->
+    case ttdict:first(Tab) of
+	{ok,{K,V}} -> [K,V];
+	error -> [nil]
     end.
 
-next_key_loop(K, [{K,_}|Tab]) -> next_key_loop(Tab);
-next_key_loop(K, [_|Tab]) -> next_key_loop(K, Tab);
-next_key_loop(_, []) ->  none.
-
-next_key_loop([{_,nil}|Tab]) -> next_key_loop(Tab);    %Skip nil values
-next_key_loop(Tab) -> Tab.
-
-pairs([#tref{}=Tref|_], St) ->
-    case luerl_eval:getmetamethod(Tref, <<"__pairs">>, St) of
-	nil -> {[{function,fun next/2},Tref,nil],St};
-	Meta -> luerl_eval:functioncall(Meta, [Tref], St)
-    end;
-pairs(As, _) -> badarg_error(pairs, As).
+next_key(K, Tab, St) ->
+    case ttdict:next(K, Tab) of
+	{ok,{N,nil}} -> next_key(N, Tab, St);	%Skip nil values
+	{ok,{N,V}} -> {[N,V],St};
+	error -> {[nil],St}
+    end.
 
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
@@ -231,15 +239,15 @@ rawset(As, _) -> badarg_error(rawset, As).
 raw_get_index(Arr, I) -> array:get(I, Arr).
 
 raw_get_key(Tab, K) ->
-    case orddict:find(K, Tab) of
+    case ttdict:find(K, Tab) of
 	{ok,V} -> V;
 	error -> nil
     end.
 
 raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
 
-raw_set_key(Tab, K, nil) -> orddict:erase(K, Tab);
-raw_set_key(Tab, K, V) -> orddict:store(K, V, Tab).
+raw_set_key(Tab, K, nil) -> ttdict:erase(K, Tab);
+raw_set_key(Tab, K, V) -> ttdict:store(K, V, Tab).
 
 select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->
@@ -285,9 +293,10 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#function{l=L}) ->
+tostring(#function{l=L}) ->			%Functions defined in Lua
     iolist_to_binary(["function: ",io_lib:write(L)]);
-tostring({function,F}) -> iolist_to_binary(["function: ",io_lib:write(F)]);
+tostring({function,F}) ->			%Internal functions
+    iolist_to_binary(["function: ",io_lib:write(F)]);
 tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
@@ -345,20 +354,29 @@ loadfile(As, St) ->
 	    end;
 	nil -> badarg_error(loadfile, As)
     end.
+ 
+do_passes([Fun|Funs], St0) ->
+    case Fun(St0) of
+	{ok,St1} -> do_passes(Funs, St1);
+	Error -> Error
+    end;
+do_passes([], St) -> {ok,St}.
 
-do_load(S, St) ->
-    case parse_string(S) of
+read_passes() ->
+    [fun (S) ->
+	     %% Make return values "conformant".
+	     case luerl_scan:string(S) of
+		 {ok,Ts,_} -> {ok,Ts};
+		 {error,Error,_} -> {error,Error}
+	     end
+     end,
+     fun (Ts) -> luerl_parse:chunk(Ts) end].
+
+do_load(Str, St) ->
+    case do_passes(read_passes(), Str) of
 	{ok,C} ->
-	    F = fun (As, St0) ->
-			%io:fwrite("l: ~p\n", [{C,As}]),
-			Env0 = St0#luerl.env,	%Caller's environment
-			%% Evaluate at top-level,
-			Env = [lists:last(Env0)],
-			{Ret,St1} = luerl_eval:chunk(C, As, St0#luerl{env=Env}),
-			St2 = St1#luerl{env=Env0},
-			{Ret,St2}
-		end,
-	    {[{function,F}],St};
+	    Fun = fun (As, S) -> luerl_eval:chunk(C, As, S) end,
+	    {[{function,Fun}],St};
 	{error,{_,Mod,E}} ->
 	    Msg = iolist_to_binary(Mod:format_error(E)),
 	    {[nil,Msg],St}
@@ -368,19 +386,11 @@ dofile(As, St) ->
     case luerl_lib:tostrings(As) of
 	[File|_] ->
 	    {ok,Bin} = file:read_file(File),
-	    {ok,C} = parse_string(binary_to_list(Bin)),
-	    luerl_eval:chunk(C, St);
-	_ -> badarg_error(dofile, As)
-    end.
-
-parse_string(S) ->
-    case luerl_scan:string(S) of
-	{ok,Ts,_} ->
-	    case luerl_parse:chunk(Ts) of
-		{ok,C} -> {ok,C};
-		{error,E} -> {error,E}
+	    case do_passes(read_passes(), binary_to_list(Bin)) of
+		{ok,Code} -> luerl_emul:chunk(Code, [], St);
+		_ -> badarg_error(dofile, As)
 	    end;
-	{error,E,_} -> {error,E}
+	_ -> badarg_error(dofile, As)
     end.
 
 pcall([F|As], St0) ->

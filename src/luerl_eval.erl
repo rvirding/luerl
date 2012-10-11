@@ -91,18 +91,26 @@ alloc_libs(Libs, St) ->
 
 %% alloc_env(State) -> {Env,State}.
 %% alloc_env(InitialTab, State) -> {Env,State}.
-%% push_env(Env, State) -> {Env,State}.
+%% push_env(Env, State) -> State.
 %% pop_env(State) -> State.
 
-alloc_env(St) -> alloc_env(orddict:new(), St).
+alloc_env(St) -> alloc_env([], St).
 
 alloc_env(Itab, St) -> alloc_table(Itab, St).
+
+push_env(#luerl{env=Es}=St0) ->
+    {T,St1} = alloc_table([], St0),
+    St1#luerl{env=[T|Es]}.
 
 push_env(#tref{}=T, #luerl{env=Es}=St) ->
     St#luerl{env=[T|Es]}.
 
 pop_env(#luerl{env=[_|Es]}=St) ->
     St#luerl{env=Es}.
+
+pop_free_env(#luerl{tabs=Ts0,free=Ns,env=[#tref{i=N}|Es]}=St) ->
+    Ts1 = ?DEL_TABLE(N, Ts0),
+    St#luerl{tabs=Ts1,free=[N|Ns],env=Es}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -124,15 +132,15 @@ alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
 
 init_table(Itab) ->
-    T0 = orddict:new(),
+    T0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
 	       ({K,V}, {T,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
 		       true when I >= 1 -> {T,array:set(I, V, A)};
-		       _NegFalse -> {orddict:store(K, V, T),A}
+		       _NegFalse -> {ttdict:store(K, V, T),A}
 		   end;
-	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
+	       ({K,V}, {T,A}) -> {ttdict:store(K, V, T),A}
 	   end,
     {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
     #table{a=A1,t=T1,m=nil}.
@@ -167,10 +175,10 @@ set_table_key(Tab, Key, _, _) ->
 
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
-    case orddict:find(Key, Tab0) of
+    case ttdict:find(Key, Tab0) of
 	{ok,_} ->			    %Key exists
 	    %% Don't delete key for nil here!
-	    Tab1 = orddict:store(Key, Val, Tab0),
+	    Tab1 = ttdict:store(Key, Val, Tab0),
 	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->				%Key does not exist
@@ -178,7 +186,7 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
 		nil ->
 		    %% Only add non-nil value.
 		    Tab1 = if Val =:= nil -> Tab0;
-			      true -> orddict:store(Key, Val, Tab0)
+			      true -> ttdict:store(Key, Val, Tab0)
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{tabs=Ts1};
@@ -233,7 +241,7 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> {[Val],St};
 	error ->
 	    %% Key not present so try metamethod
@@ -279,7 +287,7 @@ set_local_name_env(Name, Val, Ts, Env) ->
     set_local_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
 set_local_key_env(K, Val, Ts, [#tref{i=E}|_]) ->
-    Store = fun (#table{t=T}=Tab) -> Tab#table{t=orddict:store(K, Val, T)} end,
+    Store = fun (#table{t=T}=Tab) -> Tab#table{t=ttdict:store(K, Val, T)} end,
     ?UPD_TABLE(E, Store, Ts).
 
 set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[#tref{i=E}|_]}=St) ->
@@ -289,16 +297,16 @@ set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[#tref{i=E}|_]}=St) ->
     St#luerl{tabs=Ts1}.
 
 set_local_keys_tab([K|Ks], [Val|Vals], T0) ->
-    T1 = orddict:store(K, Val, T0),
+    T1 = ttdict:store(K, Val, T0),
     set_local_keys_tab(Ks, Vals, T1);
 set_local_keys_tab([K|Ks], [], T0) ->
-    T1 = orddict:store(K, nil, T0),		%Default value nil
+    T1 = ttdict:store(K, nil, T0),		%Default value nil
     set_local_keys_tab(Ks, [], T1);
 set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 
 get_local_key(Key, #luerl{tabs=Ts,env=[#tref{i=E}|_]}) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> Val;
 	error -> nil
     end.
@@ -328,15 +336,18 @@ set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
 
 set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
     Store = fun (#table{t=Tab}=T) ->
-		    T#table{t=orddict:store(K, Val, Tab)} end,
+		    T#table{t=ttdict:store(K, Val, Tab)} end,
     ?UPD_TABLE(_G, Store, Ts);
 set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
     %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
-    case orddict:is_key(K, Tab) of
+    case ttdict:is_key(K, Tab) of
 	true ->
+	    if K == <<"t2">> -> io:format("seke2: ~p\n", [{K,Val,E}]);
+	       true -> ok
+	    end,
 	    Store = fun (#table{t=Tab}=T) ->
-			    T#table{t=orddict:store(K, Val, Tab)} end,
+			    T#table{t=ttdict:store(K, Val, Tab)} end,
 	    ?UPD_TABLE(E, Store, Ts);
 	false -> set_env_key_env(K, Val, Ts, Es)
     end.
@@ -348,7 +359,7 @@ get_env_key(K, #luerl{tabs=Ts,env=Env}) ->
 
 get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Get environment table
-    case orddict:find(K, Tab) of		%Check if variable in the env
+    case ttdict:find(K, Tab) of			%Check if variable in the env
 	{ok,Val} -> Val;
 	error -> get_env_key_env(K, Ts, Es)
     end;
@@ -412,7 +423,7 @@ with_block(Do, St0) ->
     %% io:fwrite("wb->~p\n", [{Locf1}]),
     St4  = case Locf1 of			%Check if we can free table
 	       true -> pop_env(St3);
-	       false -> pop_env(free_table(T, St3))
+	       false -> pop_free_env(St3)
 	   end,
     {Ret,St4#luerl{locf=Locf1 or Locf0}}.
 
@@ -549,8 +560,10 @@ loop_block(Do, St) ->
 			throw:{break,_,Tag,St1} ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
-			    St2 = unwind_stack(St1#luerl.env, Old, St1),
-			    %% io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
+			    Top = St1#luerl.env,
+			    St2 = unwind_stack(Top, Old, St1),
+			    %%io:fwrite("lb: ~p\n", [{Old,New,St2#luerl.env}]),
+			    %%io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
 			    {[],St2}
 		    end
 	    end,
@@ -866,7 +879,8 @@ function_block(Do, St) ->
 			throw:{return,_,Tag,Ret,St1} ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
-			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    New = St1#luerl.env,
+			    St2 = unwind_stack(New, Old, St1),
 			    {Ret,St2};
 			throw:{break,_,Tag,_} ->
 			    lua_error({illegal_op,break})
@@ -875,11 +889,14 @@ function_block(Do, St) ->
     with_block(Block, St).
 
 %% unwind_stack(From, To, State) -> State.
-%%  If locf is false then we can unwind env stack freeing tables as we
-%%  go, otherwise if locf is true we can not do this.
+
+%%  Unwind the stack from From down to To. If locf is false then we
+%%  can unwind env stack freeing tables as we go, otherwise if locf is
+%%  true we can not do this and just reset it to To.
 
 %% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
-unwind_stack(_, _, #luerl{locf=true}=St) -> St;
+unwind_stack(_, To, #luerl{locf=true}=St) ->
+    St#luerl{env=To};
 unwind_stack(From, [Top|_]=To, #luerl{tabs=Ts0,free=Ns0}=St) ->
     {Ts1,Ns1} = unwind_stack(From, Top, Ts0, Ns0),
     St#luerl{tabs=Ts1,free=Ns1,env=To}.
@@ -887,7 +904,6 @@ unwind_stack(From, [Top|_]=To, #luerl{tabs=Ts0,free=Ns0}=St) ->
 unwind_stack([Top|_], Top, Ts, Ns) -> {Ts,Ns};	%Done!
 unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
-    %% io:format("us: ~p\n", [N]),
     unwind_stack(From, Top, Ts1, [N|Ns]).
 
 %% tableconstructor(Fields, State) -> {TableData,State}.
@@ -1066,7 +1082,7 @@ getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab(#tref{i=M}, E, Ts) ->
     #table{t=Mtab} = ?GET_TABLE(M, Ts),
-    case orddict:find(E, Mtab) of
+    case ttdict:find(E, Mtab) of
 	{ok,Mm} -> Mm;
 	error -> nil
     end;
@@ -1096,7 +1112,6 @@ illegal_val_error(Val) ->
 gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
     Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata|Env],
     Seen = mark(Root, [], [], Ts0),
-    %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
     {Free1,Ts1} = filter_tables(Seen, Free0, Ts0),
     St#luerl{tabs=Ts1,free=Free1}.
@@ -1114,12 +1129,18 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    mark(Todo, More, Seen0, Ts);
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
-	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
+	    %%#table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
+	    case ?GET_TABLE(T, Ts) of
+		#table{a=Arr,t=Tab,m=Meta} -> ok;
+		Other ->
+		    Arr=nil, Tab=nil, Meta=nil,
+		    error({boom,Other,T,Ts})
+	    end,
 	    %% Have to be careful where add Tab and Meta as Tab is an
-	    %% orddict, Arr is array and Meta is nil|#tref{i=M}. We
+	    %% ttdict, Arr is array and Meta is nil|#tref{i=M}. We
 	    %% want lists.
 	    Aes = array:sparse_to_list(Arr),
-	    Tes = orddict:to_list(Tab),
+	    Tes = ttdict:to_list(Tab),
 	    mark([Meta|Todo], [[{in_table,T}],Tes,Aes,[{in_table,-T}]|More],
 		 Seen1, Ts)
     end;
