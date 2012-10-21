@@ -214,9 +214,9 @@ Currently implemented functions in the libraries
 Known Bugs
 ----------
 
-Functions defined in a loop, _while_, _repeat_ and _for_, **and** when the
-loop is exited with a _break_ will generate an error when called. For
-example the functions defined in
+Functions defined in a loop, _while_, _repeat_ and _for_, **and** when
+the loop is exited with a _break_ from inside an _if_ will generate an
+error when called. For example the functions defined in
 
     for i=1,10 do
       a[i] = {set = function(x) i=x end, get = function () return i end}
