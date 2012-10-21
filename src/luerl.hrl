@@ -35,7 +35,7 @@
 -record(luerl, {tabs,free,next,			%Table structure
 		%%
 		g,				%Global table
-		stk=[],				%Stack
+		env=[],				%Current environment
 		ft,ff,fn,			%Frame table, free, next
 		%%
 		meta=[],			%Data type metatables
@@ -63,7 +63,7 @@
 %% with the same name. So no type for it.
 -record(function,{l=0,				%Line number (why?)
 		  sz,				%Block size
-		  stk,				%Stack
+		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block
 

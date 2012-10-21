@@ -499,7 +499,7 @@ insert_offs([], _, _) -> [].
 %%  Build the instructions to construct a table. We could be smarter
 %%  here and recognise already uses keys and only actually insert the
 %%  last one. Or we could pre-order the table elements so the keys are
-%%  already sorted, but that would mean adding stack-ops.
+%%  already sorted.
 
 tableconstructor(Fs, St0) ->
     %% N.B. this fun is for a MAPFOLDL!!
