@@ -17,15 +17,15 @@ OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
 
 all: $(OBJECTS)
 
-$(BEAMDIR)/%.beam: $(SRCDIR)/%.erl
+$(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
 	@ mkdir -p $(BEAMDIR) 
 	erlc -o $(BEAMDIR) $<
 
 %.erl: %.xrl
-	erl -noinput -run leex file "$<" -run init stop -noshell
+	erlc -o $(SRCDIR) $<
 
 %.erl: %.yrl
-	erl -noinput -run yecc file "$<" -run init stop -noshell
+	erlc -o $(SRCDIR) $<
 
 clean:
 	@ rm -rf $(BEAMDIR)

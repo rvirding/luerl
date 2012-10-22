@@ -29,16 +29,27 @@
 
 %% This interpreter works straight off the AST and does not do any
 %% form of compilation. Which it really should.
+%%
+%% We explicitly mirror the parser rules which generate the AST and do
+%% not try to fold similar structures into common code. While this
+%% means we get more code it also becomes more explicit and clear what
+%% we are doing. It may also allow for specific optimisations. An
+%% example is that we DON'T fold 'var' and 'funcname' even though they
+%% are almost the same.
+%%
+%% Issues: how should we handle '...'? Now we treat it as any (local)
+%% variable.
 
 -module(luerl_eval).
 
 -include("luerl.hrl").
 
 %% Basic interface.
--export([init/0,call/2,call/3,chunk/2,chunk/3,funchunk/2,funchunk/3,gc/1]).
+-export([init/0,call/2,call/3,chunk/2,chunk/3,gc/1]).
 
-%% Internal functions which can be useful "outside".
--export([alloc_table/2,functioncall/3,get_table_key/3,
+%% Internal functions which are be useful "outside".
+-export([alloc_table/2,functioncall/3,
+	 get_env_key/2,get_table_key/3,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
@@ -81,18 +92,26 @@ alloc_libs(Libs, St) ->
 
 %% alloc_env(State) -> {Env,State}.
 %% alloc_env(InitialTab, State) -> {Env,State}.
-%% push_env(Env, State) -> {Env,State}.
+%% push_env(Env, State) -> State.
 %% pop_env(State) -> State.
 
-alloc_env(St) -> alloc_env(orddict:new(), St).
+alloc_env(St) -> alloc_env([], St).
 
 alloc_env(Itab, St) -> alloc_table(Itab, St).
+
+push_env(#luerl{env=Es}=St0) ->
+    {T,St1} = alloc_table([], St0),
+    St1#luerl{env=[T|Es]}.
 
 push_env(#tref{}=T, #luerl{env=Es}=St) ->
     St#luerl{env=[T|Es]}.
 
 pop_env(#luerl{env=[_|Es]}=St) ->
     St#luerl{env=Es}.
+
+pop_free_env(#luerl{tabs=Ts0,free=Ns,env=[#tref{i=N}|Es]}=St) ->
+    Ts1 = ?DEL_TABLE(N, Ts0),
+    St#luerl{tabs=Ts1,free=[N|Ns],env=Es}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -114,15 +133,15 @@ alloc_table(Itab, #luerl{tabs=Ts0,free=[],next=N}=St) ->
     {#tref{i=N},St#luerl{tabs=Ts1,next=N+1}}.
 
 init_table(Itab) ->
-    T0 = orddict:new(),
+    T0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
 	       ({K,V}, {T,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
 		       true when I >= 1 -> {T,array:set(I, V, A)};
-		       _NegFalse -> {orddict:store(K, V, T),A}
+		       _NegFalse -> {ttdict:store(K, V, T),A}
 		   end;
-	       ({K,V}, {T,A}) -> {orddict:store(K, V, T),A}
+	       ({K,V}, {T,A}) -> {ttdict:store(K, V, T),A}
 	   end,
     {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
     #table{a=A1,t=T1,m=nil}.
@@ -157,10 +176,10 @@ set_table_key(Tab, Key, _, _) ->
 
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
-    case orddict:find(Key, Tab0) of
+    case ttdict:find(Key, Tab0) of
 	{ok,_} ->			    %Key exists
 	    %% Don't delete key for nil here!
-	    Tab1 = orddict:store(Key, Val, Tab0),
+	    Tab1 = ttdict:store(Key, Val, Tab0),
 	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{tabs=Ts1};
 	error ->				%Key does not exist
@@ -168,7 +187,7 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{tabs=Ts0}=St) ->
 		nil ->
 		    %% Only add non-nil value.
 		    Tab1 = if Val =:= nil -> Tab0;
-			      true -> orddict:store(Key, Val, Tab0)
+			      true -> ttdict:store(Key, Val, Tab0)
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{tabs=Ts1};
@@ -223,7 +242,7 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=Ts}=St) ->
     #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> {[Val],St};
 	error ->
 	    %% Key not present so try metamethod
@@ -269,7 +288,7 @@ set_local_name_env(Name, Val, Ts, Env) ->
     set_local_key_env(atom_to_binary(Name, latin1), Val, Ts, Env).
 
 set_local_key_env(K, Val, Ts, [#tref{i=E}|_]) ->
-    Store = fun (#table{t=T}=Tab) -> Tab#table{t=orddict:store(K, Val, T)} end,
+    Store = fun (#table{t=T}=Tab) -> Tab#table{t=ttdict:store(K, Val, T)} end,
     ?UPD_TABLE(E, Store, Ts).
 
 set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[#tref{i=E}|_]}=St) ->
@@ -279,16 +298,16 @@ set_local_keys(Ks, Vals, #luerl{tabs=Ts0,env=[#tref{i=E}|_]}=St) ->
     St#luerl{tabs=Ts1}.
 
 set_local_keys_tab([K|Ks], [Val|Vals], T0) ->
-    T1 = orddict:store(K, Val, T0),
+    T1 = ttdict:store(K, Val, T0),
     set_local_keys_tab(Ks, Vals, T1);
 set_local_keys_tab([K|Ks], [], T0) ->
-    T1 = orddict:store(K, nil, T0),		%Default value nil
+    T1 = ttdict:store(K, nil, T0),		%Default value nil
     set_local_keys_tab(Ks, [], T1);
 set_local_keys_tab([], _, T) -> T.		%Ignore extra values
 
 get_local_key(Key, #luerl{tabs=Ts,env=[#tref{i=E}|_]}) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),
-    case orddict:find(Key, Tab) of
+    case ttdict:find(Key, Tab) of
 	{ok,Val} -> Val;
 	error -> nil
     end.
@@ -317,16 +336,19 @@ set_env_key(K, Val, #luerl{tabs=Ts0,env=Env}=St) ->
     St#luerl{tabs=Ts1}.
 
 set_env_key_env(K, Val, Ts, [#tref{i=_G}]) ->	%Top table _G
-    Store = fun (#table{t=T}=Tab) ->
-		    Tab#table{t=orddict:store(K, Val, T)} end,
+    Store = fun (#table{t=Tab}=T) ->
+		    T#table{t=ttdict:store(K, Val, Tab)} end,
     ?UPD_TABLE(_G, Store, Ts);
 set_env_key_env(K, Val, Ts, [#tref{i=E}|Es]) ->
     %% io:fwrite("seke: ~p\n", [{K,Val,E,?GET_TABLE(E, Ts)}]),
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Find the table
-    case orddict:is_key(K, Tab) of
+    case ttdict:is_key(K, Tab) of
 	true ->
-	    Store = fun (#table{t=T}=Tab0) ->
-			    Tab0#table{t=orddict:store(K, Val, T)} end,
+	    if K == <<"t2">> -> io:format("seke2: ~p\n", [{K,Val,E}]);
+	       true -> ok
+	    end,
+	    Store = fun (#table{t=Tab}=T) ->
+			    T#table{t=ttdict:store(K, Val, Tab)} end,
 	    ?UPD_TABLE(E, Store, Ts);
 	false -> set_env_key_env(K, Val, Ts, Es)
     end.
@@ -338,7 +360,7 @@ get_env_key(K, #luerl{tabs=Ts,env=Env}) ->
 
 get_env_key_env(K, Ts, [#tref{i=E}|Es]) ->
     #table{t=Tab} = ?GET_TABLE(E, Ts),		%Get environment table
-    case orddict:find(K, Tab) of		%Check if variable in the env
+    case ttdict:find(K, Tab) of			%Check if variable in the env
 	{ok,Val} -> Val;
 	error -> get_env_key_env(K, Ts, Es)
     end;
@@ -367,7 +389,7 @@ call({functiondef,L,Ps,B}, Args, St0) ->
     {Ret,St2} = functioncall(Func, Args, St1),
     %% Should do GC here.
     {Ret,St2};
-call({function,_,_,_,_}=Func, Args, St0) ->
+call(#function{}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
@@ -375,23 +397,6 @@ call({function,_}=Func, Args, St0) ->
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
-
-%% funchunk(Function, State) -> {Return,State}.
-
-funchunk({functiondef,_Line,_Name,_Pars,Body}, St0) ->
-    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
-    %% Should do GC here.
-    {Ret,St1};
-
-funchunk({functiondef,_Line,_Pars,Body}, St0) ->
-    {Ret,St1} = function_block(fun (S) -> {[],stats(Body, S)} end, St0),
-    %% Should do GC here.
-    {Ret,St1}.
-
-funchunk(Func, St0, _Pars) ->           %Todo: Parameters.
-    funchunk(Func, St0).                %Note: from ERLANG. And the functiondef
-                                        %is a wrap around ALL chunks except
-                                        %those that already were functions.
 
 %% block(Stats, State) -> State.
 %%  Evaluate statements in a block. The with_block function requires
@@ -419,7 +424,7 @@ with_block(Do, St0) ->
     %% io:fwrite("wb->~p\n", [{Locf1}]),
     St4  = case Locf1 of			%Check if we can free table
 	       true -> pop_env(St3);
-	       false -> pop_env(free_table(T, St3))
+	       false -> pop_free_env(St3)
 	   end,
     {Ret,St4#luerl{locf=Locf1 or Locf0}}.
 
@@ -447,9 +452,6 @@ stat({goto,_,_}, _) ->				%Not implemented yet
     lua_error({undefined_op,goto});
 stat({block,_,B}, St) ->
     block(B, St);
-stat({functiondef,L,Fname,Ps,B}, St0) ->
-    St1 = set_var(Fname, {function,L,St0#luerl.env,Ps,B}, St0),
-    St1#luerl{locf=true};
 stat({'while',_,Exp,Body}, St) ->
     do_while(Exp, Body, St);
 stat({repeat,_,Body,Exp}, St) ->
@@ -462,6 +464,10 @@ stat({for,Line,V,I,L,B}, St) ->
     do_numfor(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
 stat({for,Line,Ns,Gen,B}, St) ->
     do_genfor(Line, Ns, Gen, B, St);
+stat({functiondef,L,Fname,Ps,B}, St0) ->
+    St1 = funcname(Fname, #function{l=L,env=St0#luerl.env,pars=Ps,b=B},
+		  St0),
+    St1#luerl{locf=true};
 stat({local,Decl}, St) ->
     %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
@@ -475,27 +481,28 @@ assign(Ns, Es, St0) ->
     assign_loop(Ns, Vals, St1).
 
 assign_loop([Pre|Pres], [E|Es], St0) ->
-    St1 = set_var(Pre, E, St0),
+    St1 = var(Pre, E, St0),
     assign_loop(Pres, Es, St1);
 assign_loop([Pre|Pres], [], St0) ->		%Set remaining to nil
-    St1 = set_var(Pre, nil, St0),
+    St1 = var(Pre, nil, St0),
     assign_loop(Pres, [], St1);
 assign_loop([], _, St) -> St.
 
-%% set_var(PrefixExp, Val, State) -> State.
+%% var(PrefixExp, Val, State) -> State.
 %%  Step down the prefixexp sequence evaluating as we go, stop at the
-%%  end and return a key and a table where to put data. We can reuse
-%%  much of the prefixexp code but must have our own thing at the end.
+%%  end and return a key and a table where to put data. By definition
+%%  we reuse much of the prefixexp code but must have our own thing at
+%%  the end.
 
-set_var({'.',_,Exp,Rest}, Val, St0) ->
-    {[Next|_],St1} = prefixexp_first(Exp, St0),
-    var_rest(Rest, Val, Next, St1);
-set_var({'NAME',_,N}, Val, St) ->
+var({'.',_,Exp,Rest}, Val, St0) ->
+    {Next,St1} = prefixexp_first(Exp, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
+var({'NAME',_,N}, Val, St) ->
     set_env_name(N, Val, St).
     
 var_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
-    {[Next|_],St1} = prefixexp_element(Exp, SoFar, St0),
-    var_rest(Rest, Val, Next, St1);
+    {Next,St1} = prefixexp_element(Exp, SoFar, St0),
+    var_rest(Rest, Val, first_value(Next), St1);
 var_rest(Exp, Val, SoFar, St) ->
     var_last(Exp, Val, SoFar, St).
 
@@ -504,9 +511,9 @@ var_last({'NAME',_,N}, Val, SoFar, St) ->
 var_last({key_field,_,Exp}, Val, SoFar, St0) ->
     {Key,St1} = exp(Exp, St0),
     set_table_key(SoFar, first_value(Key), Val, St1);
-var_last({method,_,{'NAME',_,N}}, {function,L,Env,Pars,B}, SoFar, St) ->
+var_last({method,_,{'NAME',_,N}}, #function{l=L,pars=Pars}=Func, SoFar, St) ->
     %% Method a function, make a "method" by adding self parameter.
-    set_table_name(SoFar, N, {function,L,Env,[{'NAME',L,self}|Pars],B}, St).
+    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
 
 %% do_while(TestExp, Body, State) -> State.
 
@@ -554,8 +561,10 @@ loop_block(Do, St) ->
 			throw:{break,_,Tag,St1} ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
-			    St2 = unwind_stack(St1#luerl.env, Old, St1),
-			    %% io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
+			    Top = St1#luerl.env,
+			    St2 = unwind_stack(Top, Old, St1),
+			    %%io:fwrite("lb: ~p\n", [{Old,New,St2#luerl.env}]),
+			    %%io:fwrite("lb: ~p\n", [{St0#luerl.locf,St1#luerl.locf,St2#luerl.locf}]),
 			    {[],St2}
 		    end
 	    end,
@@ -651,10 +660,40 @@ genfor_loop(Names, F, S, Var, Block, St0) ->
 	false -> {[],St1}			%Done
     end.
 
+%% funcname(FuncNameExp, Val, State) -> State.
+%%  Step down the funcname sequence evaluating as we go, stop at the
+%%  end and return a key and a table where to put data.
+
+funcname({'.',_,Exp,Rest}, Val, St0) ->
+    {Next,St1} = funcname_first(Exp, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname({'NAME',_,N}, Val, St) ->
+    set_env_name(N, Val, St).
+
+funcname_first({'NAME',_,N}, St) -> {[get_env_name(N, St)],St}.
+    
+funcname_rest({'.',_,Exp,Rest}, Val, SoFar, St0) ->
+    {Next,St1} = funcname_element(Exp, SoFar, St0),
+    funcname_rest(Rest, Val, first_value(Next), St1);
+funcname_rest(Exp, Val, SoFar, St) ->
+    funcname_last(Exp, Val, SoFar, St).
+
+funcname_element({'NAME',_,N}, SoFar, St) ->
+    get_table_name(SoFar, N, St).
+
+funcname_last({'NAME',_,N}, Val, SoFar, St) ->
+    set_table_name(SoFar, N, Val, St);
+funcname_last({method,_,{'NAME',_,N}}, #function{l=L,pars=Pars}=Func, SoFar, St) ->
+    %% Method a function, make a "method" by adding self parameter.
+    set_table_name(SoFar, N, Func#function{pars=[{'NAME',L,self}|Pars]}, St).
+
+%% local(Local, State) -> State.
+%%  Create and assign local variables.
+
 local({functiondef,L,{'NAME',_,N},Ps,B}, #luerl{tabs=Ts0,env=Env}=St) ->
     %% Set name separately first so recursive call finds right Name.
     Ts1 = set_local_name_env(N, nil, Ts0, Env),
-    Ts2 = set_local_name_env(N, {function,L,Env,Ps,B}, Ts1, Env),
+    Ts2 = set_local_name_env(N, #function{l=L,env=Env,pars=Ps,b=B}, Ts1, Env),
     St#luerl{tabs=Ts2,locf=true};
 local({assign,_,Ns,Es}, St0) ->
     {Vals,St1} = explist(Es, St0),
@@ -699,7 +738,7 @@ exp({'...',_}, St) ->				%Get '...', error if undefined
 	Val -> {Val,St}				%Already a list
     end;
 exp({functiondef,L,Ps,B}, St) ->
-    {[{function,L,St#luerl.env,Ps,B}],St#luerl{locf=true}};
+    {[#function{l=L,env=St#luerl.env,pars=Ps,b=B}],St#luerl{locf=true}};
 exp({table,_,Fs}, St0) ->
     {Ts,St1} = tableconstructor(Fs, St0),
     {T,St2} = alloc_table(Ts, St1),
@@ -788,7 +827,7 @@ prefixexp_element({method,_,{'NAME',_,N},Args0}, SoFar, St0) ->
 	    functioncall(Fval, [SoFar|Args1], St2)
     end.
 
-functioncall({function,_,Env,Ps,B}, Args, St0) ->
+functioncall(#function{env=Env,pars=Ps,b=B}, Args, St0) ->
     Env0 = St0#luerl.env,			%Caller's environment
     St1 = St0#luerl{env=Env},			%Set function's environment
     Do = fun (S0) ->
@@ -801,7 +840,7 @@ functioncall({function,_,Env,Ps,B}, Args, St0) ->
     {Ret,St3};
 functioncall({function,Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
-functioncall({userdata,Fun}, Args, St) when is_function(Fun) ->
+functioncall(#userdata{d=Fun}, Args, St) when is_function(Fun) ->
     Fun(Args, St);
 functioncall(Func, As, St) ->
     %% io:format("fc: ~p\n", [{Func,As}]),
@@ -841,7 +880,8 @@ function_block(Do, St) ->
 			throw:{return,_,Tag,Ret,St1} ->
 			    %% Unwind the stack and freeing tables.
 			    Old = St0#luerl.env,
-			    St2 = unwind_stack(St1#luerl.env, Old, St1),
+			    New = St1#luerl.env,
+			    St2 = unwind_stack(New, Old, St1),
 			    {Ret,St2};
 			throw:{break,_,Tag,_} ->
 			    lua_error({illegal_op,break})
@@ -850,11 +890,14 @@ function_block(Do, St) ->
     with_block(Block, St).
 
 %% unwind_stack(From, To, State) -> State.
-%%  If locf is false then we can unwind env stack freeing tables as we
-%%  go, otherwise if locf is true we can not do this.
+
+%%  Unwind the stack from From down to To. If locf is false then we
+%%  can unwind env stack freeing tables as we go, otherwise if locf is
+%%  true we can not do this and just reset it to To.
 
 %% unwind_stack(_, To, St) -> St#luerl{env=To};	%For testing
-unwind_stack(_, _, #luerl{locf=true}=St) -> St;
+unwind_stack(_, To, #luerl{locf=true}=St) ->
+    St#luerl{env=To};
 unwind_stack(From, [Top|_]=To, #luerl{tabs=Ts0,free=Ns0}=St) ->
     {Ts1,Ns1} = unwind_stack(From, Top, Ts0, Ns0),
     St#luerl{tabs=Ts1,free=Ns1,env=To}.
@@ -862,7 +905,6 @@ unwind_stack(From, [Top|_]=To, #luerl{tabs=Ts0,free=Ns0}=St) ->
 unwind_stack([Top|_], Top, Ts, Ns) -> {Ts,Ns};	%Done!
 unwind_stack([#tref{i=N}|From], Top, Ts0, Ns) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
-    %% io:format("us: ~p\n", [N]),
     unwind_stack(From, Top, Ts1, [N|Ns]).
 
 %% tableconstructor(Fields, State) -> {TableData,State}.
@@ -1031,7 +1073,7 @@ getmetamethod(O1, O2, E, St) ->
 getmetamethod(#tref{i=N}, E, #luerl{tabs=Ts}) ->
     #table{m=Meta} = ?GET_TABLE(N, Ts),
     getmetamethod_tab(Meta, E, Ts);
-getmetamethod({userdata,_}, E, #luerl{tabs=Ts,meta=Meta}) ->
+getmetamethod(#userdata{}, E, #luerl{tabs=Ts,meta=Meta}) ->
     getmetamethod_tab(Meta#meta.userdata, E, Ts);
 getmetamethod(S, E, #luerl{tabs=Ts,meta=Meta}) when is_binary(S) ->
     getmetamethod_tab(Meta#meta.string, E, Ts);
@@ -1041,7 +1083,7 @@ getmetamethod(_, _, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab(#tref{i=M}, E, Ts) ->
     #table{t=Mtab} = ?GET_TABLE(M, Ts),
-    case orddict:find(E, Mtab) of
+    case ttdict:find(E, Mtab) of
 	{ok,Mm} -> Mm;
 	error -> nil
     end;
@@ -1071,15 +1113,8 @@ illegal_val_error(Val) ->
 gc(#luerl{tabs=Ts0,meta=Meta,free=Free0,env=Env}=St) ->
     Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata|Env],
     Seen = mark(Root, [], [], Ts0),
-    %% io:format("gc: ~p\n", [Seen]),
     %% Free unseen tables and add freed to free list.
-    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
-    Free1 = ?FOLD_TABLES(fun (K, _, F) ->
-				 case ordsets:is_element(K, Seen) of
-				     true -> F;
-				     false -> [K|F]
-				 end
-			 end, Free0, Ts0),
+    {Free1,Ts1} = filter_tables(Seen, Free0, Ts0),
     St#luerl{tabs=Ts1,free=Free1}.
 
 %% mark(ToDo, MoreTodo, Seen, Tabs) -> Seen.
@@ -1095,13 +1130,22 @@ mark([#tref{i=T}|Todo], More, Seen0, Ts) ->
 	    mark(Todo, More, Seen0, Ts);
 	false ->				%Must do it
 	    Seen1 = ordsets:add_element(T, Seen0),
-	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
-	    %% Have to be careful where add Tab and Meta as Tab is a
-	    %% [{Key,Val}] and Meta is a nil|#tref{i=M}. We want lists.
-	    mark([Meta|Todo], [[{in_table,T}],Tab,Arr,[{in_table,-T}]|More],
+	    %%#table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Ts),
+	    case ?GET_TABLE(T, Ts) of
+		#table{a=Arr,t=Tab,m=Meta} -> ok;
+		Other ->
+		    Arr=nil, Tab=nil, Meta=nil,
+		    error({boom,Other,T,Ts})
+	    end,
+	    %% Have to be careful where add Tab and Meta as Tab is an
+	    %% ttdict, Arr is array and Meta is nil|#tref{i=M}. We
+	    %% want lists.
+	    Aes = array:sparse_to_list(Arr),
+	    Tes = ttdict:to_list(Tab),
+	    mark([Meta|Todo], [[{in_table,T}],Tes,Aes,[{in_table,-T}]|More],
 		 Seen1, Ts)
     end;
-mark([{function,_,Env,_,_}|Todo], More, Seen, Ts) ->
+mark([#function{env=Env}|Todo], More, Seen, Ts) ->
     mark(Todo, [Env|More], Seen, Ts);
 %% Catch these as they would match table key-value pair.
 mark([{function,_}|Todo], More, Seen, Ts) ->
@@ -1118,3 +1162,18 @@ mark([_|Todo], More, Seen, Ts) ->		%Can ignore everything else
 mark([], [M|More], Seen, Ts) ->
     mark(M, More, Seen, Ts);
 mark([], [], Seen, _) -> Seen.
+
+%% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
+%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%%  Filter tables/frames and return updated free lists and
+%%  tables/frames.
+
+filter_tables(Seen, Free0, Ts0) ->
+    Free1 = ?FOLD_TABLES(fun (K, _, Free) ->
+				 case ordsets:is_element(K, Seen) of
+				     true -> Free;
+				     false -> [K|Free]
+				 end
+			 end, Free0, Ts0),
+    Ts1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ts0),
+    {Free1,Ts1}.
