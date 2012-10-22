@@ -47,8 +47,9 @@
 %% Basic interface.
 -export([init/0,call/2,call/3,chunk/2,chunk/3,gc/1]).
 
-%% Internal functions which can be useful "outside".
--export([alloc_table/2,functioncall/3,get_table_key/3,
+%% Internal functions which are be useful "outside".
+-export([alloc_table/2,functioncall/3,
+	 get_env_key/2,get_table_key/3,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
