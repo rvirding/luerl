@@ -23,11 +23,15 @@
 %% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %% POSSIBILITY OF SUCH DAMAGE.
 
-%% File    : luerl_os.erl
+%% File    : luerl_io.erl
 %% Author  : Robert Virding
-%% Purpose : The os library for Luerl.
+%% Purpose : The io library for Luerl.
 
--module(luerl_os).
+%% This is a quick hack to get io working. It will be improved in time.
+
+-module(luerl_io).
+
+-include("luerl.hrl").
 
 -export([install/1]).
 
@@ -36,37 +40,19 @@
 install(St) ->
     luerl_eval:alloc_table(table(), St).
 
+%% table() -> [{FuncName,Function}].
+
 table() ->
-    [{<<"clock">>,{function,fun clock/2}},
-     {<<"date">>,{function,fun date/2}},
-     {<<"difftime">>,{function,fun difftime/2}},
-     {<<"getenv">>,{function,fun getenv/2}},
-     {<<"time">>,{function,fun time/2}}].
+    [{<<"flush">>,{function,fun flush/2}},
+     {<<"write">>,{function,fun write/2}}
+    ].
 
-getenv([<<>>|_], St) -> {[nil],St};
-getenv([A|_], St) when is_binary(A) ; is_number(A) ->
-    case os:getenv(luerl_lib:to_list(A)) of
-	Env when is_list(Env) ->
-	    {[list_to_binary(Env)],St};
-	false -> {[nil],St}
-    end;
-getenv(As, _) -> lua_error({badarg,getenv,As}).
+flush(_, St) -> {[true],St}.
 
-%% Time functions.
-
-clock(_, St) ->					%This is wrong!
-    {Mega,S,Micro} = now(),
-    {[1.0e6*Mega+S+Micro*1.0e-6],St}.
-
-date(_, St) ->
-    {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
-    Str = io_lib:fwrite("~w-~.2.Ow-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
-			[Ye,Mo,Da,Ho,Mi,Sec]),
-    {[iolist_to_binary(Str)],St}.
-
-difftime([A1,A2|_], St) ->
-    {[A2-A1],St}.
-
-time(_, St) ->					%Time since 1 Jan 1970
-    {M,S,_} = now(),
-    {[1.0e6*M+S],St}.
+write(As, St) ->
+    case luerl_lib:conv_list(As, [lua_string]) of
+	nil -> lua_error({badarg,write,As});
+	Ss ->
+	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),
+	    {[#userdata{d=standard_io}],St}
+    end.
