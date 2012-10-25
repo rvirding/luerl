@@ -27,13 +27,6 @@ $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
 %.erl: %.yrl
 	erlc -o $(SRCDIR) $<
 
-bench: all bench.beam
-	@ echo "(Do 'lua bench.lua' to see what you should see.)" 
-	erl -pa ./ebin -s bench run -s init stop -noshell
-
-bench.beam: bench.erl
-	erlc bench.erl
-
 clean:
 	@ rm -rf $(BEAMDIR)
 	@ rm -f *.beam
