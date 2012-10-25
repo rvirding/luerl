@@ -2,5 +2,8 @@
 -- Purpose : Demonstration of Luerl interface.
 -- See     : ./examples/hello/hello2.erl
 
-a = a .. ' (in case you didn\'t know)'
-return a
+function confirm(p)
+	return p .. ' (it really is)'
+end
+
+return confirm(a)

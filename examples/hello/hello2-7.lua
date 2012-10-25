@@ -2,5 +2,5 @@
 -- Purpose : Demonstration of Luerl interface.
 -- See     : ./examples/hello/hello2.erl
 
-a = "οἶδα οὐκ εἰδώς, oîda ouk eidōs"
+a = "(28a) οἶδα οὐκ εἰδώς, oîda ouk eidōs"
 return a
