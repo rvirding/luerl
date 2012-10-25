@@ -3,5 +3,5 @@
 -- See     : ./examples/hello/hello2.erl
 
 a = 'new contents of a'
-print(a)
+print('(27) (a) ' .. a)
 return a
