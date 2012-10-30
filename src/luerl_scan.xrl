@@ -126,7 +126,12 @@ Rules.
 [\011-\015\s\240]+ : skip_token.		%Mirror Lua here
 
 %% Comments, either -- or --[[ ]].
---(\[[^[].*|[^[].*|\n) : skip_token.
+%%--(\[([^[\n].*|\[\n|[^[\n].*|\n) : skip_token.
+--\n :		skip_token.
+--[^[\n].* :	skip_token.
+--\[\n :	skip_token.
+--\[[^[\n].* :	skip_token.
+
 %% --aa([^b]|b[^b])*b+b
 --\[\[([^]]|\][^]])*\]+\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
