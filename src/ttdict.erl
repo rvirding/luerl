@@ -97,14 +97,14 @@ is_key(_, empty) -> false;
 is_key(Key, {L,Xk,_,_}) when Key < Xk -> is_key(Key, L);
 is_key(Key, {_,Xk,_,R}) when Key > Xk -> is_key(Key, R);
 is_key(_, {_,_,_,_}) -> true;			%Key == Xk
-is_key(Key, {L,Xk,_,_,_,_}) when Key < Xk ->
+is_key(Key, {L,Xk,_,_,_,_,_}) when Key < Xk ->
     is_key(Key, L);
 is_key(Key, {_,Xk,_,M,Yk,_,R}) when Key > Xk ->
     if Key < Yk -> is_key(Key, M);
        Key > Yk -> is_key(Key, R);
        true -> true				%Key == Yk
     end;
-is_key(_, {_,_,_,_,_,_}) -> true.
+is_key(_, {_,_,_,_,_,_,_}) -> true.		%Key == Xk
 
 -spec to_list(Dict) -> List when
       Dict :: ttdict(),

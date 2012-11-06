@@ -64,6 +64,8 @@ Interface functions in luerl.erl
 
 All functions optionally accept a **Lua State** parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.
 
+Please avoid directly accessing functions in other modules which haven't been defined here. There are no guarantees that they will not change.
+
 **eval** and **do** functions differ only in what they return. The **do** functions return results and a new Lua State, the **eval** functions return a tuple starting on 'ok' or 'error', then the result, or cause of error.
 
     do --> {Result, State} 
@@ -91,8 +93,17 @@ All functions optionally accept a **Lua State** parameter. The Lua State is the 
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
-#### luerl:call(Form, Args[, State]) -> {Result,State}
- Call a compiled chunk or function.
+#### luerl:call(FuncPath, Args[, State]) -> {Result,NewState}
+Call a function already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+
+#### luerl:call1(Keys, Args, State) -> {Result,NewState}
+Call a function already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
+
+#### luerl:method(FuncPath, Args[, State]) -> {Result,NewState}.
+Call a method already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+
+#### luerl:method1(Keys, Args, State) -> {Result,NewState}
+Call a method already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
 
 #### luerl:stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
@@ -101,7 +112,6 @@ All functions optionally accept a **Lua State** parameter. The Lua State is the 
  Runs the (experimental) garbage collector on a state and returns the new state.
  
 N.B. This interface is subject to change!
-
 
 Examples
 
@@ -116,6 +126,10 @@ Examples
     State = luerl:init(),
     {_Ret, _NewState} = luerl:do(Chunk, State),
 
+#### call a function in the state
+    {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42], State0)
+
+executes the call `table.pack("a", "b", 42)` in `State0`.
 
 For more examples see `examples/hello/hello2.erl`.
 
@@ -125,6 +139,12 @@ You can build and run these samples with:
 
     make hello
     make hello2
+
+There is also a library module, `luerl_lib`, which contains functions which may be used.
+
+#### luerl_lib:first_value(ReturnList) -> Value.
+
+#### luerl_lib:is_true_value(ReturnList) -> true | false.
 
 
 Currently implemented functions in the libraries
