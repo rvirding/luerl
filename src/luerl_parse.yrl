@@ -98,7 +98,7 @@ stat -> repeat_stat : '$1' .
 stat -> if_stat : '$1' .
 stat -> for_stat : '$1' .
 stat -> function funcname funcbody : functiondef(line('$1'),'$2','$3') .
-stat -> local local_decl : {local,'$2'} .
+stat -> local local_decl : {local,line('$1'),'$2'} .
 
 label_stat -> '::' NAME '::' : {label,line('$1'),'$2'} .
 

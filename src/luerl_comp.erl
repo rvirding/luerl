@@ -50,7 +50,9 @@
 -export([chunk/1]).
 
 string(S) ->
-    {ok,C} = luerl:load(S),
+    %% Can't call luerl:load here as it calls the compiler, us.
+    {ok,Ts,_} = luerl_scan:string(S),
+    {ok,C} = luerl_parse:chunk(Ts),
     Is = chunk(C),
     {C,Is}.
 
@@ -193,9 +195,9 @@ stat({for,Line,Ns,Gens,B}, St0) ->
 stat({functiondef,L,Fname,Ps,B}, St0) ->
     {V,F,St1} = functiondef(L, Fname, Ps, B, St0),
     {{functiondef,L,V,F},St1};
-stat({local,Local}, St0) ->
+stat({local,L,Local}, St0) ->
     {Cloc,St1} = local(Local, St0),
-    {{local,Cloc},St1};
+    {{local,L,Cloc},St1};
 stat(Exp, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {Ce,St1}.
@@ -394,20 +396,6 @@ exp({functiondef,L,Ps,B}, St0) ->
 exp({table,L,Fs}, St0) ->
     {Cfs,St1} = tableconstructor(Fs, St0),
     {{table,L,Cfs},St1};
-%% 'and' and 'or' short-circuit so need special handling.
-%% exp({op,_,'and',A1,A2}, St0) ->
-%%     {After,St1} = new_label(St0),
-%%     {Ia1s,St2} = exp(A1, St1),
-%%     {Ia2s,St3} = exp(A2, St2),
-%%     %% A bit convoluted with the stack here.
-%%     {Ia1s ++ [dup,{br_false,After},pop] ++ Ia2s ++ [{label,After}], St3};
-%% exp({op,_,'or',A1,A2}, St0) ->
-%%     {After,St1} = new_label(St0),
-%%     {Ia1s,St2} = exp(A1, St1),
-%%     {Ia2s,St3} = exp(A2, St2),
-%%     %% A bit convoluted with the stack here.
-%%     {Ia1s ++ [dup,{br_true,After},pop] ++ Ia2s ++ [{label,After}], St3};
-%% All the other operators are strict.
 exp({op,L,Op,A1,A2}, St0) ->
     {Ca1,St1} = exp(A1, St0),
     {Ca2,St2} = exp(A2, St1),

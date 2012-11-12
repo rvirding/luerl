@@ -426,7 +426,7 @@ stat({for,_,Vs,Gen,Sz,B}, St) ->		%Generic for
 stat({functiondef,_,V,F}, St0) ->
     {[Func],St1} = exp(F, St0),
     funcname(V, Func, St1);
-stat({local,Decl}, St) ->
+stat({local,_,Decl}, St) ->
     %% io:format("sl: ~p\n", [Decl]),
     local(Decl, St);
 stat(P, St0) ->
