@@ -64,6 +64,8 @@ Interface functions in luerl.erl
 
 All functions optionally accept a **Lua State** parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.
 
+Note that **Forms** (see definition below) can travel between different States. They are precompiled bits of code, independent of State. That you can 'carry them around' is unique to Luerl.
+
 Please avoid directly accessing functions in other modules which haven't been defined here. There are no guarantees that they will not change.
 
 **eval** and **do** functions differ only in what they return. The **do** functions return results and a new Lua State, the **eval** functions return a tuple starting on 'ok' or 'error', then the result, or cause of error.
@@ -71,6 +73,17 @@ Please avoid directly accessing functions in other modules which haven't been de
     do --> {Result, State} 
 
     eval --> {ok, Result} | {error, Reason}
+
+**Spec Definitions:**   
+**Binary** means an Erlang binary string.   
+**Form** means a portion of precompiled bytecode. (also ambiguously called **Compiled Chunks** here and **Chunks** in the samples.)    
+**State** means a Lua State, this *is* a Lua VM instance.     
+**Path** means a file system path and file name.  
+**FuncPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.  
+**Keys** I don't know
+
+**Eaxmples**
+See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
 #### luerl:eval(String|Binary|Form[, State]) -> {ok, Result} | {error, Reason}.
  Evaluate a Lua expression passed in as a string or binary, and return its result.
@@ -85,22 +98,22 @@ Please avoid directly accessing functions in other modules which haven't been de
  Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
 
 #### luerl:load(String|Binary) -> {ok, Form} | {error, Reason} .
- Parse a Lua chunk as string or binary, and return a compiled chunk.
+ Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
 
 #### luerl:loadfile(Path) -> {ok,Form}.
- Parse a Lua file, and return a compiled chunk.
+ Parse a Lua file, and return a compiled chunk ('form').
 
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
 #### luerl:call(FuncPath, Args[, State]) -> {Result,NewState}
-Call a function already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+Call a function already defined in the state. FuncPath is a list of atoms of names to the function. FuncPath, Args and Result are automatically encode/decoded.
 
 #### luerl:call1(Keys, Args, State) -> {Result,NewState}
 Call a function already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
 
 #### luerl:method(FuncPath, Args[, State]) -> {Result,NewState}.
-Call a method already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+Call a method already defined in the state. FuncPath is a list of atoms of names to the function. FuncPath, Args and Result are automatically encode/decoded.
 
 #### luerl:method1(Keys, Args, State) -> {Result,NewState}
 Call a method already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
@@ -115,30 +128,46 @@ N.B. This interface is subject to change!
 
 Examples
 
+To run the examples, do `make` and then start the Erlang command line with `erl -pa ./ebin`.  
+**Don't be shocked by the very long dump following each function call.**   
+At the command line you are seeing the Lua State dumped, that is returned by these calls:
+
 #### execute a string
-    luerl:do("print(\"Hello, Robert(o)!\")"),
+    luerl:do("print(\"Hello, Robert(o)!\")").
 
 #### execute a file
-    luerl:dofile("./examples/hello/hello.lua"),
+    luerl:dofile("./examples/hello/hello.lua").
 
 #### separately parse, then execute
     {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
     State = luerl:init(),
-    {_Ret, _NewState} = luerl:do(Chunk, State),
+    {_Ret, _NewState} = luerl:do(Chunk, State).
 
 #### call a function in the state
     {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42], State0)
 
-executes the call `table.pack("a", "b", 42)` in `State0`.
+executes the call `table.pack("a", "b", 42)` in `State0`. E.g.:
 
-For more examples see `examples/hello/hello2.erl`.
+    {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42]),
+    io:format("~p~n",[Res]).
 
-`./hello.erl` is a very brief example while `examples/hello/hello2.erl` is a comprehensive lists of most ways that come to mind of how to use the individual interface functions.
+
+Examples
+--------
+
+For more exhaustive examples see `examples/hello/hello2.erl`:  
+
+`./hello.erl` is a very brief example while `examples/hello/hello2.erl` is a
+comprehensive lists of most ways that come to mind of how to use the individual
+ interface functions.
 
 You can build and run these samples with:
 
-    make hello
-    make hello2
+    make examples
+
+
+Library Module
+--------------
 
 There is also a library module, `luerl_lib`, which contains functions which may be used.
 
@@ -230,6 +259,7 @@ Currently implemented functions in the libraries
 - table\.remove
 - table\.sort
 - table\.unpack
+
 
 Known Bugs
 ----------
