@@ -2,4 +2,6 @@
 -- Purpose : Demonstration of Luerl interface.
 -- See     : ./examples/hello/hello2.erl
 
-print "News!"
+function old() print "(33) old" end
+
+print "(32) News!"

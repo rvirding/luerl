@@ -2,4 +2,4 @@
 -- Purpose : Demonstration of Luerl interface.
 -- See     : ./examples/hello/hello2.erl
 
-return "'Evidently, Mr. Watson.'"
+return "'(18b) Evidently, Mr. Watson.'"
