@@ -93,17 +93,21 @@ Please avoid directly accessing functions in other modules which haven't been de
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
-#### luerl:call(FuncPath, Args[, State]) -> {Result,NewState}
-Call a function already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+#### luerl:call(Form, Args[, State]) -> {Result,State}
+#### luerl:call_chunk(Form, Args[, State]) -> {Result,State}
+Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.
 
-#### luerl:call1(Keys, Args, State) -> {Result,NewState}
-Call a function already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
+#### luerl:call_function(FuncPath, Args[, State]) -> {Result,NewState}
+Call a function already defined in the state. `FuncPath` is a list of names to the function. `FuncPath`, `Args` and `Result` are automatically encode/decoded.
 
-#### luerl:method(FuncPath, Args[, State]) -> {Result,NewState}.
-Call a method already defined in the state. FuncPath is a list of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+#### luerl:call_function1(Keys, Args, State) -> {Result,NewState}
+Call a function already defined in the state. `Keys` is a list of keys to the function. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
 
-#### luerl:method1(Keys, Args, State) -> {Result,NewState}
-Call a method already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
+#### luerl:call_method(MethPath, Args[, State]) -> {Result,NewState}.
+Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encode/decoded.
+
+#### luerl:call_method1(Keys, Args, State) -> {Result,NewState}
+Call a method already defined in the state. `Keys` is a list of keys to the method. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
 
 #### luerl:stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
@@ -127,9 +131,14 @@ Examples
     {_Ret, _NewState} = luerl:do(Chunk, State),
 
 #### call a function in the state
-    {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42], State0)
+    {Res,State1} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], State0)
 
 executes the call `table.pack("a", "b", 42)` in `State0`.
+
+#### call a method in the state
+    {Res,State1} = luerl:call_method([g,h,i], [<<"a">>,<<"b">>,42], State0)
+
+executes the call `g.h:i("a", "b", 42)` in `State0`.
 
 For more examples see `examples/hello/hello2.erl`.
 

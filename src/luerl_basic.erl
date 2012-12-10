@@ -87,7 +87,7 @@ collectgarbage(_, St) ->			%Ignore everything else
 
 eprint(Args, St) ->
     lists:foreach(fun (#tref{i=N}) ->
-			  T = ?GET_TABLE(N, St#luerl.tabs),
+			  T = ?GET_TABLE(N, St#luerl.ttab),
 			  io:format("~w ", [T]);
 		      (A) -> io:format("~w ", [A])
 		  end, Args),
@@ -110,7 +110,7 @@ ipairs(As, _) -> badarg_error(ipairs, As).
     
 ipairs_next([A], St) -> ipairs_next([A,0.0], St);
 ipairs_next([#tref{i=T},K|_], St) ->
-    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    #table{a=Arr} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
     case ?IS_INTEGER(K, I) of
 	true when I >= 0 ->
 	    Next = I + 1,
@@ -139,7 +139,7 @@ pairs(As, _) -> badarg_error(pairs, As).
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(T, St#luerl.tabs),	%Get the table
+    #table{a=Arr,t=Tab} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
     if K == nil ->
 	    %% Find the first, start with the array.
 	    %% io:format("n: ~p\n", [{Arr,Tab}]),
@@ -195,7 +195,7 @@ rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
 rawequal(As, _) -> badarg_error(rawequal, As).
 
 rawget([#tref{i=N},K|_], St) when is_number(K) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
     V = case ?IS_INTEGER(K, I) of
 	    true when I >= 1 ->			%Array index
 		raw_get_index(Arr, I);
@@ -204,18 +204,18 @@ rawget([#tref{i=N},K|_], St) when is_number(K) ->
 	end,
     {[V],St};
 rawget([#tref{i=N},K|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.tabs),	%Get the table.
+    #table{t=Tab} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
     V = raw_get_key(Tab, K),
     {[V],St};
 rawget(As, _) -> badarg_error(rawget, As).
 
 rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 rawlen([#tref{i=N}|_], St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
     {[float(array:size(Arr))],St};
 rawlen(As, _) -> badarg_error(rawlen, As).
 
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) when is_number(K) ->
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_number(K) ->
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     Ts1 = case ?IS_INTEGER(K, I) of
 	      true when I >= 1 ->
@@ -225,12 +225,12 @@ rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) when is_number(K) ->
 		  Tab1 = raw_set_key(Tab0, K, V),
 		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
 	  end,
-    {[Tref],St#luerl{tabs=Ts1}};
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Ts0}=St) ->
+    {[Tref],St#luerl{ttab=Ts1}};
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
     Tab1 = raw_set_key(Tab0, K, V),
     Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
-    {[Tref],St#luerl{tabs=Ts1}};
+    {[Tref],St#luerl{ttab=Ts1}};
 rawset(As, _) -> badarg_error(rawset, As).
 
 %% raw_get_index(Array, Index) -> nil | Value.
@@ -316,7 +316,7 @@ type(_) -> <<"unknown">>.
 
 %% Meta table functions.
 
-getmetatable([#tref{i=T}|_], #luerl{tabs=Ts}=St) ->
+getmetatable([#tref{i=T}|_], #luerl{ttab=Ts}=St) ->
     #table{m=Meta} = ?GET_TABLE(T, Ts),		%Get the table
     {[Meta],St};
 getmetatable([#userdata{m=Meta}|_], St) ->
@@ -328,11 +328,11 @@ getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
 getmetatable(_, St) -> {[nil],St}.		%Other types have no metatables
 
 setmetatable([#tref{i=N}=A1,#tref{}=A2|_], St) ->
-    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=A2} end, St#luerl.tabs),
-    {[A1],St#luerl{tabs=Ts}};
+    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=A2} end, St#luerl.ttab),
+    {[A1],St#luerl{ttab=Ts}};
 setmetatable([#tref{i=N}=A1,nil|_], St) ->
-    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=nil} end, St#luerl.tabs),
-    {[A1],St#luerl{tabs=Ts}};
+    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=nil} end, St#luerl.ttab),
+    {[A1],St#luerl{ttab=Ts}};
 setmetatable(As, _) -> badarg_error(setmetatable, As).
 
 %% Load string and files.

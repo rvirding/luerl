@@ -136,7 +136,7 @@ size({L,_,_,M,_,_,R}) ->
 
 -spec fetch(Key, Dict) -> Value when
       Key :: term(),
-      Dict :: dict(),
+      Dict :: ttdict(),
       Value :: term().
 
 fetch(K, {L,Xk,_,_}) when K < Xk -> fetch(K, L);
