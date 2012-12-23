@@ -85,30 +85,11 @@ dofile(Path, St) ->
 load(Bin) when is_binary(Bin) ->
     load(binary_to_list(Bin));
 load(Str) when is_list(Str) ->
-    do_passes(comp_passes(), Str).
+    luerl_comp:string(Str).
 
 %% loadfile(Path) -> {ok,Form}.
 loadfile(Path) ->
-    {ok,Bin} = file:read_file(Path),
-    do_passes(comp_passes(), binary_to_list(Bin)).
-
-do_passes([Fun|Funs], St0) ->
-    case Fun(St0) of
-	{ok,St1} -> do_passes(Funs, St1);
-	Error -> Error
-    end;
-do_passes([], St) -> {ok,St}.
-
-comp_passes() ->
-    [fun (S) ->
-	     %% Make return values "conformant".
-	     case luerl_scan:string(S) of
-		 {ok,Ts,_} -> {ok,Ts};
-		 {error,Error,_} -> {error,Error}
-	     end
-     end,
-     fun (Ts) -> luerl_parse:chunk(Ts) end,
-     fun (Chunk) -> luerl_comp:chunk(Chunk) end].
+    luerl_comp:file(Path).
 
 %% init() -> State.
 init() -> luerl_emul:init().

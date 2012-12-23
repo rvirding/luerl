@@ -97,6 +97,7 @@ forms_passes() ->				%Doing the forms
     [{do,fun do_pass_1/1},
      {do,fun do_comp_vars/1},
      {when_flag,to_vars,{done,fun(Cst) -> {ok,Cst} end}},
+     {do,fun do_comp_locf/1},
      {do,fun do_comp_env/1},
      {when_flag,to_env,{done,fun(Cst) -> {ok,Cst} end}},
      {do,fun do_code_gen/1},
@@ -152,6 +153,13 @@ do_pass_1(#comp{code=C0,opts=Opts}=Cst) ->
 
 do_comp_vars(Cst) ->
     case luerl_comp_vars:chunk(Cst#comp.code, Cst#comp.opts) of
+	{ok,C1} -> {ok,Cst#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,Cst#comp{errors=Es}}
+    end.
+
+do_comp_locf(Cst) ->
+    case luerl_comp_locf:chunk(Cst#comp.code, Cst#comp.opts) of
 	{ok,C1} -> {ok,Cst#comp{code=C1}};
 	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,Cst#comp{errors=Es}}
