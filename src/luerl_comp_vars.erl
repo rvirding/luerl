@@ -57,8 +57,6 @@ debug_print(Opts, Format, Args) ->
 %%  right order. Must do everything going forwards.
 
 stats([S0|Ss0], Local0, Free0, Used0, St0) ->
-    %% {S1,Snew,Sfree,St1} = stat(S0, Local0, St0),
-    %% Sused = intersection(Sfree, Local0),	%Add Sused
     case stat(S0, Local0, St0) of		%Export S1,Snew,Sfree,Sused,St1
 	{S1,Snew,Sfree,St1} ->
 	    Sused = intersection(Sfree, Local0);	%Add Sused

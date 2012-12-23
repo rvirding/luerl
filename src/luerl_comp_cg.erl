@@ -169,10 +169,10 @@ block_stat(Block, St) -> do_block(Block, St).
 
 %% do_block(#block{b=Ss,local=[],used=[]}, St) ->	%No local variables in block
 %%     stats(Ss, St);				%Fold into surrounding block
-do_block(#block{ss=Ss,local=Loc,used=U}, St0) ->
-    Local = U == [],				%A local stack frame?
+do_block(#block{ss=Ss,local=Loc,used=U,locf=Locf}, St0) ->
+    Fr = frame_type(U, Locf),			%A local stack frame?
     {Ib,St1} = stats(Ss, St0),
-    {[?BLOCK(Ib, Local, length(Loc))],St1}.
+    {[?BLOCK(Ib, Fr, length(Loc))],St1}.
 
 %% while_stat(While, State) -> {WhileIs,State}.
 
@@ -213,12 +213,13 @@ numfor_stat(#nfor{v=V,init=I,limit=L,step=S,b=B}, St0) ->
 
 %% genfor_stat(For, State) -> {ForIs,State}.
 
-genfor_stat(#gfor{vs=Vs,gens=Gs,b=B}, St0) ->
+genfor_stat(#gfor{vs=[V|Vs],gens=Gs,b=B}, St0) ->
     {Igs,St1} = explist(Gs, false, St0),
-    {Ib0,St2} = do_block(B, St1),
+    {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
+    {Ib0,St3} = do_block(B, St2),
     [?BLOCK(Is,Loc,Sz)] = Ib0,
-    Ib1 = [?BLOCK(Is,Loc,Sz)],			%No-op sofar
-    {Igs ++ [?GFOR(Vs,Ib1)],St2}.
+    Ib1 = [?BLOCK(Ias ++ [set_var(V)|Is],Loc,Sz)],
+    {Igs ++ [?POP_VALS(length(Gs)-1)] ++ [?GFOR(Vs,Ib1)],St3}.
 
 %% local_assign_stat(Local, State) -> {Ilocal,State}.
 
@@ -332,7 +333,7 @@ prefixexp_element(#key{k=E}, _, St0) ->
     {[?PUSH] ++ Ie ++ [?GET_KEY],St1};		%Table is in Acc
 prefixexp_element(#fcall{as=As}, S, St0) ->
     {Ias,St1} = explist(As, false, St0),
-    Ifs = [?PUSH] ++ Ias ++ [?FCALL(length(As))],
+    Ifs = [?PUSH] ++ Ias ++ [?CALL(length(As))],
     {first_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
     {Ias,St1} = explist(As, false, St0),
@@ -340,16 +341,16 @@ prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
 	   ?GET_LIT_KEY(K),			%Get function into acc
 	   ?SWAP,				%Swap func onto stack
 	   ?PUSH] ++				%Push table as first arg
-	Ias ++ [?FCALL(length(As)+1)],
+	Ias ++ [?CALL(length(As)+1)],
     {first_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
 
-functiondef(#fdef{ps=Ps0,ss=Ss,local=Loc,used=U}, St0) ->
-    Local = U == [],				%A local stack frame?
+functiondef(#fdef{ps=Ps0,ss=Ss,local=Loc,used=U,locf=Locf}, St0) ->
+    Fr = frame_type(U, Locf),			%A local stack frame?
     Ps1 = func_pars(Ps0),
     {Ib,St1} = stats(Ss, St0),
-    {[?FDEF(Ps1, Ib, Local, length(Loc))],St1}.
+    {[?FDEF(Ps1, Ib, Fr, length(Loc))],St1}.
 
 func_pars([#fvar{n= <<"...">>,i=I}]) -> I;	%Tail is index for varargs
 func_pars([#lvar{n= <<"...">>,i=I}]) -> I;
@@ -370,3 +371,9 @@ tableconstructor(Fs0, St0) ->
 	  end,
     {Its,_,St1} = lists:foldl(Fun, {[],1.0,St0}, Fs0),
     {Its,St1}.
+
+%% frame_type(Used, LocalFunc) -> local | temporary | used.
+
+frame_type([], _) -> local;			%Purely local
+frame_type(_, false) -> transient;		%On the frame stack
+frame_type(_, true) -> permanent.		%Used by sub-functions

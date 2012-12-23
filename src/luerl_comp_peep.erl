@@ -69,7 +69,7 @@ instrs([?STORE_GVAR(K),?LOAD_GVAR(K)|Is], St) ->
 instrs([?FDEF(Ps,Fis0,L,Sz)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?FDEF(Ps,Fis1,L,Sz)|instrs(Is, St)];
-instrs([?BLOCK(Bis,true,0)|Is], St) ->		%No local variables in block
+instrs([?BLOCK(Bis,local,0)|Is], St) ->		%No local variables in block
     instrs(Bis ++ Is, St);			%Fold into surrounding block
 instrs([?BLOCK(Bis0,L,Sz)|Is], St) ->
     Bis1 = instrs(Bis0, St),
@@ -94,6 +94,9 @@ instrs([?IF(Tis0, Fis0)|Is], St) ->
 instrs([?NFOR(V, Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?NFOR(V, Fis1)|instrs(Is, St)];
+instrs([?GFOR(Vs, Fis0)|Is], St) ->
+    Fis1 = instrs(Fis0, St),
+    [?GFOR(Vs, Fis1)|instrs(Is, St)];
 %% Nothing to do.
 instrs([I|Is], St) ->
     [I|instrs(Is, St)];

@@ -65,8 +65,7 @@
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[is_true_value/1,first_value/1]}).
 
-%%-define(DP(F,As), io:format(F, As)).
--define(DP(F, A), ok).
+-define(ITRACE_DO(B), (get(itrace) /= undefined) andalso B).
 
 %% init() -> State.
 %% Initialise the basic state.
@@ -341,16 +340,16 @@ call(Chunk, St) -> call(Chunk, [], St).
 
 call(#chunk{code=C0}, Args, St0) ->
     {R,_,_,_,St1} = emul(C0, St0),		%R is the accumulator
-    io:fwrite("e: ~p\n", [R]),
+    itrace_print("e: ~p\n", [R]),
     functioncall(R, Args, St1);
-call({functiondef,_,_,_,_}=Fd, Args, St0) ->
-    %% Generate function and call it.
-    {Fret,St1} = exp(Fd, St0),
-    {Ret,St2} = functioncall(first_value(Fret), Args, St1),
-    %% Should do GC here.
-    {Ret,St2};
-call({functiondef,L,_,Sz,Ps,B}, Args, St) ->	%Ignore name
-    call({functiondef,L,Sz,Ps,B}, Args, St);
+%% call({functiondef,_,_,_,_}=Fd, Args, St0) ->
+%%     %% Generate function and call it.
+%%     {Fret,St1} = exp(Fd, St0),
+%%     {Ret,St2} = functioncall(first_value(Fret), Args, St1),
+%%     %% Should do GC here.
+%%     {Ret,St2};
+%% call({functiondef,L,_,Sz,Ps,B}, Args, St) ->	%Ignore name
+%%     call({functiondef,L,Sz,Ps,B}, Args, St);
 call(#function{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -360,8 +359,14 @@ call({function,_}=Func, Args, St0) ->		%Internal erlang function
     %% Should do GC here.
     {Ret,St1}.
 
-exp(_, _) ->
-    error(boom).
+itrace_do(Fun) ->
+    ?ITRACE_DO(Fun()).
+
+itrace_print(Format, Args) ->
+    ?ITRACE_DO(io:fwrite(Format, Args)).
+
+%% exp(_, _) ->
+%%     error(boom).
 
 -record(frame, {acc,var,env}).			%Save these for the GC
 
@@ -372,11 +377,12 @@ emul(Is, #luerl{env=Env}=St) ->
     emul(Is, nil, {}, [], Env, St).
 
 emul([], Acc, Var, Stk, Env, St) ->
-    io:fwrite("el: ~p\n", [{Acc,Var,Env}]),
+    itrace_print("el: ~p\n", [{Acc,Var,Env}]),
     emul_1([], Acc, Var, Stk, Env, St);
 emul(Is, Acc, Var, Stk, Env, St) ->
-    io:fwrite("ei: ~p\n", [{hd(Is),Acc,Var,Env}]),
-    stack_print(Stk),
+    ?ITRACE_DO(begin
+		   io:fwrite("ei: ~p\n", [{hd(Is),Acc,Var,Env}]),
+		   stack_print(Stk) end),
     emul_1(Is, Acc, Var, Stk, Env, St).
 
 stack_print([#frame{}|_]) -> io:fwrite(" ...\n");
@@ -425,8 +431,10 @@ emul_1([?SET_LIT_KEY(K)|Is], Acc, Var, [Val|Stk], Env, St0) ->
 emul_1([?BUILD_TAB(Fc)|Is], _, Var, Stk0, Env, St0) ->
     {Tab,Stk1,St1} = build_tab(Fc, Stk0, St0),
     emul(Is, Tab, Var, Stk1, Env, St1);
-emul_1([?FCALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_fcall(Is, Acc, Var, Stk, Env, St, Ac);
+emul_1([?CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
+    do_call(Is, Acc, Var, Stk, Env, St, Ac);
+emul_1([?TAIL_CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
+    do_tail_call(Is, Acc, Var, Stk, Env, St, Ac);
 emul_1([?OP(Op,Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_op(Is, Acc, Var, Stk, Env, St, Op, Ac);
 emul_1([?FDEF(Fps, Fis, Loc, Sz)|Is], _, Var, Stk, Env, St) ->
@@ -461,6 +469,8 @@ emul_1([?IF(True, False)|Is], Acc, Var, Stk, Env, St) ->
     do_if(Is, Acc, Var, Stk, Env, St, True, False);
 emul_1([?NFOR(V, Fis)|Is], Acc, Var, Stk, Env, St) ->
     do_numfor(Is, Acc, Var, Stk, Env, St, V, Fis);
+emul_1([?GFOR(Vs, Fis)|Is], Acc, Var, Stk, Env, St) ->
+    do_genfor(Is, Acc, Var, Stk, Env, St, Vs, Fis);
 emul_1([?BREAK|_], _, _, _, _, St) ->
     throw({break,St#luerl.tag,St});
 emul_1([?RETURN(0)|_], _, _, _, _, St) ->
@@ -533,33 +543,18 @@ pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
 %% do_block(Instrs, Acc, Vars, Stack, Env, State,
 %%          BlockInstrs, Vars, LocalSize) -> ReturnFromEmul.
 
-do_block(Is, Acc0, Var0, Stk0, Env, St0, Bis, true, Sz) ->
-    Var1 = erlang:make_tuple(Sz, nil),
-    {Acc1,_,_,_,St1} =
-	emul(Bis, Acc0, Var1, Stk0, Env, St0),
-    emul(Is, Acc1, Var0, Stk0, Env, St1);
-do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, false, Sz) ->
-    Var1 = erlang:make_tuple(Sz, nil),
-    St1 = push_frame(Var1, St0),
-    io:format("bl: ~p\n", [St1#luerl.env]),
-    {Acc1,_,_,_,St2} = emul(Bis, Acc, Var1, Stk0, Env, St1),
-    io:format("bl> ~p\n", [St2#luerl.env]),
-    St3 = pop_frame(St2),
-    io:format("bl> ~p\n", [St3#luerl.env]),
-    emul(Is, Acc1, Var0, Stk0, Env, St3);
-%% The new not yet implemented local types.
 do_block(Is, Acc0, Var0, Stk0, Env, St0, Bis, local, Sz) ->
     Var1 = erlang:make_tuple(Sz, nil),
     {Acc1,_,_,_,St1} =
 	emul(Bis, Acc0, Var1, Stk0, Env, St0),
     emul(Is, Acc1, Var0, Stk0, Env, St1);
-do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, temporary, Sz) ->
+do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, transient, Sz) ->
     Var1 = erlang:make_tuple(Sz, nil),
     St1 = push_frame(Var1, St0),
     {Acc1,_,_,_,St2} = emul(Bis, Acc, Var1, Stk0, Env, St1),
     St3 = pop_free_frame(St2),			%We can free this frame
     emul(Is, Acc1, Var0, Stk0, Env, St3);
-do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, used, Sz) ->
+do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, permanent, Sz) ->
     Var1 = erlang:make_tuple(Sz, nil),
     St1 = push_frame(Var1, St0),
     {Acc1,_,_,_,St2} = emul(Bis, Acc, Var1, Stk0, Env, St1),
@@ -568,7 +563,7 @@ do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, used, Sz) ->
 
 do_op(Is, Acc, Var, Stk0, Env, St0, Op, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),
-    io:fwrite("op: ~p\n", [{Op,Args}]),
+    %% io:fwrite("op: ~p\n", [{Op,Args}]),
     %% Fr = #frame{acc=Acc,var=Var,stk=Stk1,env=Env},
     {Res,St1}= do_op(Op, Args, St0),
     emul(Is, Res, Var, Stk1, Env, St1).
@@ -581,13 +576,21 @@ do_op(Op, [A1,A2], St) -> op(Op, A1, A2, St).
 do_fdef(Ps, Is, Local, Sz, Env, _) ->
     #function{local=Local,sz=Sz,pars=Ps,b=Is,env=Env}.
 
-do_fcall(Is, Acc, Var, Stk0, Env, St, 0) ->
+do_call(Is, Acc, Var, Stk0, Env, St, 0) ->
     [Func|Stk1] = Stk0,				%Get function
     functioncall(Is, Acc, Var, Stk1, Env, St, Func, []);
-do_fcall(Is, Acc, Var, Stk0, Env, St, Ac) ->
+do_call(Is, Acc, Var, Stk0, Env, St, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
     functioncall(Is, Acc, Var, Stk2, Env, St, Func, Args).
+
+do_tail_call(_Is, Acc, Var, Stk0, Env, St, 0) ->
+    [Func|Stk1] = Stk0,				%Get function
+    error(boom);
+do_tail_call(_Is, Acc, Var, Stk0, Env, St, Ac) ->
+    {Args,Stk1} = pop_vals(Ac-a, Stk0, Acc),	%Pop arguments, last is in acc
+    [Func|Stk2] = Stk1,				%Get function
+    error(boom).
 
 %% functioncall(Function, Args, State) -> {Return,State}.
 %%  This is called from "within" things, for example metamethods, and
@@ -607,13 +610,21 @@ functioncall(Is, Acc, Var, Stk0, Env, St0, Func, Args) ->
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
     emul(Is, Ret, Var, Stk0, Env, St1).
 
-functioncall(#function{local=true,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
+functioncall(#function{local=local,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
 	     #luerl{env=OldEnv}=St0) ->
     Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
     Var1 = assign_pars(Ps, Args, Var0),
     {Ret,St1} = functioncall(Fis, Var1, Stk, Env, St0#luerl{env=Env}),
     {Ret,St1#luerl{env=OldEnv}};
-functioncall(#function{local=false,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
+functioncall(#function{local=transient,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
+	     #luerl{env=OldEnv}=St0) ->
+    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
+    Var1 = assign_pars(Ps, Args, Var0),
+    St1 = push_frame(Var1, St0#luerl{env=Env}),
+    {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
+    St3 = pop_free_frame(St2),
+    {Ret,St3#luerl{env=OldEnv}};
+functioncall(#function{local=permanent,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
 	     #luerl{env=OldEnv}=St0) ->
     Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
     Var1 = assign_pars(Ps, Args, Var0),
@@ -621,24 +632,6 @@ functioncall(#function{local=false,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
     {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
     St3 = pop_frame(St2),
     {Ret,St3#luerl{env=OldEnv}};
-%% The new not yet implemented local types.
-functioncall(#function{local=local,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk, St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    {Ret,St1} = functioncall(Fis, Var1, Stk, Env, St0#luerl{env=Env}),
-    {Ret,St1};
-functioncall(#function{local=temporary,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk, St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    St1 = push_frame(Var1, St0#luerl{env=Env}),
-    {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
-    {Ret,pop_free_frame(St2)};
-functioncall(#function{local=used,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk, St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    St1 = push_frame(Var1, St0#luerl{env=Env}),
-    {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
-    {Ret,pop_frame(St2)};
 functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
@@ -647,13 +640,14 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
 functioncall(Fis, Var, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
     %% Must use different St names else they become 'unsafe'.
+    %%io:fwrite("fc: ~p\n", [{Env,St0#luerl.env}]),
     try
 	{_,_,_,_,Sta} = emul(Fis, nil, Var, Stk, Env, St0),
-	io:fwrite("fr: ~p\n", [{Tag,[]}]),
+	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
 	{[],Sta}				%No return, no arguments
     catch
 	throw:{return,Tag,Ret,Stb} ->
-	    io:fwrite("fr: ~p\n", [{Tag,Ret}]),
+	    %%io:fwrite("fr: ~p\n", [{Tag,Ret,Stb#luerl.env}]),
 	    {Ret,Stb};
 	throw:{break,Tag,_} ->
 	    lua_error({illegal_op,break})
@@ -703,13 +697,6 @@ loop_block(Is, Var, Stk, Env, St0, Do) ->
 	  end,
     emul(Is, nil, Var, Stk, Env, St1).
 
-%% do_if(Is, Acc, Var, Stk, Env, St0, True, False) ->
-%%     St1 = case is_true_value(Acc) of
-%% 	      true -> do_block(True, Acc, Var, Stk, Env, St0);
-%% 	      false -> do_block(False, Acc, Var, Stk, Env, St0)
-%%     end,
-%%     emul(Is, Acc, Var, Stk, Env, St1).
-
 do_if(Is, Acc, Var, Stk, Env, St, True, False) ->
     case is_true_value(Acc) of
 	true -> do_if_block(True, Acc, Var, Stk, Env, St, Is);
@@ -749,6 +736,30 @@ numfor_loop(N, Limit, Step, Fis, Var, Stk, Env, St0) ->
        true -> St0				%Done!
     end.
 
+%% do_genfor(Instrs, Acc, Var, Stack, Env, State, Vars, FromInstrs) -> <emul>
+
+do_genfor(Is, Acc, Var, Stk, Env, St, _, Fis) ->
+    case Acc of					%Export F, T, V
+	[F] -> T = nil, V = nil;
+	[F,T] -> V = nil;
+	[F,T,V|_] -> ok;
+	F -> T = nil, V = nil
+    end,
+    Do = fun (St) ->
+		 genfor_loop(F, T, V, Fis, Var, Stk, Env, St)
+	 end,
+    loop_block(Is, Var, Stk, Env, St, Do).
+
+genfor_loop(Func, Tab, Val, Fis, Var, Stk, Env, St0) ->
+    {Vals,St1} = functioncall(Func, [Tab,Val], Stk, St0),
+    case is_true_value(Vals) of
+	true ->
+	    {_,_,_,_,St2} =
+		emul(Fis, Vals, Var, Stk, Env, St1),
+	    genfor_loop(Func, Tab, hd(Vals), Fis, Var, Stk, Env, St2);
+	false -> St1
+    end.
+
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
 %% getmetamethod(Object, Event, State) -> Method | nil.
 %% Get the metamethod for object(s).
@@ -783,7 +794,7 @@ getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 build_tab(Fc, Stk0, St0) ->
     {Fs,Stk1} = build_tab_loop(Fc, Stk0, []),
     {Tref,St1} = alloc_table(Fs, St0),
-    io:fwrite("bt: ~p\n", [{Fc,Fs,Tref}]),
+    %%io:fwrite("bt: ~p\n", [{Fc,Fs,Tref}]),
     {Tref,Stk1,St1}.
 
 build_tab_loop(0, Stk, Fs) -> {Fs,Stk};

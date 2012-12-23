@@ -112,7 +112,8 @@
 -define(SET_KEY, set_key).			%Stk[
 -define(SET_LIT_KEY(K), {set_key,K}).		%[?PUSH,?LIT(K),?SET_KEY]
 -define(BUILD_TAB(Fc), {build_tab,Fc}).
--define(FCALL(Ac), {fcall,Ac}).
+-define(CALL(Ac), {call,Ac}).
+-define(TAIL_CALL(Ac), {tail_call,Ac}).
 -define(OP(Op,Ac), {op,Op,Ac}).
 -define(FDEF(Ps, Is, L, Sz), {fdef,Ps,Is,L,Sz}).
 %% Control instructions.
