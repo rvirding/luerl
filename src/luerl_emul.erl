@@ -666,26 +666,37 @@ assign_pars_loop(V, As, Var) ->			%This is a vararg!
 
 %% do_repeat(Instrs, Acc, Var, Stack, Env, State, RepeatInstrs) -> <emul>
 
-do_repeat(Is, Acc0, Var0, Stk0, Env0, St0, Ris) ->
+do_repeat(Is, Acc, Var, Stk, Env, St, Ris) ->
+    Do = fun (S) ->
+		 repeat_loop(Ris, Acc, Var, Stk, Env, S)
+	 end,
+    loop_block(Is, Var, Stk, Env, St, Do).
+
+repeat_loop(Ris, Acc0, Var0, Stk0, Env0, St0) ->
     {Acc1,Var1,Stk1,Env1,St1} =
 	emul(Ris, Acc0, Var0, Stk0, Env0, St0),
     case is_true_value(Acc1) of
-	true -> emul(Is, Acc1, Var1, Stk1, Env1, St1);
-	false -> do_repeat(Is, Acc1, Var1, Stk1, Env1, St1, Ris)
+	true -> St1;
+	false -> repeat_loop(Ris, Acc1, Var1, Stk1, Env1, St1)
     end.
 
 %% do_while(Instrs, Acc, Var, Stack, Env, State, WhileEis, WhileBis) -> <emul>
 
-do_while(Is, Acc0, Var0, Stk0, Env0, St0, Eis, Wis) ->
+do_while(Is, Acc, Var, Stk, Env, St, Eis, Wis) ->
+    Do = fun (S) ->
+		 while_loop(Eis, Acc, Var, Stk, Env, S, Wis)
+	 end,
+    loop_block(Is, Var, Stk, Env, St, Do).
+
+while_loop(Eis, Acc0, Var0, Stk0, Env0, St0, Wis) ->
     {Acc1,Var1,Stk1,Env1,St1} =
 	emul(Eis, Acc0, Var0, Stk0, Env0, St0),
     case is_true_value(Acc1) of
 	true ->
 	    {Acc2,Var2,Stk2,Env2,St2} =
 		emul(Wis, Acc1, Var1, Stk1, Env1, St1),
-	    do_while(Is, Acc2, Var2, Stk2, Env2, St2, Eis, Wis);
-	false ->
-	    emul(Is, Acc1, Var1, Stk1, Env1, St1)
+	    while_loop(Eis, Acc2, Var2, Stk2, Env2, St2, Wis);
+	false -> St1
     end.
 
 loop_block(Is, Var, Stk, Env, St0, Do) ->
