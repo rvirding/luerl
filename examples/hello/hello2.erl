@@ -151,4 +151,8 @@ run() ->
     {Result14A,_} = luerl:call([confirm], [<<"Is it?">>], State14),
     io:format("(36) Well: ~s~n", [Result14A]),
 
+    % execute a file, get the decoded result of a table
+    {ok,Result15} = luerl:evalfile("./hello2-10.lua", State14),
+    io:format("(37) Decoded table: ~s~n", [io_lib:write(Result15)]),
+ 
     io:format("done~n").
