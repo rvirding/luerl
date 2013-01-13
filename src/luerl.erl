@@ -43,9 +43,9 @@
 eval(Chunk) ->
     eval(Chunk, init()).
 
-eval(Chunk, St) ->
-    try do(Chunk, St) of
-        {Ret,_} -> {ok,Ret}
+eval(Chunk, St0) ->
+    try do(Chunk, St0) of
+        {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
          _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
     end.
@@ -54,9 +54,9 @@ eval(Chunk, St) ->
 evalfile(Path) ->
     evalfile(Path, init()).
 
-evalfile(Path, St) ->
-    try dofile(Path, St) of
-        {Ret,_} -> {ok,Ret}
+evalfile(Path, St0) ->
+    try dofile(Path, St0) of
+        {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
          _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
     end.
