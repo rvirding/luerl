@@ -1,8 +1,8 @@
 Implementation Notes
 --------------------
 
-So far luerl is a straight interpreter and no compilation is
-done. This means that many simple optimisations are not done.
+Syntax
+------
 
 We are almost able to represent the Lua syntax as an LALR(1)
 grammar. The only place this doesn't work is when a statement can be a
@@ -10,6 +10,9 @@ function call as it clashes when it can also be a varlist. We get
 around this by using the more general prefixexp and doing a post-test
 to check that it is a functioncall. This works together with the
 varlist.
+
+Data
+----
 
 For the Lua data types we internally use the corresponding Erlang:
 
@@ -44,6 +47,32 @@ bigger change as copying the whole table for each access would be very
 inefficient. Either use bags and have one per table or use sets and
 have the ETS key as {Tab,Key}.
 
+Machine
+-------
+
+The VM is a hybrid. It uses normal Erlang function calls for Luerl
+calls and blocks and has a small instruction set for operations inside
+a block. This should make it not too difficult to compile down to
+straight Erlang in the future.
+
+Blocks keep variables in tuples. There are three variable types
+depending on how they are used:
+
+- local variables which are only used in that block and not in any
+  sub-blocks
+
+- transient variables which are used in sub-blocks but can be thrown
+  away when the block exits
+
+- permanent variables are used in functions defined in sub-blocks
+  which mean they must be kept around as long as the functions are
+  alive and are stored in the global heap as each invocation can
+  modify them
+
+Currently each block only has one variable tuple which is then the
+"worst" type. Note that all would-be transient variable tuples in
+blocks above a permanent one also become permanent.
+
 To handle multiple return values we always return a list of values.
 The only place this is not done is in luerl_eval.erl when getting
 values from the environment where we can only have one value. This
@@ -63,6 +92,21 @@ We create a unique tag which is saved in the environment. This is used
 so we can implement 'break' with a simple throw. The thrown value
 includes the tag so we can uniquely catch it and not get confused with
 a throw/error/exit from the erlang code.
+
+Compiler
+--------
+
+The compiler has state at different levels:
+
+- In luerl_comp there is #comp{} containing code, options and errors.
+- In the #cst{} between the compiler modules for data outside the
+  code. This empty so far.
+- Inside and local to the compiler modules.
+
+All the compiler modules are written so that they chain a status
+argument through their code, even if it not used. When they are not
+used we just send the atom 'nil' through and check it comes out "the
+other end".
 
 Lua implementation "features"
 -----------------------------
