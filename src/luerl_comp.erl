@@ -39,6 +39,8 @@
 
 -export([file/1,file/2,string/1,string/2,forms/1,forms/2]).
 
+-export([debug_print/3]).
+
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
@@ -97,7 +99,7 @@ forms_passes() ->				%Doing the forms
     [{do,fun do_pass_1/1},
      {do,fun do_comp_vars/1},
      {when_flag,to_vars,{done,fun(Cst) -> {ok,Cst} end}},
-     {do,fun do_comp_locf/1},
+     %% {do,fun do_comp_locf/1},
      {do,fun do_comp_env/1},
      {when_flag,to_env,{done,fun(Cst) -> {ok,Cst} end}},
      {do,fun do_code_gen/1},
@@ -193,11 +195,11 @@ do_error_return(#comp{errors=Es,warnings=Ws}) ->
 
 %% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
 
-chunk(Code, Opts) ->
-    St0 = #chunk{code=Code},			%Initialise internal state
-    {C1,St1} = exp(Code, St0),			%This is local!
-    debug_print(Opts, "c: ~p\n", [C1]),
-    {ok,St1#chunk{code=C1}}.
+chunk(Code0, Opts) ->
+    St = #cst{},				%Initialise common state
+    {Code1,nil} = exp(Code0, nil),		%This is local!
+    debug_print(Opts, "c: ~p\n", [Code1]),
+    {ok,#code{code=Code1,cst=St}}.
 
 debug_print(Opts, Format, Args) ->
     case lists:member(debug_print, Opts) of
@@ -208,53 +210,54 @@ debug_print(Opts, Format, Args) ->
 %% The first pass (pass_1).
 %% Here we normalise the code and convert it to an internal form. 
 
-%% stats([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
+%% stmts([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
 %%     %% Need to split this to handle recursive definitions.
-%%     stats([{local,L,{assign,L,[Name],[{nil,L}]}},F|Ss], St);
-stats([{';',_}|Ss], St) -> stats(Ss, St);	%No-op so we drop it
-stats([S0|Ss0], St0) ->
-    {S1,St1} = stat(S0, St0),
-    {Ss1,St2} = stats(Ss0, St1),
+%%     stmts([{local,L,{assign,L,[Name],[{nil,L}]}},F|Ss], St);
+stmts([{';',_}|Ss], St) -> stmts(Ss, St);	%No-op so we drop it
+stmts([S0|Ss0], St0) ->
+    {S1,St1} = stmt(S0, St0),
+    {Ss1,St2} = stmts(Ss0, St1),
     {[S1|Ss1],St2};
-stats([], St) -> {[],St}.
+stmts([], St) -> {[],St}.
 
-%% stat(Statement, State) -> {CStat,State}.
-%%  Do a statement. The ';' statement will caught and removed in stats/2.
+%% stmt(Statement, State) -> {CStat,State}.
+%%  Do a statement. The ';' statement will caught and removed in stmts/2.
 
-stat({assign,Line,Vs,Es}, St) ->
-    assign_stat(Line, Vs, Es, St);
-stat({return,Line,Es}, St) ->
-    return_stat(Line, Es, St);
-stat({break,L}, St) ->				%Interesting
-    {#break{l=L},St};
-stat({block,Line,B}, St) ->
-    block_stat(Line, B, St);
-stat({while,Line,Exp,B}, St) ->
-    while_stat(Line, Exp, B, St);
-stat({repeat,Line,B,Exp}, St) ->
-    repeat_stat(Line, B, Exp, St);
-stat({'if',Line,Tests,Else}, St) ->
-    if_stat(Line, Tests, Else, St);
-stat({for,Line,V,I,L,B}, St) ->			%Default step of 1.0
-    numfor_stat(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
-stat({for,Line,V,I,L,S,B}, St) ->
-    numfor_stat(Line, V, I, L, S, B, St);
-stat({for,Line,Ns,Gs,B}, St) ->
-    genfor_stat(Line, Ns, Gs, B, St);
-stat({functiondef,Line,Fname,Ps,B}, St) ->
-    fdef_stat(Line, Fname, Ps, B, St);
-stat({local,Line,Local}, St) ->
-    local_stat(Line, Local, St);
-stat(Exp, St0) ->
+stmt({assign,Line,Vs,Es}, St) ->
+    assign_stmt(Line, Vs, Es, St);
+stmt({return,Line,Es}, St) ->
+    return_stmt(Line, Es, St);
+stmt({break,L}, St) ->				%Interesting
+    {#break_stmt{l=L},St};
+stmt({block,Line,B}, St) ->
+    block_stmt(Line, B, St);
+stmt({while,Line,Exp,B}, St) ->
+    while_stmt(Line, Exp, B, St);
+stmt({repeat,Line,B,Exp}, St) ->
+    repeat_stmt(Line, B, Exp, St);
+stmt({'if',Line,Tests,Else}, St) ->
+    if_stmt(Line, Tests, Else, St);
+stmt({for,Line,V,I,L,B}, St) ->			%Default step of 1.0
+    numfor_stmt(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
+stmt({for,Line,V,I,L,S,B}, St) ->
+    numfor_stmt(Line, V, I, L, S, B, St);
+stmt({for,Line,Ns,Gs,B}, St) ->
+    genfor_stmt(Line, Ns, Gs, B, St);
+stmt({functiondef,Line,Fname,Ps,B}, St) ->
+    fdef_stmt(Line, Fname, Ps, B, St);
+stmt({local,Line,Local}, St) ->
+    local_stmt(Line, Local, St);
+stmt(Exp, St0) ->				%This is really just a call
+    Line = element(2, Exp),
     {Ce,St1} = exp(Exp, St0),
-    {Ce,St1}.
+    {#call_stmt{l=Line,call=Ce},St1}.
 
-%% assign_stat(Line, Vars, Exps, State) -> {Assign,State}.
+%% assign_stmt(Line, Vars, Exps, State) -> {Assign,State}.
 
-assign_stat(Line, Vs, Es, St0) ->
+assign_stmt(Line, Vs, Es, St0) ->
     {Ces,St1} = explist(Es, St0),
     {Cvs,St2} = assign_loop(Vs, St1),
-    {#assign{l=Line,vs=Cvs,es=Ces},St2}.
+    {#assign_stmt{l=Line,vs=Cvs,es=Ces},St2}.
 
 assign_loop([V|Vs], St0) ->
     {Cv,St1} = var(V, St0),
@@ -287,42 +290,42 @@ var_last({key_field,L,Exp}, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {#key{l=L,k=Ce},St1}.
 
-%% return_stat(Line, Exps, State) -> {Return,State}.
+%% return_stmt(Line, Exps, State) -> {Return,State}.
 
-return_stat(Line, Es, St0) ->
+return_stmt(Line, Es, St0) ->
     {Ces,St1} = explist(Es, St0),
-    {#return{l=Line,es=Ces},St1}.
+    {#return_stmt{l=Line,es=Ces},St1}.
 
-%% block_stat(Line, Stats, State) -> {Block,State}.
+%% block_stmt(Line, Stats, State) -> {Block,Stmte}.
 
-block_stat(Line, Stats, St0) ->
-    {Cb,St1} = block(Line, Stats, St0),
-    {Cb,St1}.
+block_stmt(Line, Ss0, St0) ->
+    {Ss1,St1} = stmts(Ss0, St0),
+    {#block_stmt{l=Line,ss=Ss1},St1}.
 
-block(L, Ss0, St0) ->
-    {Ss1,St1} = stats(Ss0, St0),
-    {#block{l=L,ss=Ss1},St1}.
+block(Line, Ss0, St0) ->
+    {Ss1,St1} = stmts(Ss0, St0),
+    {#block{l=Line,ss=Ss1},St1}.
 
-%% while_stat(Line, Exp, Block, State) -> {While,State}.
+%% while_stmt(Line, Exp, Block, State) -> {While,State}.
 
-while_stat(Line, Exp, B, St0) ->
+while_stmt(Line, Exp, B, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {Cb,St2} = block(Line, B, St1),
-    {#while{l=Line,e=Ce,b=Cb},St2}.
+    {#while_stmt{l=Line,e=Ce,b=Cb},St2}.
 
-%% repeat_stat(Line, Block, Exp, State) -> {Repeat,State}.
+%% repeat_stmt(Line, Block, Exp, State) -> {Repeat,State}.
 
-repeat_stat(Line, B, Exp, St0) ->
+repeat_stmt(Line, B, Exp, St0) ->
     {Cb,St1} = block(Line, B, St0),
     {Ce,St2} = exp(Exp, St1),
-    {#repeat{l=Line,b=Cb,e=Ce},St2}.
+    {#repeat_stmt{l=Line,b=Cb,e=Ce},St2}.
 
-%% if_stat(Line, Test, Else, State) -> {If,State}.
+%% if_stmt(Line, Test, Else, State) -> {If,State}.
 
-if_stat(Line, Tests, Else, St0) ->
+if_stmt(Line, Tests, Else, St0) ->
     {Cts,St1} = if_tests(Line, Tests, St0),
     {Ce,St2} = block(Line, Else, St1),
-    {#'if'{l=Line,tests=Cts,else=Ce},St2}.
+    {#if_stmt{l=Line,tests=Cts,else=Ce},St2}.
 
 if_tests(L, Ts, St) ->
     Test = fun ({T,B}, S0) ->
@@ -332,27 +335,28 @@ if_tests(L, Ts, St) ->
 	   end,
     lists:mapfoldl(Test, St, Ts).
 
-%% numfor_stat(Line, Var, Init, Limit, Step, Stats, State) -> {NumFor, State}.
+%% numfor_stmt(Line, Var, Init, Limit, Step, Stmts, State) -> {NumFor,State}.
 
-numfor_stat(Line, {'NAME',Ln,N}, I0, L0, S0, Ss, St0) ->
+numfor_stmt(Line, {'NAME',Ln,N}, I0, L0, S0, Ss, St0) ->
     Var = var_name(Ln, N),
     {[I1,L1,S1],St1} = explist([I0,L0,S0], St0),
     {B,St2} = block(Line, Ss, St1),
-    {#nfor{l=Line,v=Var,init=I1,limit=L1,step=S1,b=B},St2}.
+    {#nfor_stmt{l=Line,v=Var,init=I1,limit=L1,step=S1,b=B},St2}.
 
-%% genfor_stat(Line, Vars, Generators, Stats, State) -> {GenFor,State}.
+%% genfor_stmt(Line, Vars, Generators, Stmts, State) -> {GenFor,State}.
 
-genfor_stat(Line, Vs0, Gs0, Ss, St0) ->
+genfor_stmt(Line, Vs0, Gs0, Ss, St0) ->
     Vs1 = [ var_name(Ln, N) || {'NAME',Ln,N} <- Vs0 ],
     {Gs1,St1} = explist(Gs0, St0),
     {B,St2} = block(Line, Ss, St1),
-    {#gfor{l=Line,vs=Vs1,gens=Gs1,b=B},St2}.
+    {#gfor_stmt{l=Line,vs=Vs1,gens=Gs1,b=B},St2}.
 
-%% fdef_stat(Line, Name, Pars, Stats, State) -> {Fdef,State}.
+%% fdef_stmt(Line, Name, Pars, Stmts, State) -> {Fdef,State}.
+%%  Transform this to an assign.
 
-fdef_stat(Line, Fname, Ps, B, St0) ->
+fdef_stmt(Line, Fname, Ps, B, St0) ->
     {V,F,St1} = functiondef(Line, Fname, Ps, B, St0),
-    {#assign{l=Line,vs=[V],es=[F]},St1}.
+    {#assign_stmt{l=Line,vs=[V],es=[F]},St1}.
 
 %% functiondef(Line, Pars, Block, State) -> {CFunc,State}.
 %% functiondef(Line, Name, Pars, Block, State) -> {Var,CFunc,State}.
@@ -360,8 +364,8 @@ fdef_stat(Line, Fname, Ps, B, St0) ->
 %%  really means is that the function has an extra parameter 'self'
 %%  prepended to the paramter list.
 
-functiondef(L, Ps, Stats, St0) ->
-    {Cp,Cb,St1} = function_block(Ps, Stats, St0),
+functiondef(L, Ps, Stmts, St0) ->
+    {Cp,Cb,St1} = function_block(Ps, Stmts, St0),
     {#fdef{l=L,ps=Cp,ss=Cb},St1}.
 
 functiondef(L, Name0, Ps0, B, St0) ->
@@ -410,16 +414,16 @@ funcname_last({'NAME',L,N}, St) ->
     %% Transform this to key_field with the name string.
     {#key{l=L,k=lit_name(L, N)},St}.
 
-%% local_stat(Line, Local, State) -> {Assign,State}.
+%% local_stmt(Line, Local, State) -> {Assign,State}.
 %%  Create and assign local variables.
 
-local_stat(Line, {functiondef,Lf,Name,Ps,B}, St0) ->
+local_stmt(Line, {functiondef,Lf,Name,Ps,B}, St0) ->
     {Var,F,St1} = functiondef(Lf, Name, Ps, B, St0),
-    {#local_fdef{l=Line,v=Var,f=F},St1};
-local_stat(Line, {assign,_,Ns,Es}, St0) ->
+    {#local_fdef_stmt{l=Line,v=Var,f=F},St1};
+local_stmt(Line, {assign,_,Ns,Es}, St0) ->
     {Ces,St1} = explist(Es, St0),
     {Cns,St2} = lists:mapfoldl(fun (V, St) -> var(V, St) end, St1, Ns),
-    {#local_assign{l=Line,vs=Cns,es=Ces},St2}.
+    {#local_assign_stmt{l=Line,vs=Cns,es=Ces},St2}.
 
 %% explist(Exprs, State) -> {Ins,State}.
 %% exp(Expression, State) -> {Ins,State}.
@@ -490,9 +494,9 @@ prefixexp_element({method,Lm,{'NAME',Ln,N},Args}, St0) ->
 
 dot(L, Exp, Rest) -> #dot{l=L,e=Exp,r=Rest}.
 
-function_block(Pars, Stats, St0)->
+function_block(Pars, Stmts, St0)->
     {Cps,St1} = make_local_pars(Pars, St0),
-    {Cs,St2} = stats(Stats, St1),
+    {Cs,St2} = stmts(Stmts, St1),
     %% io:format("fb: ~p\n", [{St3#comp.fs}]),
     {Cps,Cs,St2}.
 

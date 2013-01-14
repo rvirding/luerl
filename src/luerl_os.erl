@@ -55,8 +55,8 @@ getenv(As, _) -> lua_error({badarg,getenv,As}).
 %% Time functions.
 
 clock(_, St) ->					%This is wrong!
-    {Mega,S,Micro} = now(),
-    {[1.0e6*Mega+S+Micro*1.0e-6],St}.
+    {Mega,Sec,Micro} = now(),
+    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),

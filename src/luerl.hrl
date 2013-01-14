@@ -68,6 +68,8 @@
 -record(function,{l=0,				%Line number (why?)
 		  local,			%Local block
 		  sz,				%Block size
+		  lsz, lps,			%Local var size, pars
+		  esz, eps,			%Env var size, pars
 		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block

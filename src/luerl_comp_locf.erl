@@ -40,21 +40,12 @@
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,
 		  subtract/2,intersection/2]).
 
-chunk(#chunk{code=C0}=St0, Opts) ->
-    {C1,_,St1} = exp(C0, St0),
-    debug_print(Opts, "cf: ~p\n", [C1]),
-    {ok,St1#chunk{code=C1}}.
+chunk(#code{code=C0}=Code, Opts) ->
+    {C1,_,nul} = exp(C0, nul),			%No local state here!
+    luerl_comp:debug_print(Opts, "cf: ~p\n", [C1]),
+    {ok,Code#code{code=C1}}.
 
-debug_print(Opts, Format, Args) ->
-    case lists:member(debug_print, Opts) of
-	true -> io:fwrite(Format, Args);
-	false -> ok
-    end.
-
-%% stat(Stats, State) ->
-%%     {Stats,LocalFunc,State}.
-%%  Main problem here is to calculate local/free/used variables in the
-%%  right order. Must do everything going forwards.
+%% stat(Stats, State) -> {Stats,LocalFunc,State}.
 
 stats([S0|Ss0], St0) ->
     {S1,Slocf,St1} = stat(S0, St0),
@@ -127,15 +118,12 @@ block_stat(B0, St0) ->
     {B1,Locf,St1}.
 
 %% do_block(Block, State) -> {Block,LocalFunc,State}.
-%%  Do_block never returns external new variables as it never exports
-%%  variables.
 
 do_block(#block{ss=Ss0}=B, St0) ->
-    {Ss1,Blocf,St1} = stats(Ss0, St0),
-    {B#block{ss=Ss1,locf=Blocf},Blocf,St1}.
+    {Ss1,Sslocf,St1} = stats(Ss0, St0),
+    {B#block{ss=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% while_stat(While, State) -> {While,LocalFunc,State}.
-%%  While_stat never returns external new variables. Fits into stat().
 %%  The test expression is done in the context of the surrounding
 %%  block.
 
@@ -145,9 +133,7 @@ while_stat(#while{e=E0,b=B0}=W, St0) ->
     {W#while{e=E1,b=B1},Elocf or Blocf,St2}.
 
 %% repeat_stat(Repeat, State) -> {Repeat,LocalFunc,State}.
-%%  Repeat_stat never returns external new variables. Fits into
-%%  stat(). The test expression is done in the context of the repeat
-%%  block.
+%%  The test expression is done in the context of the repeat block.
 
 repeat_stat(#repeat{b=B0,e=E0}=R, St0) ->
     {B1,Blocf,St1} = repeat_block(B0, St0),
@@ -156,9 +142,9 @@ repeat_stat(#repeat{b=B0,e=E0}=R, St0) ->
     {R#repeat{b=B1,e=E1},Locf,St2}.
 
 repeat_block(#block{ss=B0}=B, St0) ->
-    {B1,Blocf,St1} = stats(B0, St0),
+    {B1,Sslocf,St1} = stats(B0, St0),
     %% Now do the test in the context of the block.
-    {B#block{ss=B1,locf=Blocf},Blocf,St1}.
+    {B#block{ss=B1,locf=Sslocf},Sslocf,St1}.
 
 %% if_stat(If, State) -> {If,LocalFunc,State}.
 %%  The block info includes anything from the test expressions even
@@ -208,7 +194,6 @@ local_fdef_stat(#local_fdef{f=F0}=L, St0) ->
 
 %% explist(Exprs, State) -> {Exprs,LocalFunc,State}.
 %% exp(Expr, State) -> {Expr,LocalFunc,State}.
-%%  An expression can never create new local variables.
 
 explist([E0|Es0], St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
@@ -218,7 +203,7 @@ explist([], St) -> {[],false,St}.		%No expressions at all
 
 exp(#lit{}=L, St) -> {L,false,St};		%Nothing to do
 exp(#fdef{}=F0, St0) ->
-    {F1,_,St1} = functiondef(F0, St0),
+    {F1,_,St1} = functiondef(F0, St0),		%Don't care what's in func
     {F1,true,St1};
 exp(#op{as=Es0}=Op, St0) ->
     {Es1,Eslocf,St1} = explist(Es0, St0),
@@ -262,8 +247,8 @@ prefixexp_element(#mcall{as=As0}=M, St0) ->
 %%  the function.
 
 functiondef(#fdef{ss=Ss0}=F, St0) ->
-    {Ss1,Blocf,St1} = stats(Ss0, St0),
-    {F#fdef{ss=Ss1,locf=Blocf},Blocf,St1}.
+    {Ss1,Sslocf,St1} = stats(Ss0, St0),
+    {F#fdef{ss=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% tableconstructor(Fields, State) -> {Fields,LocalFunc,State}.
 

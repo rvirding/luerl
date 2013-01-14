@@ -46,7 +46,8 @@
 -include("luerl_comp.hrl").
 
 %% Basic interface.
--export([init/0,call/2,call/3,chunk/2,chunk/3,gc/1]).
+-export([init/0,gc/1]).
+-export([emul/2,call/2,call/3,chunk/2,chunk/3]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
@@ -127,6 +128,13 @@ push_frame(F, #luerl{env=Fps,ftab=Ft0,ffree=[],fnext=N}=St) ->
     Ft1 = array:set(N, F, Ft0),
     St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,fnext=N+1}.
 
+push_frame(F, Fps, #luerl{ftab=Ft0,ffree=[N|Ns]}=St) ->
+    Ft1 = array:set(N, F, Ft0),
+    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,ffree=Ns};
+push_frame(F, Fps, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
+    Ft1 = array:set(N, F, Ft0),
+    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,fnext=N+1}.
+
 pop_frame(#luerl{env=[_|Fps]}=St) ->		%Pop the frame
     St#luerl{env=Fps}.
 
@@ -177,7 +185,7 @@ free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
 %%  Access tables, as opposed to the environment (which are also
 %%  tables). Setting a value to 'nil' will clear it from the array but
 %%  not from the table; however, we won't add a nil value.
-%%  NOTE: WE ALWAYS RETURN A SINGLE VALUE.
+%%  NOTE: WE ALWAYS RETURN A SINGLE VALUE!
 
 set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
     case ?IS_INTEGER(Key, I) of
@@ -272,7 +280,7 @@ get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
 
 get_table_metamethod(T, Meta, Key, Ts, St) ->
     case getmetamethod_tab(Meta, <<"__index">>, Ts) of
-	nil -> {[nil],St};
+	nil -> {nil,St};
 	Meth when element(1, Meth) =:= function ->
 	    {Vs,St1} = functioncall(Meth, [T,Key], St),
 	    {first_value(Vs),St1};
@@ -280,52 +288,72 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 	    get_table_key(Meth, Key, St)
     end.
 
-%% set_global_var(Key, Val, State) -> State.
-%% get_global_var(Key, State) -> Val.
-%%  Is _G a normal table with metatable etc? If so we should really
-%%  use the table functions instead.
+%% set_global_var(Var, Val, State) -> State.
+%% get_global_var(Var, State) -> {Val,State}.
+%%  _G a normal table with metatable so we must use the table
+%%  functions.  However we can optimise a bit as we KNOW that _G is a
+%%  table and the var is always a normal non-integer key.
 
-set_global_var(Key, Val, #luerl{ttab=Ts0,g=#tref{i=G}}=St) ->
-    Store = fun (#table{t=Tab}=T) ->
-		    T#table{t=ttdict:store(Key, Val, Tab)} end,
-    Ts1 = ?UPD_TABLE(G, Store, Ts0),
-    St#luerl{ttab=Ts1}.
+set_global_var(Var, Val, #luerl{g=G}=St) ->
+    set_table_key_key(G, Var, Val, St).
 
-get_global_var(Key, #luerl{ttab=Ts,g=#tref{i=G}}) ->
-    #table{t=Tab} = ?GET_TABLE(G, Ts),
-    case ttdict:find(Key, Tab) of
-	{ok,Val} -> Val;
-	error -> nil
-    end.
+get_global_var(Var, #luerl{g=G}=St) ->
+    get_table_key_key(G, Var, St).
 
-%% set_frame_var(Depth, Index, Val, State) -> State.
-%% get_frame_var(Depth, Index, State) -> Val.
+%% set_env_var(Depth, Index, Val, State) -> State.
+%% get_env_var(Depth, Index, State) -> Val.
+%%  We must have the state as the environments are global in the
+%%  state.
 
-set_frame_var(D, I, Val, #luerl{env=Fps,ftab=Ft0}=St) ->
-    Ft1 = set_frame_var(D, I, Val, Fps, Ft0),
+set_env_var(D, I, Val, #luerl{env=Fps,ftab=Ft0}=St) ->
+    Ft1 = set_env_var(D, I, Val, Fps, Ft0),
     St#luerl{ftab=Ft1}.
 
-get_frame_var(D, I, #luerl{env=Fps,ftab=Ft}) ->
-    get_frame_var(D, I, Fps, Ft).
-
-set_frame_var(1, I, V, [#fref{i=N}|_], Ft) ->
+set_env_var(1, I, V, [#fref{i=N}|_], Ft) ->
     F = setelement(I, array:get(N, Ft), V),
     array:set(N, F, Ft);
-set_frame_var(2, I, V, [_,#fref{i=N}|_], Ft) ->
+set_env_var(2, I, V, [_,#fref{i=N}|_], Ft) ->
     F = setelement(I, array:get(N, Ft), V),
     array:set(N, F, Ft);
-set_frame_var(D, I, V, Fps, Ft) ->
+set_env_var(D, I, V, Fps, Ft) ->
     #fref{i=N} = lists:nth(D, Fps),
     F = setelement(I, array:get(N, Ft), V),
     array:set(N, F, Ft).
 
-get_frame_var(1, I, [#fref{i=N}|_], Ft) ->
+get_env_var(D, I, #luerl{env=Fps,ftab=Ft}) ->
+    get_env_var(D, I, Fps, Ft).
+
+get_env_var(1, I, [#fref{i=N}|_], Ft) ->
     element(I, array:get(N, Ft));
-get_frame_var(2, I, [_,#fref{i=N}|_], Ft) ->
+get_env_var(2, I, [_,#fref{i=N}|_], Ft) ->
     element(I, array:get(N, Ft));
-get_frame_var(D, I, Fps, Ft) ->
+get_env_var(D, I, Fps, Ft) ->
     #fref{i=N} = lists:nth(D, Fps),
     element(I, array:get(N, Ft)).
+
+%% set_frame_var(Depth, Index, Var, Frames) -> Frames.
+%% get_frame_var(Depth, Index, Frames) -> Val.
+
+set_frame_var(1, I, V, [F|Fs]) ->
+    [setelement(I, F, V)|Fs];
+set_frame_var(D, I, V, [F|Fs]) ->
+    [F|set_frame_var(D-1, I, V, Fs)].
+
+get_frame_var(1, I, [F|_]) -> element(I, F);
+get_frame_var(D, I, [_|Fs]) ->
+    get_frame_var(D-1, I, Fs).
+
+%% set_local_var(Depth, Index, Var, Frames) -> Frames.
+%% get_local_var(Depth, Index, Frames) -> Val.
+
+set_local_var(1, I, V, [F|Fs]) ->
+    [setelement(I, F, V)|Fs];
+set_local_var(D, I, V, [F|Fs]) ->
+    [F|set_local_var(D-1, I, V, Fs)].
+
+get_local_var(1, I, [F|_]) -> element(I, F);
+get_local_var(D, I, [_|Fs]) ->
+    get_local_var(D-1, I, Fs).
 
 %% chunk(Chunk, State) -> {Return,State}.
 %% chunk(Chunk, Args, State) -> {Return,State}.
@@ -338,7 +366,7 @@ chunk(Chunk, Args, St) -> call(Chunk, Args, St).
 
 call(Chunk, St) -> call(Chunk, [], St).
 
-call(#chunk{code=C0}, Args, St0) ->
+call(#code{code=C0}, Args, St0) ->
     {R,_,_,_,St1} = emul(C0, St0),		%R is the accumulator
     itrace_print("e: ~p\n", [R]),
     functioncall(R, Args, St1);
@@ -368,9 +396,9 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(frame, {acc,var,env}).			%Save these for the GC
+-record(frame, {acc,var,fs,env}).		%Save these for the GC
 
-%% emul(Instrs, Accumulator, LocalVariables, State).
+%% emul(Instrs, State).
 %% emul(Instrs, Accumulator, LocalVariables, Stack, Env, State).
 
 emul(Is, #luerl{env=Env}=St) ->
@@ -397,18 +425,34 @@ emul_1([?LOAD_LIT(L)|Is], _, Var, Stk, Env, St) ->
 emul_1([?LOAD_LVAR(I)|Is], _, Var, Stk, Env, St) ->
     Acc = element(I, Var),
     emul(Is, Acc, Var, Stk, Env, St);
-emul_1([?LOAD_FVAR(D, I)|Is], _, Var, Stk, Env, St) ->
-    Acc = get_frame_var(D, I, St),
-    emul(Is, Acc, Var, Stk, Env, St);
-emul_1([?LOAD_GVAR(K)|Is], _, Var, Stk, Env, St) ->
-    Acc = get_global_var(K, St),
-    emul(Is, Acc, Var, Stk, Env, St);
+emul_1([?LOAD_FVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
+    Acc = get_frame_var(D, I, Lvs),
+    emul(Is, Acc, Lvs, Stk, Env, St);
+
+emul_1([?LOAD_LVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
+    Acc = get_local_var(D, I, Lvs),
+    emul(Is, Acc, Lvs, Stk, Env, St);
+emul_1([?LOAD_EVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
+    Acc = get_env_var(D, I, St),
+    emul(Is, Acc, Lvs, Stk, Env, St);
+emul_1([?LOAD_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
+    {Acc,St1} = get_global_var(K, St0),
+    emul(Is, Acc, Var, Stk, Env, St1);
+
 emul_1([?STORE_LVAR(I)|Is], Acc, Var0, Stk, Env, St) ->
     Var1 = setelement(I, Var0, Acc),
     emul(Is, Acc, Var1, Stk, Env, St);
 emul_1([?STORE_FVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
     St1 = set_frame_var(D, I, Acc, St0),
     emul(Is, Acc, Var, Stk, Env, St1);
+
+emul_1([?STORE_LVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
+    St1 = set_local_var(D, I, Acc, St0),
+    emul(Is, Acc, Var, Stk, Env, St1);
+emul_1([?STORE_EVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
+    St1 = set_env_var(D, I, Acc, St0),
+    emul(Is, Acc, Var, Stk, Env, St1);
+
 emul_1([?STORE_GVAR(K)|Is], Acc, Var, Stk, Env, St0) ->
     St1 = set_global_var(K, Acc, St0),
     emul(Is, Acc, Var, Stk, Env, St1);
@@ -440,10 +484,13 @@ emul_1([?OP(Op,Ac)|Is], Acc, Var, Stk, Env, St) ->
 emul_1([?FDEF(Fps, Fis, Loc, Sz)|Is], _, Var, Stk, Env, St) ->
     Func = do_fdef(Fps, Fis, Loc, Sz, Env, St),
     emul(Is, Func, Var, Stk, Env, St);
+emul_1([?FDEF(Lsz, Lps, Esz, Eps, Fis)|Is], _, Var, Stk, Env, St) ->
+    Func = do_fdef(Lsz, Lps, Esz, Eps, Fis, Env, St),
+    emul(Is, Func, Var, Stk, Env, St);
 %% Control instructions.
-emul_1([?BLOCK(Bis, Loc, Sz)|Is], Acc, Var, Stk, Env, St) ->
-    do_block(Is, Acc, Var, Stk, Env, St, Bis, Loc, Sz);
-emul_1([?WHILE(Eis,Wis)|Is], Acc, Var, Stk, Env, St) ->
+emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Acc, Var, Stk, Env, St) ->
+    do_block(Is, Acc, Var, Stk, Env, St, Bis, Lsz, Bsz);
+emul_1([?WHILE(Eis, Wis)|Is], Acc, Var, Stk, Env, St) ->
     do_while(Is, Acc, Var, Stk, Env, St, Eis, Wis);
 emul_1([?REPEAT(Ris)|Is], Acc, Var, Stk, Env, St) ->
     do_repeat(Is, Acc, Var, Stk, Env, St, Ris);
@@ -503,9 +550,9 @@ emul_1([?PUSH_LVAR(I)|Is], _, Var, Stk, Env, St) ->
 emul_1([?PUSH_FVAR(D, I)|Is], _, Var, Stk, Env, St) ->
     Acc = get_frame_var(D, I, St),
     emul(Is, Acc, Var, [Acc|Stk], Env, St);
-emul_1([?PUSH_GVAR(K)|Is], _, Var, Stk, Env, St) ->
-    Acc = get_global_var(K, St),
-    emul(Is, Acc, Var, [Acc|Stk], Env, St);
+emul_1([?PUSH_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
+    {Acc,St1} = get_global_var(K, St0),
+    emul(Is, Acc, Var, [Acc|Stk], Env, St1);
 emul_1([], Acc, Var, Stk, Env, St) ->
     {Acc,Var,Stk,Env,St}.
 
@@ -541,25 +588,20 @@ pop_args(0, Stk, _) -> {[],Stk};
 pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
 
 %% do_block(Instrs, Acc, Vars, Stack, Env, State,
-%%          BlockInstrs, Vars, LocalSize) -> ReturnFromEmul.
+%%          BlockInstrs, LocalSize, EnvSize) -> ReturnFromEmul.
 
-do_block(Is, Acc0, Var0, Stk0, Env, St0, Bis, local, Sz) ->
-    Var1 = erlang:make_tuple(Sz, nil),
-    {Acc1,_,_,_,St1} =
-	emul(Bis, Acc0, Var1, Stk0, Env, St0),
-    emul(Is, Acc1, Var0, Stk0, Env, St1);
-do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, transient, Sz) ->
-    Var1 = erlang:make_tuple(Sz, nil),
-    St1 = push_frame(Var1, St0),
-    {Acc1,_,_,_,St2} = emul(Bis, Acc, Var1, Stk0, Env, St1),
-    St3 = pop_free_frame(St2),			%We can free this frame
-    emul(Is, Acc1, Var0, Stk0, Env, St3);
-do_block(Is, Acc, Var0, Stk0, Env, St0, Bis, permanent, Sz) ->
-    Var1 = erlang:make_tuple(Sz, nil),
-    St1 = push_frame(Var1, St0),
-    {Acc1,_,_,_,St2} = emul(Bis, Acc, Var1, Stk0, Env, St1),
-    St3 = pop_frame(St2),
-    emul(Is, Acc1, Var0, Stk0, Env, St3).
+do_block(Is, Acc0, Lvs, Stk, Env, St0, Bis, Lsz, 0) ->
+    L = erlang:make_tuple(Lsz, nil),
+    {Acc1,_,_,_,St1} = emul(Bis, Acc0, [L|Lvs], Stk, Env, St0),
+    emul(Is, Acc1, Lvs, Stk, Env, St1);
+do_block(Is, Acc0, Lvs, Stk, Env, St0, Bis, Lsz, Esz) ->
+    OldEnv = St0#luerl.env,
+    L = erlang:make_tuple(Lsz, nil),
+    E = erlang:make_tuple(Esz, nil),
+    St1 = push_frame(E, St0),
+    {Acc1,_,_,_,St2} = emul(Bis, Acc0, [L|Lvs], Stk, Env, St1),
+    St3 = St2#luerl{env=OldEnv},		%pop_frame ?
+    emul(Is, Acc1, Lvs, Stk, Env, St1).
 
 do_op(Is, Acc, Var, Stk0, Env, St0, Op, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),
@@ -576,19 +618,22 @@ do_op(Op, [A1,A2], St) -> op(Op, A1, A2, St).
 do_fdef(Ps, Is, Local, Sz, Env, _) ->
     #function{local=Local,sz=Sz,pars=Ps,b=Is,env=Env}.
 
-do_call(Is, Acc, Var, Stk0, Env, St, 0) ->
-    [Func|Stk1] = Stk0,				%Get function
-    functioncall(Is, Acc, Var, Stk1, Env, St, Func, []);
+do_fdef(Lsz, Lps, Esz, Eps, Is, Env, _) ->
+    #function{lsz=Lsz,lps=Lps,esz=Esz,eps=Eps,env=Env,b=Is}.
+
+do_call(Is, Acc, Var, Stk, Env, St, 0) ->
+    %% The function is in the acc.
+    functioncall(Is, Acc, Var, Stk, Env, St, Acc, []);
 do_call(Is, Acc, Var, Stk0, Env, St, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
     functioncall(Is, Acc, Var, Stk2, Env, St, Func, Args).
 
-do_tail_call(_Is, Acc, Var, Stk0, Env, St, 0) ->
-    [Func|Stk1] = Stk0,				%Get function
+do_tail_call(_Is, Acc, Var, Stk, Env, St, 0) ->
+    %% The function is in the acc.
     error(boom);
 do_tail_call(_Is, Acc, Var, Stk0, Env, St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-a, Stk0, Acc),	%Pop arguments, last is in acc
+    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
     error(boom).
 
@@ -604,45 +649,39 @@ functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
 %%  This is called from within code and continues with Instrs after
 %%  call. It must move everything into State.
 
-functioncall(Is, Acc, Var, Stk0, Env, St0, Func, Args) ->
-    Fr = #frame{var=Var,env=Env},		%Save current state
+functioncall(Is, Acc, Lvs, Stk0, Env, St0, Func, Args) ->
+    Fr = #frame{acc=Acc,var=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    emul(Is, Ret, Var, Stk0, Env, St1).
+    emul(Is, Ret, Lvs, Stk0, Env, St1).
 
-functioncall(#function{local=local,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
-	     #luerl{env=OldEnv}=St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    {Ret,St1} = functioncall(Fis, Var1, Stk, Env, St0#luerl{env=Env}),
-    {Ret,St1#luerl{env=OldEnv}};
-functioncall(#function{local=transient,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
-	     #luerl{env=OldEnv}=St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    St1 = push_frame(Var1, St0#luerl{env=Env}),
-    {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
-    St3 = pop_free_frame(St2),
-    {Ret,St3#luerl{env=OldEnv}};
-functioncall(#function{local=permanent,sz=Sz,env=Env,pars=Ps,b=Fis}, Args, Stk,
-	     #luerl{env=OldEnv}=St0) ->
-    Var0 = erlang:make_tuple(Sz, nil),		%Make local frame
-    Var1 = assign_pars(Ps, Args, Var0),
-    St1 = push_frame(Var1, St0#luerl{env=Env}),
-    {Ret,St2} = functioncall(Fis, {}, Stk, St1#luerl.env, St1),
-    St3 = pop_frame(St2),
-    {Ret,St3#luerl{env=OldEnv}};
+functioncall(#function{lsz=Lsz,lps=Lps,esz=0,env=Env,b=Fis},
+	     Args, Stk, St0) ->
+    L0 = erlang:make_tuple(Lsz, nil),
+    L1 = assign_pars(Lps, Args, L0),
+    {Ret,St1} = functioncall(Fis, [L1], Stk, none, St0),
+    {Ret,St1};
+functioncall(#function{lsz=Lsz,lps=Lps,esz=Esz,eps=Eps,env=Env,b=Fis},
+	     Args, Stk, #luerl{env=OldEnv}=St0) ->
+    L0 = erlang:make_tuple(Lsz, nil),
+    E0 = erlang:make_tuple(Esz, nil),
+    L1 = assign_pars(Lps, Args, L0),
+    E1 = assign_pars(Eps, Args, E0),
+    St1 = push_frame(E1, Env, St0),
+    {Ret,St2} = functioncall(Fis, [L1], Stk, none, St1),
+    St3 = St2#luerl{env=OldEnv},		%pop_frame ?
+    {Ret,St3};
 functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
     {Ret,St1#luerl{stk=Stk0}}.			%Replace it
 
-functioncall(Fis, Var, Stk, Env, St0) ->
+functioncall(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
     %% Must use different St names else they become 'unsafe'.
-    %%io:fwrite("fc: ~p\n", [{Env,St0#luerl.env}]),
+    io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     try
-	{_,_,_,_,Sta} = emul(Fis, nil, Var, Stk, Env, St0),
+	{_,_,_,_,Sta} = emul(Fis, nil, Lvs, Stk, Env, St0),
 	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
 	{[],Sta}				%No return, no arguments
     catch
@@ -656,6 +695,8 @@ functioncall(Fis, Var, Stk, Env, St0) ->
 assign_pars(Vs, As, Var) ->
     assign_pars_loop(Vs, As, Var).
 
+assign_pars_loop([none|Vs], [_|As], Var) ->	%Ignore this argument
+    assign_pars_loop(Vs, As, Var);
 assign_pars_loop([V|Vs], [A|As], Var) ->
     assign_pars_loop(Vs, As, setelement(V, Var, A));
 assign_pars_loop([V|Vs], [], Var) ->

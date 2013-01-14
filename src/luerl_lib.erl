@@ -89,7 +89,7 @@ aclr(I, [{F,L,Es}|A]) when I > F, I < L ->
     {Bef,[_|Aft]} = lists:split(Bc, Es),	%Split and drop
     [{F,I-1,Bef},{I+1,L,Aft}|A];
 aclr(I, [S|A]) -> [S|aclr(I, A)];
-aclr(I, A) -> A.
+aclr(_, A) -> A.
 
 asl(_, _, A) -> A.
 
@@ -186,7 +186,7 @@ str_to_float(S) ->
 
 %% tonumber(Arg) -> Number | nil.
 %% tonumber(Arg, Base) -> Number | nil.
-%% Tonumber/2 only generates "integers". Lua does it like that.
+%%  Tonumber/2 only generates "integers". Lua does it like that.
 
 tonumber(N) when is_number(N) -> N;
 tonumber(B) when is_binary(B) ->

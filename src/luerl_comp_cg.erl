@@ -41,63 +41,51 @@
 
 %% chunk(St0, Opts) -> {ok,St0}.
 
-chunk(#chunk{code=C0}=St0, Opts) ->
-    {Is,St1} = exp(C0, true, St0),
-    debug_print(Opts, "cg: ~p\n", [Is]),
-    {ok,St1#chunk{code=Is}}.
-
-debug_print(Opts, Format, Args) ->
-    case lists:member(debug_print, Opts) of
-	true -> io:fwrite(Format, Args);
-	false -> ok
-    end.
+chunk(#code{code=C0}=Code, Opts) ->
+    {Is,nul} = exp(C0, true, nul),		%No local state
+    luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
+    {ok,Code#code{code=Is}}.
 
 %% set_var(Var) -> SetI.
 %% get_var(Var) -> GetI.
 
-set_var(#lvar{i=I}) -> ?STORE_LVAR(I);
-set_var(#fvar{d=D,i=I}) -> ?STORE_FVAR(D, I);
+set_var(#lvar{d=D,i=I}) -> ?STORE_LVAR(D, I);
+set_var(#evar{d=D,i=I}) -> ?STORE_EVAR(D, I);
 set_var(#gvar{n=N}) -> ?STORE_GVAR(N).
 
-get_var(#lvar{i=I}) -> ?LOAD_LVAR(I);
-get_var(#fvar{d=D,i=I}) -> ?LOAD_FVAR(D, I);
+get_var(#lvar{d=D,i=I}) -> ?LOAD_LVAR(D, I);
+get_var(#evar{d=D,i=I}) -> ?LOAD_EVAR(D, I);
 get_var(#gvar{n=N}) -> ?LOAD_GVAR(N).
 
-%% stat(Stats, State) -> {Istats,State}.
+%% stmt(Stmts, State) -> {Istmts,State}.
 
-stats([S0|Ss0], St0) ->
-    {S1,St1} = stat(S0, nul, St0),
+stmts([S0|Ss0], St0) ->
+    {S1,St1} = stmt(S0, nul, St0),
     %% io:format("ss1: ~p\n", [{Loc0,Free0,Used0}]),
-    {Ss1,St2} = stats(Ss0, St1),
+    {Ss1,St2} = stmts(Ss0, St1),
     {S1 ++ Ss1,St2};
-stats([], St) -> {[],St}.
+stmts([], St) -> {[],St}.
 
-%% stat(Stat, LocalVars, State) -> {Istat,State}.
+%% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
-stat(#assign{}=A, _, St) -> assign_stat(A, St);
-stat(#return{}=R, _, St) -> return_stat(R, St);
-stat(#break{}, _, St) -> {[?BREAK],St};
-stat(#block{}=B, _, St) ->			%Sub-block
-    block_stat(B, St);
-stat(#while{}=W, _, St) ->
-    while_stat(W, St);
-stat(#repeat{}=R, _, St) ->
-    repeat_stat(R, St);
-stat(#'if'{}=I, _, St) ->
-    if_stat(I, St);
-stat(#nfor{}=F, _, St) ->
-    numfor_stat(F, St);
-stat(#gfor{}=F, _, St) ->
-    genfor_stat(F, St);
-stat(#local_assign{}=L, _, St) ->
-    local_assign_stat(L, St);
-stat(#local_fdef{}=L, _, St) ->
-    local_fdef_stat(L, St);
-stat(Exp0, _, St0) ->
-    {Exp1,St1} = exp(Exp0, false, St0),
-    {Exp1,St1}.
+stmt(#assign_stmt{}=A, _, St) -> assign_stmt(A, St);
+stmt(#call_stmt{}=C, _, St) -> call_stmt(C, St);
+stmt(#return_stmt{}=R, _, St) -> return_stmt(R, St);
+stmt(#break_stmt{}, _, St) -> {[?BREAK],St};
+stmt(#block_stmt{}=B, _, St) -> block_stmt(B, St);
+stmt(#while_stmt{}=W, _, St) -> while_stmt(W, St);
+stmt(#repeat_stmt{}=R, _, St) -> repeat_stmt(R, St);
+stmt(#if_stmt{}=I, _, St) -> if_stmt(I, St);
+stmt(#nfor_stmt{}=F, _, St) -> numfor_stmt(F, St);
+stmt(#gfor_stmt{}=F, _, St) -> genfor_stmt(F, St);
+stmt(#local_assign_stmt{}=L, _, St) ->
+    local_assign_stmt(L, St);
+stmt(#local_fdef_stmt{}=L, _, St) ->
+    local_fdef_stmt(L, St).
 
-assign_stat(#assign{vs=Vs,es=Es}, St) ->
+%% assign_stmt(Assign, State) -> {AssignIs,State}.
+
+assign_stmt(#assign_stmt{vs=Vs,es=Es}, St) ->
     assign_loop(Vs, Es, St).
 
 %% assign_loop(Vars, Exps, State) -> {Iassigns,State}.
@@ -154,43 +142,50 @@ var_last(#key{k=Exp}, St0) ->
     {Ie,St1} = exp(Exp, true, St0),
     {[?PUSH] ++ Ie ++ [?SET_KEY],St1}.
 
-%% return_stat(Return, State) -> {ReturnIs,State}.
+%% call_stmt(Call, State) -> {CallIs,State}.
 
-return_stat(#return{es=Es}, St0) ->
+call_stmt(#call_stmt{call=Exp}, St0) ->
+    {Ie,St1} = exp(Exp, false, St0),
+    {Ie,St1}.
+
+%% return_stmt(Return, State) -> {ReturnIs,State}.
+
+return_stmt(#return_stmt{es=Es}, St0) ->
     {Ies,St1} = explist(Es, false, St0),
     {Ies ++ [?RETURN(length(Es))],St1}.
 
-%% block_stat(Block, State) -> {BlockIs,State}.
+%% block_stmt(Block, State) -> {BlockIs,State}.
 
-block_stat(Block, St) -> do_block(Block, St).
+block_stmt(#block_stmt{ss=Ss,lf=Lf,ef=Ef}, St0) ->
+    {Iss,St1} = stmts(Ss, St0),
+    {[?BLOCK(length(Lf), length(Ef), Iss)],St1}.
 
 %% do_block(Block, State) -> {Block,State}.
-%%  Do_block never returns external new variables. Fits into stat().
+%%  Do_block never returns external new variables. Fits into stmt().
 
 %% do_block(#block{b=Ss,local=[],used=[]}, St) ->	%No local variables in block
-%%     stats(Ss, St);				%Fold into surrounding block
-do_block(#block{ss=Ss,local=Loc,used=U,locf=Locf}, St0) ->
-    Fr = frame_type(U, Locf),			%A local stack frame?
-    {Ib,St1} = stats(Ss, St0),
-    {[?BLOCK(Ib, Fr, length(Loc))],St1}.
+%%     stmts(Ss, St);				%Fold into surrounding block
+do_block(#block{ss=Ss,lf=Lf,ef=Ef}, St0) ->
+    {Iss,St1} = stmts(Ss, St0),
+    {[?BLOCK(length(Lf), length(Ef), Iss)],St1}.
 
-%% while_stat(While, State) -> {WhileIs,State}.
+%% while_stmt(While, State) -> {WhileIs,State}.
 
-while_stat(#while{e=E,b=B}, St0) ->
+while_stmt(#while_stmt{e=E,b=B}, St0) ->
     {Ie,St1} = exp(E, true, St0),
     {Ib,St2} = do_block(B, St1),
     {[?WHILE(Ie, Ib)],St2}.
 
-%% repeat_stat(Repeat, State) -> {RepeatIs,State}.
+%% repeat_stmt(Repeat, State) -> {RepeatIs,State}.
 
-repeat_stat(#repeat{b=B,e=E}, St0) ->
+repeat_stmt(#repeat_stmt{b=B,e=E}, St0) ->
     {Ib,St1} = do_block(B, St0),
     {Ie,St2} = exp(E, true, St1),
     {[?REPEAT(Ib ++ Ie)],St2}.
 
-%% if_stat(If, State) -> {If,State}.
+%% if_stmt(If, State) -> {If,State}.
 
-if_stat(#'if'{tests=Ts,else=E}, St) ->
+if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
 
 if_tests([{E,B}|Ts], Else, St0) ->
@@ -202,28 +197,36 @@ if_tests([], Else, St0) ->
     {Ie,St1} = do_block(Else, St0),
     {Ie,St1}.
 
-%% numfor_stat(For, State) -> {ForIs,State}.
+%% numfor_stmt(For, State) -> {ForIs,State}.
 
-numfor_stat(#nfor{v=V,init=I,limit=L,step=S,b=B}, St0) ->
+%% numfor_stmt(#nfor{v=V,init=I,limit=L,step=S,b=B}, St0) ->
+%%     {Ies,St1} = explist([I,L,S], true, St0),
+%%     {Ib0,St2} = do_block(B, St1),
+%%     [?BLOCK(Is,Loc,Sz)] = Ib0,
+%%     Ib1 = [?BLOCK([set_var(V)|Is],Loc,Sz)],
+%%     {Ies ++ [?NFOR(V,Ib1)],St2}.
+
+%% An experiment to put the block *outside* the for loop.
+numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
     {Ies,St1} = explist([I,L,S], true, St0),
-    {Ib0,St2} = do_block(B, St1),
-    [?BLOCK(Is,Loc,Sz)] = Ib0,
-    Ib1 = [?BLOCK([set_var(V)|Is],Loc,Sz)],
-    {Ies ++ [?NFOR(V,Ib1)],St2}.
+    {Ib,St2} = do_block(B, St1),
+    [?BLOCK(Lsz, Esz, Is)] = Ib,
+    ForBlock = [?BLOCK(Lsz, Esz, [?NFOR(V,[set_var(V)|Is])])],
+    {Ies ++ ForBlock,St2}.
 
-%% genfor_stat(For, State) -> {ForIs,State}.
+%% genfor_stmt(For, State) -> {ForIs,State}.
 
-genfor_stat(#gfor{vs=[V|Vs],gens=Gs,b=B}, St0) ->
+genfor_stmt(#gfor_stmt{vs=[V|Vs],gens=Gs,b=B}, St0) ->
     {Igs,St1} = explist(Gs, false, St0),
     {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
     {Ib0,St3} = do_block(B, St2),
-    [?BLOCK(Is,Loc,Sz)] = Ib0,
-    Ib1 = [?BLOCK(Ias ++ [set_var(V)|Is],Loc,Sz)],
+    [?BLOCK(Lsz, Esz, Is)] = Ib0,
+    Ib1 = [?BLOCK(Lsz, Esz, Ias ++ [set_var(V)|Is])],
     {Igs ++ [?POP_VALS(length(Gs)-1)] ++ [?GFOR(Vs,Ib1)],St3}.
 
-%% local_assign_stat(Local, State) -> {Ilocal,State}.
+%% local_assign_stmt(Local, State) -> {Ilocal,State}.
 
-local_assign_stat(#local_assign{vs=Vs,es=Es}, St) ->
+local_assign_stmt(#local_assign_stmt{vs=Vs,es=Es}, St) ->
     assign_local(Vs, Es, St).
 
 assign_local([V|Vs], [], St0) ->
@@ -232,7 +235,7 @@ assign_local([V|Vs], [], St0) ->
 assign_local(Vs, Es, St) ->
     assign_local_loop(Vs, Es, St).
 
-local_fdef_stat(#local_fdef{v=V,f=F}, St0) ->
+local_fdef_stmt(#local_fdef_stmt{v=V,f=F}, St0) ->
     {If,St1} = functiondef(F, St0),
     {If ++ [set_var(V)],St1}.
 
@@ -301,7 +304,7 @@ exp(#tc{fs=Fs}, _, St0) ->
     {Its ++ [{build_tab,length(Fs)}],St1};
 exp(#lvar{n= <<"...">>}=V, S, St) ->		%Can be either local or frame
     {first_value(S, [get_var(V)]),St};
-exp(#fvar{n= <<"...">>}=V, S, St) ->
+exp(#evar{n= <<"...">>}=V, S, St) ->
     {first_value(S, [get_var(V)]),St};
 exp(E, S, St) ->
     prefixexp(E, S, St).
@@ -331,30 +334,39 @@ prefixexp_element(#key{k=#lit{v=K}}, _, St) ->
 prefixexp_element(#key{k=E}, _, St0) ->
     {Ie,St1} = exp(E, true, St0),
     {[?PUSH] ++ Ie ++ [?GET_KEY],St1};		%Table is in Acc
+prefixexp_element(#fcall{as=[]}, S, St) ->
+    Ifs = [?CALL(0)],
+    {first_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{as=As}, S, St0) ->
     {Ias,St1} = explist(As, false, St0),
     Ifs = [?PUSH] ++ Ias ++ [?CALL(length(As))],
     {first_value(S, Ifs),St1};			%Function call returns list
+prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
+    %% Special case this to leave table in the acc.
+    Ims = [?PUSH,				%Push table onto stack
+	   ?GET_LIT_KEY(K),			%Get function into acc
+	   ?SWAP] ++				%Swap func/table in stack/acc
+	[?CALL(1)],
+    {first_value(S, Ims),St};			%Method call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
     {Ias,St1} = explist(As, false, St0),
     Ims = [?PUSH,				%Push table onto stack
 	   ?GET_LIT_KEY(K),			%Get function into acc
-	   ?SWAP,				%Swap func onto stack
+	   ?SWAP,				%Swap func/table in stack/acc
 	   ?PUSH] ++				%Push table as first arg
 	Ias ++ [?CALL(length(As)+1)],
     {first_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
 
-functiondef(#fdef{ps=Ps0,ss=Ss,local=Loc,used=U,locf=Locf}, St0) ->
-    Fr = frame_type(U, Locf),			%A local stack frame?
+functiondef(#fdef{ps=Ps0,ss=Ss,lf=Lf,ef=Ef}, St0) ->
     Ps1 = func_pars(Ps0),
-    {Ib,St1} = stats(Ss, St0),
-    {[?FDEF(Ps1, Ib, Fr, length(Loc))],St1}.
+    {Iss,St1} = stmts(Ss, St0),
+    {[?FDEF(length(Lf),Ps1,length(Ef),Ps1, Iss)],St1}.
 
-func_pars([#fvar{n= <<"...">>,i=I}]) -> I;	%Tail is index for varargs
+func_pars([#evar{n= <<"...">>,i=I}]) -> I;	%Tail is index for varargs
 func_pars([#lvar{n= <<"...">>,i=I}]) -> I;
-func_pars([#fvar{i=I}|Ps]) -> [I|func_pars(Ps)];
+func_pars([#evar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
 
@@ -371,9 +383,3 @@ tableconstructor(Fs0, St0) ->
 	  end,
     {Its,_,St1} = lists:foldl(Fun, {[],1.0,St0}, Fs0),
     {Its,St1}.
-
-%% frame_type(Used, LocalFunc) -> local | temporary | used.
-
-frame_type([], _) -> local;			%Purely local
-frame_type(_, false) -> transient;		%On the frame stack
-frame_type(_, true) -> permanent.		%Used by sub-functions

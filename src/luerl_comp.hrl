@@ -27,46 +27,63 @@
 %% Author  : Robert Virding
 %% Purpose : Internal LUA 5.2 compiler definitions.
 
-%% The chunk compile info.
+%% The code compile info.
+-record(code, {code=none,			%Code
+	       cst=none				%Shared compiler state
+	      }).
 
--record(chunk, {code=none,			%Code
-		fs=[],				%Variable frames
-		locv=false,			%Local variables
-		locf				%Local frame
-	       }).
+%% Compiler state passed between passes.
+-record(cst, {}).				%Nothing yet
+
+%% Variable data.
+-record(vars, {local=[],free=[],		%Local, free variables
+	       used=[],				%Used in sub blocks
+	       fused=[]				%Used in sub-functions
+	      }).
 
 %% Define internal data macros.
 
 %% Statements.
--record(assign, {l,vs,es}).
+-record(assign_stmt, {l,vs,es}).
 
--record(return, {l,es}).
+-record(call_stmt, {l,call}).
 
--record(break, {l}).
+-record(return_stmt, {l,es}).
 
--record(block, {l,ss=[],
-		local=[],free=[],		%Local, free variables
-		used=[],			%Variables in sub blocks
-		locf=false}).			%Local function
+-record(break_stmt, {l}).
 
--record(while, {l,e,b=[]}).
+-record(block_stmt, {l,ss=[],			%Block statement
+		     vars=none,			%Variable info
+		     lf=[],			%Local frame
+		     ef=[],			%Env frame
+		     local=none,		%Local variables
+		     locf=false}).		%Local functions
 
--record(repeat, {l,b=[],e}).
+-record(while_stmt, {l,e,b=[]}).
 
--record(nfor, {l,v,init,limit,step,b=[]}).
+-record(repeat_stmt, {l,b=[],e}).
 
--record(gfor, {l,vs,gens,b=[]}).
+-record(nfor_stmt, {l,v,init,limit,step,b=[]}).
 
--record('if', {l,tests=[],else}).
+-record(gfor_stmt, {l,vs,gens,b=[]}).
 
--record(local_assign, {l,vs,es}).
+-record(if_stmt, {l,tests=[],else}).
 
--record(local_fdef, {l,v,f}).
+-record(local_assign_stmt, {l,vs,es}).
+
+-record(local_fdef_stmt, {l,v,f}).
+
+-record(block, {l,ss=[],			%Sub-blocks
+		vars=none,			%Variable info
+		lf=[],				%Local frame
+		ef=[]}).
 
 %% Expressions.
 -record(fdef, {l,ps=[],ss=[],
-	       local=[],free=[],		%Local, free variables
-	       used=[],				%Variables in sub blocks
+	       vars=none,			%Variable info
+	       lf=[],
+	       ef=[],
+	       local=none,			%Local variables
 	       locf=false}).			%Local function
 
 -record(lit, {l,v}).
@@ -92,19 +109,28 @@
 -record(kfield, {l,k,v}).
 
 %% Variable types.
--record(lvar, {n,i}).				%Local name, index
--record(fvar, {n,d,i}).				%Frame name, depth, index
+-record(lvar, {n,d,i}).				%Local name, depth, index
+-record(evar, {n,d,i}).				%Environment name, depth, index
 -record(gvar, {n}).				%Global name
 
 %% Instructions.
 
 %% Expression instructions.
 -define(LOAD_LIT(L), {load_lit,L}).			%Load a literal
--define(LOAD_LVAR(I), {load_lvar,I}).		%Load variable into acc
--define(LOAD_FVAR(D, I), {load_fvar,D,I}).
+%%-define(LOAD_LVAR(I), {load_lvar,I}).		%Load variable into acc
+%%-define(LOAD_FVAR(D, I), {load_fvar,D,I}).
+
+-define(LOAD_LVAR(D, I), {load_lvar,D,I}).
+-define(LOAD_EVAR(D, I), {load_evar,D,I}).
+
 -define(LOAD_GVAR(K), {load_gvar,K}).
--define(STORE_LVAR(I), {store_lvar,I}).		%Store variable from acc
+%%-define(STORE_LVAR(I), {store_lvar,I}).		%Store variable from acc
+%%
 -define(STORE_FVAR(D, I), {store_fvar,D,I}).
+
+-define(STORE_LVAR(D, I), {store_lvar,D,I}).
+-define(STORE_EVAR(D, I), {store_evar,D,I}).
+
 -define(STORE_GVAR(K), {store_gvar,K}).
 -define(SINGLE, single).
 -define(GET_KEY, get_key).			%Acc = Stk[Acc]
@@ -115,9 +141,14 @@
 -define(CALL(Ac), {call,Ac}).
 -define(TAIL_CALL(Ac), {tail_call,Ac}).
 -define(OP(Op,Ac), {op,Op,Ac}).
--define(FDEF(Ps, Is, L, Sz), {fdef,Ps,Is,L,Sz}).
+%% -define(FDEF(Ps, Is, L, Sz), {fdef,Ps,Is,L,Sz}).
+
+-define(FDEF(Lsz, Lps, Esz, Eps, Is), {fdef,Lsz,Lps,Esz,Eps,Is}).
+
 %% Control instructions.
--define(BLOCK(Is, L, Sz), {block,Is,L,Sz}).
+
+-define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
+
 -define(WHILE(E, B), {while,E,B}).
 -define(REPEAT(B), {repeat,B}).
 -define(IF_TRUE(T), {if_true,T}).
@@ -136,8 +167,12 @@
 -define(POP_VALS(Vc), {pop_vals,Vc}).
 %% Optimisations and combined instructions.
 -define(PUSH_LIT(L), {push_lit,L}).		%?LIT(L), ?PUSH
--define(PUSH_LVAR(I), {push_lvar,I}).		%?LVAR(I), ?PUSH
--define(PUSH_FVAR(D, I), {push_fvar,D,I}).	%?FVAR(D,I), ?PUSH
+%%-define(PUSH_LVAR(I), {push_lvar,I}).		%?LVAR(I), ?PUSH
+%%-define(PUSH_FVAR(D, I), {push_fvar,D,I}).	%?FVAR(D,I), ?PUSH
+
+-define(PUSH_LVAR(D,I), {push_lvar,D,I}).	%?LVAR(D,I), ?PUSH
+-define(PUSH_EVAR(D, I), {push_evar,D,I}).	%?EVAR(D,I), ?PUSH
+
 -define(PUSH_GVAR(K), {push_gvar,K}).		%?GVAR(K), ?PUSH
 
 %% -record(push_vals,{ac}).

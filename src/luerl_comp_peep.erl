@@ -38,16 +38,10 @@
 
 %% chunk(St0, Opts) -> {ok,St0}.
 
-chunk(#chunk{code=Is0}=St0, Opts) ->
-    Is1 = instrs(Is0, St0),
-    debug_print(Opts, "cp: ~p\n", [Is1]),
-    {ok,St0#chunk{code=Is1}}.
-
-debug_print(Opts, Format, Args) ->
-    case lists:member(debug_print, Opts) of
-	true -> io:fwrite(Format, Args);
-	false -> ok
-    end.
+chunk(#code{code=Is0}=Code, Opts) ->
+    Is1 = instrs(Is0, nil),			%No local state
+    luerl_comp:debug_print(Opts, "cp: ~p\n", [Is1]),
+    {ok,Code#code{code=Is1}}.
 
 %% Combining instructions.
 instrs([?PUSH,?LOAD_LIT(L),?GET_KEY|Is], St) ->
@@ -55,25 +49,25 @@ instrs([?PUSH,?LOAD_LIT(L),?GET_KEY|Is], St) ->
 instrs([?PUSH,?LOAD_LIT(L),?SET_KEY|Is], St) ->
     instrs([?SET_LIT_KEY(L)|Is], St);
 instrs([?LOAD_LIT(L),?PUSH|Is], St) -> instrs([?PUSH_LIT(L)|Is], St);
-instrs([?LOAD_LVAR(I),?PUSH|Is], St) -> instrs([?PUSH_LVAR(I)|Is], St);
-instrs([?LOAD_FVAR(D,I),?PUSH|Is], St) -> instrs([?PUSH_FVAR(D,I)|Is], St);
+instrs([?LOAD_LVAR(D,I),?PUSH|Is], St) -> instrs([?PUSH_LVAR(D,I)|Is], St);
+instrs([?LOAD_EVAR(D,I),?PUSH|Is], St) -> instrs([?PUSH_EVAR(D,I)|Is], St);
 instrs([?LOAD_GVAR(K),?PUSH|Is], St) -> instrs([?PUSH_GVAR(K)|Is], St);
 %% Are these safe? Value should be left in Acc.
-instrs([?STORE_LVAR(I),?LOAD_LVAR(I)|Is], St) ->
-    instrs([?STORE_LVAR(I)|Is], St);
-instrs([?STORE_FVAR(D,I),?LOAD_FVAR(D,I)|Is], St) ->
+instrs([?STORE_LVAR(D,I),?LOAD_LVAR(D,I)|Is], St) ->
+    instrs([?STORE_LVAR(D,I)|Is], St);
+instrs([?STORE_EVAR(D,I),?LOAD_EVAR(D,I)|Is], St) ->
     instrs([?STORE_FVAR(D,I)|Is], St);
 instrs([?STORE_GVAR(K),?LOAD_GVAR(K)|Is], St) ->
     instrs([?STORE_GVAR(K)|Is], St);
 %% Doing sub instructions.
-instrs([?FDEF(Ps,Fis0,L,Sz)|Is], St) ->
+instrs([?FDEF(Lsz,Lps,Esz,Eps,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
-    [?FDEF(Ps,Fis1,L,Sz)|instrs(Is, St)];
+    [?FDEF(Lsz,Lps,Esz,Eps,Fis1)|instrs(Is, St)];
 instrs([?BLOCK(Bis,local,0)|Is], St) ->		%No local variables in block
     instrs(Bis ++ Is, St);			%Fold into surrounding block
-instrs([?BLOCK(Bis0,L,Sz)|Is], St) ->
+instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->
     Bis1 = instrs(Bis0, St),
-    [?BLOCK(Bis1,L,Sz)|instrs(Is, St)];
+    [?BLOCK(Lsz,Esz,Bis1)|instrs(Is, St)];
 instrs([?REPEAT(Ris0)|Is], St) ->
     Ris1 = instrs(Ris0, St),
     [?REPEAT(Ris1)|instrs(Is, St)];
