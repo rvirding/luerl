@@ -387,7 +387,7 @@ dofile(As, St) ->
 	[File|_] ->
 	    {ok,Bin} = file:read_file(File),
 	    case do_passes(read_passes(), binary_to_list(Bin)) of
-		{ok,Code} -> luerl_emul:chunk(Code, [], St);
+		{ok,Code} -> luerl_eval:chunk(Code, [], St);
 		_ -> badarg_error(dofile, As)
 	    end;
 	_ -> badarg_error(dofile, As)
