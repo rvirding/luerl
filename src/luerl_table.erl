@@ -36,8 +36,13 @@
 
 -include("luerl.hrl").
 
--export([install/1,length/2]).
+%% The basic entry point to set up the function table.
+-export([install/1]).
 
+%% Export some functions which can be called from elsewhere.
+-export([length/2,unpack/2]).
+
+%% Export some test functions.
 -export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
 
 -import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this

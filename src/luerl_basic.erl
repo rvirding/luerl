@@ -64,7 +64,8 @@ table() ->
      {<<"setmetatable">>,{function,fun setmetatable/2}},
      {<<"tonumber">>,{function,fun tonumber/2}},
      {<<"tostring">>,{function,fun tostring/2}},
-     {<<"type">>,{function,fun type/2}}
+     {<<"type">>,{function,fun type/2}},
+     {<<"unpack">>,{function,fun unpack/2}}	%For Lua 5.1 compatibility
     ].
 
 assert(As, St) ->
@@ -407,3 +408,7 @@ pcall([F|As], St0) ->
 	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
 	    {[false,Msg],St0}
     end.
+
+%% Lua 5.1 compatibility functions.
+
+unpack(As, St) -> luerl_table:unpack(As, St).

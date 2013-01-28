@@ -203,6 +203,7 @@ Currently implemented functions in the libraries
 - tonumber
 - tostring
 - type
+- unpack
 - io\.flush
 - io\.write
 - math\.abs
