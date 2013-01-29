@@ -32,7 +32,6 @@
 -module(luerl_comp_locf).
 
 -include("luerl.hrl").
-
 -include("luerl_comp.hrl").
 
 -export([chunk/2]).
@@ -45,41 +44,39 @@ chunk(#code{code=C0}=Code, Opts) ->
     luerl_comp:debug_print(Opts, "cf: ~p\n", [C1]),
     {ok,Code#code{code=C1}}.
 
-%% stat(Stats, State) -> {Stats,LocalFunc,State}.
+%% stmt(Stmts, State) -> {Stmts,LocalFunc,State}.
 
-stats([S0|Ss0], St0) ->
-    {S1,Slocf,St1} = stat(S0, St0),
-    {Ss1,Sslocf,St2} = stats(Ss0, St1),
+stmts([S0|Ss0], St0) ->
+    {S1,Slocf,St1} = stmt(S0, St0),
+    {Ss1,Sslocf,St2} = stmts(Ss0, St1),
     Locf = Slocf or Sslocf,
     {[S1|Ss1],Locf,St2};
-stats([], St) -> {[],false,St}.
+stmts([], St) -> {[],false,St}.
 
-%% stat(Stat, State) -> {Stat,LocalFunc,State}.
+%% stmt(Stmt, State) -> {Stmt,LocalFunc,State}.
 
-stat(#assign{}=A, St) -> assign_stat(A, St);
-stat(#return{}=R, St) -> return_stat(R, St);
-stat(#break{}=B, St) -> {B,false,St};
-stat(#block{}=B, St) -> block_stat(B, St);
-stat(#while{}=W, St) -> while_stat(W, St);
-stat(#repeat{}=R, St) -> repeat_stat(R, St);
-stat(#'if'{}=If, St) -> if_stat(If, St);
-stat(#nfor{}=For, St) -> numfor_stat(For, St);
-stat(#gfor{}=For, St) -> genfor_stat(For, St);
-stat(#local_assign{}=L, St) ->
-    local_assign_stat(L, St);
-stat(#local_fdef{}=L, St) ->
-    local_fdef_stat(L, St);
-stat(Exp0, St0) ->
-    {Exp1,Locf,St1} = exp(Exp0, St0),
-    {Exp1,Locf,St1}.
+stmt(#assign_stmt{}=A, St) -> assign_stmt(A, St);
+stmt(#call_stmt{}=C, St) -> call_stmt(C, St);
+stmt(#return_stmt{}=R, St) -> return_stmt(R, St);
+stmt(#break_stmt{}=B, St) -> {B,false,St};
+stmt(#block_stmt{}=B, St) -> block_stmt(B, St);
+stmt(#while_stmt{}=W, St) -> while_stmt(W, St);
+stmt(#repeat_stmt{}=R, St) -> repeat_stmt(R, St);
+stmt(#if_stmt{}=If, St) -> if_stmt(If, St);
+stmt(#nfor_stmt{}=For, St) -> numfor_stmt(For, St);
+stmt(#gfor_stmt{}=For, St) -> genfor_stmt(For, St);
+stmt(#local_assign_stmt{}=L, St) ->
+    local_assign_stmt(L, St);
+stmt(#local_fdef_stmt{}=L, St) ->
+    local_fdef_stmt(L, St).
 
-%% assign_stat(Assign, State) -> {Assign,LocalFunc,State}.
+%% assign_stmt(Assign, State) -> {Assign,LocalFunc,State}.
 
-assign_stat(#assign{vs=Vs0,es=Es0}=A, St0) ->
+assign_stmt(#assign_stmt{vs=Vs0,es=Es0}=A, St0) ->
     {Vs1,Vlocf,St1} = assign_loop(Vs0, St0),
     {Es1,Elocf,St2} = explist(Es0, St1),
     Locf = Vlocf or Elocf,
-    {A#assign{vs=Vs1,es=Es1},Locf,St2}.
+    {A#assign_stmt{vs=Vs1,es=Es1},Locf,St2}.
 
 assign_loop([V0|Vs0], St0) ->
     {V1,Vlocf,St1} = var(V0, St0),
@@ -105,56 +102,57 @@ var_last(#key{k=Exp0}=K, St0) ->
     {Exp1,Elocf,St1} = exp(Exp0, St0),
     {K#key{k=Exp1},Elocf,St1}.
 
-%% return_stat(Return, State) -> {Return,LocalFunc,State}.
+%% call_stmt(Call, State) -> {Call,LocalFunc,State}.
 
-return_stat(#return{es=Es0}=R, St0) ->
+call_stmt(#call_stmt{call=Exp0}=C, St0) ->
+    {Exp1,Locf,St1} = exp(Exp0, St0),
+    {C#call_stmt{call=Exp1},Locf,St1}.
+
+%% return_stmt(Return, State) -> {Return,LocalFunc,State}.
+
+return_stmt(#return_stmt{es=Es0}=R, St0) ->
     {Es1,Locf,St1} = explist(Es0, St0),
-    {R#return{es=Es1},Locf,St1}.
+    {R#return_stmt{es=Es1},Locf,St1}.
 
-%% block_stat(Block, State) -> {Block,LocalFunc,State}.
+%% block_stmt(Block, State) -> {Block,LocalFunc,State}.
 
-block_stat(B0, St0) ->
-    {B1,Locf,St1} = do_block(B0, St0),
-    {B1,Locf,St1}.
+block_stmt(#block_stmt{ss=Ss0}=B, St0) ->
+    {Ss1,Sslocf,St1} = stmts(Ss0, St0),
+    {B#block_stmt{ss=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% do_block(Block, State) -> {Block,LocalFunc,State}.
 
 do_block(#block{ss=Ss0}=B, St0) ->
-    {Ss1,Sslocf,St1} = stats(Ss0, St0),
+    {Ss1,Sslocf,St1} = stmts(Ss0, St0),
     {B#block{ss=Ss1,locf=Sslocf},Sslocf,St1}.
 
-%% while_stat(While, State) -> {While,LocalFunc,State}.
+%% while_stmt(While, State) -> {While,LocalFunc,State}.
 %%  The test expression is done in the context of the surrounding
 %%  block.
 
-while_stat(#while{e=E0,b=B0}=W, St0) ->
+while_stmt(#while_stmt{e=E0,b=B0}=W, St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
     {B1,Blocf,St2} = do_block(B0, St1),
-    {W#while{e=E1,b=B1},Elocf or Blocf,St2}.
+    {W#while_stmt{e=E1,b=B1},Elocf or Blocf,St2}.
 
-%% repeat_stat(Repeat, State) -> {Repeat,LocalFunc,State}.
+%% repeat_stmt(Repeat, State) -> {Repeat,LocalFunc,State}.
 %%  The test expression is done in the context of the repeat block.
 
-repeat_stat(#repeat{b=B0,e=E0}=R, St0) ->
-    {B1,Blocf,St1} = repeat_block(B0, St0),
+repeat_stmt(#repeat_stmt{b=B0,e=E0}=R, St0) ->
+    {B1,Blocf,St1} = do_block(B0, St0),
     {E1,Elocf,St2} = exp(E0, St1),
     Locf = Blocf or Elocf,
-    {R#repeat{b=B1,e=E1},Locf,St2}.
+    {R#repeat_stmt{b=B1,e=E1},Locf,St2}.
 
-repeat_block(#block{ss=B0}=B, St0) ->
-    {B1,Sslocf,St1} = stats(B0, St0),
-    %% Now do the test in the context of the block.
-    {B#block{ss=B1,locf=Sslocf},Sslocf,St1}.
-
-%% if_stat(If, State) -> {If,LocalFunc,State}.
+%% if_stmt(If, State) -> {If,LocalFunc,State}.
 %%  The block info includes anything from the test expressions even
 %%  though we keep them separate.
 
-if_stat(#'if'{tests=Ts0,else=E0}=If, St0) ->
+if_stmt(#if_stmt{tests=Ts0,else=E0}=If, St0) ->
     {Ts1,Tlocf,St1} = if_tests(Ts0, St0),
     {E1,Elocf,St2} = do_block(E0, St1),
     Locf = Tlocf or Elocf,
-    {If#'if'{tests=Ts1,else=E1},Locf,St2}.
+    {If#if_stmt{tests=Ts1,else=E1},Locf,St2}.
 
 if_tests([{E0,B0}|Ts0], St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
@@ -164,33 +162,33 @@ if_tests([{E0,B0}|Ts0], St0) ->
     {[{E1,B1}|Ts1],Locf,St3};
 if_tests([], St) -> {[],false,St}.
 
-%% numfor_stat(For, State) -> {For,LocalFunc,State}.
+%% numfor_stmt(For, State) -> {For,LocalFunc,State}.
 
-numfor_stat(#nfor{init=I0,limit=L0,step=S0,b=B0}=For, St0) ->
+numfor_stmt(#nfor_stmt{init=I0,limit=L0,step=S0,b=B0}=For, St0) ->
     {[I1,L1,S1],Eslocf,St1} = explist([I0,L0,S0], St0),
     {B1,Blocf,St2} = do_block(B0, St1),
     Locf = Eslocf or Blocf,
-    {For#nfor{init=I1,limit=L1,step=S1,b=B1},Locf,St2}.
+    {For#nfor_stmt{init=I1,limit=L1,step=S1,b=B1},Locf,St2}.
 
-%% genfor_stat(For, State) -> {For,LocalFunc,State}.
+%% genfor_stmt(For, State) -> {For,LocalFunc,State}.
 
-genfor_stat(#gfor{gens=Gs0,b=B0}=For, St0) ->
+genfor_stmt(#gfor_stmt{gens=Gs0,b=B0}=For, St0) ->
     {Gs1,Glocf,St1} = explist(Gs0, St0),
     {B1,Blocf,St2} = do_block(B0, St1),
     Locf = Glocf or Blocf,
-    {For#gfor{gens=Gs1,b=B1},Locf,St2}.
+    {For#gfor_stmt{gens=Gs1,b=B1},Locf,St2}.
 
-%% local_assign_stat(Local, State) -> {Local,LocalFunc,State}.
+%% local_assign_stmt(Local, State) -> {Local,LocalFunc,State}.
 
-local_assign_stat(#local_assign{es=Es0}=L, St0) ->
+local_assign_stmt(#local_assign_stmt{es=Es0}=L, St0) ->
     {Es1,Eslocf,St1} = explist(Es0, St0),
-    {L#local_assign{es=Es1},Eslocf,St1}.
+    {L#local_assign_stmt{es=Es1},Eslocf,St1}.
 
-%% local_fdef_stat(Local, State) -> {Local,LocalFunc,State}.
+%% local_fdef_stmt(Local, State) -> {Local,LocalFunc,State}.
 
-local_fdef_stat(#local_fdef{f=F0}=L, St0) ->
+local_fdef_stmt(#local_fdef_stmt{f=F0}=L, St0) ->
     {F1,_,St1} = functiondef(F0, St0),		%Don't care what's in func
-    {L#local_fdef{f=F1},true,St1}.
+    {L#local_fdef_stmt{f=F1},true,St1}.
 
 %% explist(Exprs, State) -> {Exprs,LocalFunc,State}.
 %% exp(Expr, State) -> {Expr,LocalFunc,State}.
@@ -247,7 +245,7 @@ prefixexp_element(#mcall{as=As0}=M, St0) ->
 %%  the function.
 
 functiondef(#fdef{ss=Ss0}=F, St0) ->
-    {Ss1,Sslocf,St1} = stats(Ss0, St0),
+    {Ss1,Sslocf,St1} = stmts(Ss0, St0),
     {F#fdef{ss=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% tableconstructor(Fields, State) -> {Fields,LocalFunc,State}.
