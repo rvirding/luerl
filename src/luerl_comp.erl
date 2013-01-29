@@ -41,40 +41,73 @@
 
 -export([debug_print/3]).
 
+-import(lists, [member/2,keysearch/3,mapfoldl/3]).
+
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
--record(comp, {lfile="",			%Lua file
-	       code=none,			%Code/chunk
-	       opts=[],				%Options
-	       errors=[],			%Errors
-	       warnings=[]			%Warnings
+-record(comp, {base="",				%Base name
+	       odir=".",			%Output directory
+	       lfile="",			%Lua file
+	       bfile="",			%Beam file
+	       cfile="",			%Core file
+	       opts=[],				%User options
+	       mod=[],				%Module name
+	       ret=file,			%What is returned [Val] | []
+	       code=none,			%Code after last pass.
+	       errors=[],
+	       warnings=[]
 	      }).
 
 file(Name) -> file(Name, [verbose,report]).
 
 file(Name, Opts) ->
-    Cst = #comp{lfile=Name,opts=Opts},
-    compile(file_passes(), Cst).
+    St0 = #comp{opts=Opts},
+    St1 = filenames(Name, St0),
+    compile(file_passes(), St1).
+
+%% filenames(File, State) -> State.
+%%  The default output dir is the current directory unless an
+%%  explicit one has been given in the options.
+
+filenames(File, St) ->
+    %% Test for explicit outdir.
+    Odir = case keysearch(outdir, 1, St#comp.opts) of
+	       {value,{outdir,D}} -> D;
+	       false -> "."
+	   end,
+    Dir = filename:dirname(File),
+    Base = filename:basename(File, ".lua"),
+    Lfile = filename:join(Dir, Base ++ ".lua"),
+    Bfile = Base ++ ".beam",
+    Cfile = Base ++ ".core",
+    St#comp{base=Base,
+	    lfile=Lfile,
+	    odir=Odir,
+	    bfile=filename:join(Odir, Bfile),
+	    cfile=filename:join(Odir, Cfile)}.
 
 string(Str) -> string(Str, [verbose,report]).
 
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
-    Cst = #comp{code=Str,opts=Opts},
-    compile(list_passes(), Cst).
+    St0 = #comp{opts=Opts},
+    St1 = filenames("-no-file-", St0),
+    compile(list_passes(), St1).
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
-    Cst = #comp{code=Forms,opts=Opts},
-    compile(forms_passes(), Cst).
+    St0 = #comp{opts=Opts},
+    St1 = filenames("-no-file-", St0),
+    St2 = St1#comp{code=Forms},
+    compile(forms_passes(), St2).
 
-compile(Ps, Cst0) ->
-    case do_passes(Ps, Cst0) of
-	{ok,Cst1} -> do_ok_return(Cst1);
-	{error, Cst1} -> do_error_return(Cst1)
+compile(Ps, St0) ->
+    case do_passes(Ps, St0) of
+	{ok,St1} -> do_ok_return(St1);
+	{error, St1} -> do_error_return(St1)
     end.
 
 %% file_passes() -> [Pass].
@@ -98,31 +131,31 @@ list_passes() ->				%Scanning string
 forms_passes() ->				%Doing the forms
     [{do,fun do_pass_1/1},
      {do,fun do_comp_vars/1},
-     {when_flag,to_vars,{done,fun(Cst) -> {ok,Cst} end}},
+     {when_flag,to_vars,{done,fun(St) -> {ok,St} end}},
      %% {do,fun do_comp_locf/1},
      {do,fun do_comp_env/1},
-     {when_flag,to_env,{done,fun(Cst) -> {ok,Cst} end}},
+     {when_flag,to_env,{done,fun(St) -> {ok,St} end}},
      {do,fun do_code_gen/1},
      {unless_flag,no_iopt,{do,fun do_peep_op/1}}].
 
-do_passes([{do,Fun}|Ps], Cst0) ->
-    case Fun(Cst0) of
-	{ok,Cst1} -> do_passes(Ps, Cst1); 
-	{error,Cst1} -> {error,Cst1}
+do_passes([{do,Fun}|Ps], St0) ->
+    case Fun(St0) of
+	{ok,St1} -> do_passes(Ps, St1); 
+	{error,St1} -> {error,St1}
     end;
-do_passes([{when_flag,Flag,Cmd}|Ps], Cst) ->
-    case lists:member(Flag, Cst#comp.opts) of
-	true -> do_passes([Cmd|Ps], Cst);
-	false -> do_passes(Ps, Cst)
+do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
+    case member(Flag, St#comp.opts) of
+	true -> do_passes([Cmd|Ps], St);
+	false -> do_passes(Ps, St)
     end;
-do_passes([{unless_flag,Flag,Cmd}|Ps], Cst) ->
-    case lists:member(Flag, Cst#comp.opts) of
-	true -> do_passes(Ps, Cst);
-	false -> do_passes([Cmd|Ps], Cst)
+do_passes([{unless_flag,Flag,Cmd}|Ps], St) ->
+    case member(Flag, St#comp.opts) of
+	true -> do_passes(Ps, St);
+	false -> do_passes([Cmd|Ps], St)
     end;
-do_passes([{done,Fun}|_], Cst) ->
-    Fun(Cst);
-do_passes([], Cst) -> {ok,Cst}.
+do_passes([{done,Fun}|_], St) ->
+    Fun(St);
+do_passes([], St) -> {ok,St}.
 
 %% do_read_file(State) -> {ok,State} | {error,State}.
 %% do_scan(State) -> {ok,State} | {error,State}.
@@ -131,61 +164,61 @@ do_passes([], Cst) -> {ok,Cst}.
 %% do_return(State) -> {ok,State}.
 %%  The actual compiler passes.
 
-do_read_file(#comp{lfile=Name}=Cst) ->
+do_read_file(#comp{lfile=Name}=St) ->
     case file:read_file(Name) of
-	{ok,Bin} -> {ok,Cst#comp{code=binary_to_list(Bin)}}; 
-	{error,E} -> {error,Cst#comp{errors=[E]}}
+	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}}; 
+	{error,E} -> {error,St#comp{errors=[E]}}
     end.
 
-do_scan(#comp{code=Str}=Cst) ->
+do_scan(#comp{code=Str}=St) ->
     case luerl_scan:string(Str) of
-	{ok,Ts,_} -> {ok,Cst#comp{code=Ts}}; 
-	{error,E,_} -> {error,Cst#comp{errors=[E]}}
+	{ok,Ts,_} -> {ok,St#comp{code=Ts}}; 
+	{error,E,_} -> {error,St#comp{errors=[E]}}
     end.
 
-do_parse(#comp{code=Ts}=Cst) ->
+do_parse(#comp{code=Ts}=St) ->
     case luerl_parse:chunk(Ts) of
-	{ok,Chunk} -> {ok,Cst#comp{code=Chunk}};
-	{error,E} -> {error,Cst#comp{errors=[E]}}
+	{ok,Chunk} -> {ok,St#comp{code=Chunk}};
+	{error,E} -> {error,St#comp{errors=[E]}}
     end.
 
-do_pass_1(#comp{code=C0,opts=Opts}=Cst) ->
+do_pass_1(#comp{code=C0,opts=Opts}=St) ->
     {ok,C1} = chunk(C0, Opts),
-    {ok,Cst#comp{code=C1}}.
+    {ok,St#comp{code=C1}}.
 
-do_comp_vars(Cst) ->
-    case luerl_comp_vars:chunk(Cst#comp.code, Cst#comp.opts) of
-	{ok,C1} -> {ok,Cst#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,Cst#comp{errors=Es}}
+do_comp_vars(St) ->
+    case luerl_comp_vars:chunk(St#comp.code, St#comp.opts) of
+	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_comp_locf(Cst) ->
-    case luerl_comp_locf:chunk(Cst#comp.code, Cst#comp.opts) of
-	{ok,C1} -> {ok,Cst#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,Cst#comp{errors=Es}}
+do_comp_locf(St) ->
+    case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
+	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_comp_env(Cst) ->
-    case luerl_comp_env:chunk(Cst#comp.code, Cst#comp.opts) of
-	{ok,C1} -> {ok,Cst#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,Cst#comp{errors=Es}}
+do_comp_env(St) ->
+    case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
+	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_code_gen(Cst) ->
-    case luerl_comp_cg:chunk(Cst#comp.code, Cst#comp.opts) of
-	{ok,C1} -> {ok,Cst#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,Cst#comp{errors=Es}}
+do_code_gen(St) ->
+    case luerl_comp_cg:chunk(St#comp.code, St#comp.opts) of
+	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_peep_op(Cst) ->
-    case luerl_comp_peep:chunk(Cst#comp.code, Cst#comp.opts) of
-	{ok,C1} -> {ok,Cst#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,Cst#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,Cst#comp{errors=Es}}
+do_peep_op(St) ->
+    case luerl_comp_peep:chunk(St#comp.code, St#comp.opts) of
+	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
 do_ok_return(#comp{code=C}) -> {ok,C}.
@@ -196,13 +229,13 @@ do_error_return(#comp{errors=Es,warnings=Ws}) ->
 %% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
 
 chunk(Code0, Opts) ->
-    St = #cst{},				%Initialise common state
+    Cst = #cst{},				%Initialise common state
     {Code1,nil} = exp(Code0, nil),		%This is local!
     debug_print(Opts, "c: ~p\n", [Code1]),
-    {ok,#code{code=Code1,cst=St}}.
+    {ok,#code{code=Code1,cst=Cst}}.
 
 debug_print(Opts, Format, Args) ->
-    case lists:member(debug_print, Opts) of
+    case member(debug_print, Opts) of
 	true -> io:fwrite(Format, Args);
 	false -> ok
     end.
@@ -333,7 +366,7 @@ if_tests(L, Ts, St) ->
 		   {Cb,S2} = block(L, B, S1),
 		   {{Ct,Cb},S2}
 	   end,
-    lists:mapfoldl(Test, St, Ts).
+    mapfoldl(Test, St, Ts).
 
 %% numfor_stmt(Line, Var, Init, Limit, Step, Stmts, State) -> {NumFor,State}.
 
@@ -422,7 +455,7 @@ local_stmt(Line, {functiondef,Lf,Name,Ps,B}, St0) ->
     {#local_fdef_stmt{l=Line,v=Var,f=F},St1};
 local_stmt(Line, {assign,_,Ns,Es}, St0) ->
     {Ces,St1} = explist(Es, St0),
-    {Cns,St2} = lists:mapfoldl(fun (V, St) -> var(V, St) end, St1, Ns),
+    {Cns,St2} = mapfoldl(fun (V, St) -> var(V, St) end, St1, Ns),
     {#local_assign_stmt{l=Line,vs=Cns,es=Ces},St2}.
 
 %% explist(Exprs, State) -> {Ins,State}.
@@ -504,7 +537,7 @@ make_local_pars(Ps, St) ->
     Add = fun ({'NAME',L,N}, S) -> {var_name(L, N),S};
 	      ({'...',L}, S) -> {var_name(L, '...'),S}
 	  end,
-    lists:mapfoldl(Add, St, Ps).
+    mapfoldl(Add, St, Ps).
 
 %% tableconstrutor(Fields, State) -> {Instrs,State}.
 %%  Build the instructions to construct a table. We could be smarter
@@ -526,7 +559,7 @@ tableconstructor(Fs, St0) ->
 		  {Cv,S2} = exp(Ve, S1),	%Value
 		  {#kfield{l=L,k=Ck,v=Cv},S2}
 	  end,
-    {Cfs,St1} = lists:mapfoldl(Fun, St0, Fs),
+    {Cfs,St1} = mapfoldl(Fun, St0, Fs),
     {Cfs,St1}.
 
 %% name_string(Name) -> String.
