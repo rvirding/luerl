@@ -239,8 +239,7 @@ Erlang code.
 chunk(Ts) ->
     case parse(Ts) of
         {error,_}=Error -> Error;
-        {ok,Body} -> {ok,{functiondef,1,[{'NAME',1,'_ENV'},{'...',1}],Body}}
-%%         {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[{'...',1}],Body}}
+        {ok,Body} -> {ok,{functiondef,1,[{'...',1}],Body}}
     end.
 
 cat(T) -> element(1, T).
