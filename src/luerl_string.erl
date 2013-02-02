@@ -254,8 +254,8 @@ gsub_repl(Cas, S, #tref{}=T, St0) ->
 	[Ca] -> Key = match_ca(Ca, S);
 	[Ca,Ca1|_] -> Key = match_ca(Ca1, S)
     end,
-    {Rs,St1} = luerl_emul:get_table_key(T, Key, St0),
-    {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
+    {R,St1} = luerl_emul:get_table_key(T, Key, St0),
+    {[gsub_repl_val(S, R, Ca)],St1};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     case Cas0 of				%Export both Ca and Args
 	[Ca] -> Args = [match_ca(Ca, S)];
