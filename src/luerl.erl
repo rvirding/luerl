@@ -131,12 +131,12 @@ call_function1(F, Las, St) ->
 %%  Go down a list of keys and return final value.
 
 function_list([G|Kl], St0) ->
-    First = luerl_emul:get_env_key(G, St0),	%Start at global env
+    {First,St1} = luerl_emul:get_global_key(G, St0),	%Start at global env
     Fun = fun (K, {T,Sta}) ->
 		  {Vs,Stb} = luerl_emul:get_table_key(T, K, Sta),
 		  {luerl_lib:first_value(Vs),Stb}
 	  end,
-    lists:foldl(Fun, {First,St0}, Kl);
+    lists:foldl(Fun, {First,St1}, Kl);
 function_list(_, _) -> error(badarg).
 
 %% call_method(FuncPath, Args, State) -> {Result,State}.

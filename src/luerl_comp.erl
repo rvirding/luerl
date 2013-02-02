@@ -92,17 +92,16 @@ string(Str) -> string(Str, [verbose,report]).
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
-    St0 = #comp{opts=Opts},
+    St0 = #comp{opts=Opts,code=Str},
     St1 = filenames("-no-file-", St0),
     compile(list_passes(), St1).
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
-    St0 = #comp{opts=Opts},
+    St0 = #comp{opts=Opts,code=Forms},
     St1 = filenames("-no-file-", St0),
-    St2 = St1#comp{code=Forms},
-    compile(forms_passes(), St2).
+    compile(forms_passes(), St1).
 
 compile(Ps, St0) ->
     case do_passes(Ps, St0) of

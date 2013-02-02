@@ -65,11 +65,8 @@
 -record(thread, {}).				%Thread type
 %% There are two function types, this the Lua one, and an Erlang one
 %% with the same name. So no type for it.
--record(function,{l=0,				%Line number (why?)
-		  local,			%Local block
-		  sz,				%Block size
-		  lsz, lps,			%Local var size, pars
-		  esz, eps,			%Env var size, pars
+-record(function,{lsz,				%Local var size
+		  esz,				%Env var size
 		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block

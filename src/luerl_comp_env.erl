@@ -55,99 +55,77 @@ chunk(#code{code=C0}=Code, Opts) ->
     luerl_comp:debug_print(Opts, "ce: ~p\n", [C1]),
     {ok,Code#code{code=C1}}.
 
-%% push_env_frame(State) -> State.
-%% push_env_frame(Frame, State) -> State.
-%% pop_env_frame(State) -> State.
-%% get_env_frame(State) -> Frame.
+%% push_frame(State) -> State.
+%% push_frame(Frame, State) -> State.
+%% pop_frame(State) -> State.
+%% get_frame(State) -> Frame.
 
-push_env_frame(St) -> push_env_frame(new_frame(), St).
+push_frame(St) -> push_frame(new_frame(), St).
 
-push_env_frame(F, #st{efs=Fs}=St) ->
-    St#st{efs=[F|Fs]}.
+push_frame(F, #st{fs=Fs}=St) -> St#st{fs=[F|Fs]}.
 
-pop_env_frame(#st{efs=[_|Fs]}=St) ->
-    St#st{efs=Fs}.
+pop_frame(#st{fs=[_|Fs]}=St) -> St#st{fs=Fs}.
 
-get_env_frame(#st{efs=[F|_]}) -> F.
-
-%% push_env_frame(State) -> State.
-%% push_env_frame(Frame, State) -> State.
-%% pop_env_frame(State) -> State.
-%% get_env_frame(State) -> Frame.
-
-push_local_frame(St) -> push_local_frame(new_frame(), St).
-
-push_local_frame(F, #st{lfs=Fs}=St) ->
-    St#st{lfs=[F|Fs]}.
-
-pop_local_frame(#st{lfs=[_|Fs]}=St) ->
-    St#st{lfs=Fs}.
-
-get_local_frame(#st{lfs=[F|_]}) -> F.
+get_frame(#st{fs=[F|_]}) -> F.
 
 %% new_frame() -> Frame.
-%% add_frame_var(Name, Frame) -> Frame.
-%% find_frame_var(Name, Frame) -> {yes,Index} | no.
-%% fetch_frame_var(Name, Frame) -> Index.
 %%  We know frame will be tuples which we index from 1. Also Lua has
 %%  the feature that every time you add a local variable you get a new
 %%  version of it which shadows the old one. We handle this by keeping
 %%  them in reverse order and always pushing variable to front of
 %%  list.
 
-new_frame() -> [].
+new_frame() -> {0,0,[]}.			%{Lc,Ec,Vs}
 
-add_frame_var(N, [{_,I}|_]=F) -> [{N,I+1}|F];
-add_frame_var(N, []) -> [{N,1}].
+frame_local_size({Lc,_,_}) -> Lc.
+frame_env_size({_,Ec,_}) -> Ec.
 
-find_frame_var(N, [{N,I}|_]) -> {yes,I};
-find_frame_var(N, [_|F]) -> find_frame_var(N, F);
-find_frame_var(_, []) -> no.
+%% find_fs_var(Name, FrameStack) -> {yes,Type,Depth,Index} | no.
 
-%% add_fs_var(Name, FrameStack) -> FrameStack.
-%% find_fs_var(Name, FrameStack) -> {yes,Depth,Index} | no.
+find_fs_var(N, Fs) -> find_fs_var(N, Fs, 1, 1).
 
-add_fs_var(N, [F|Fs]) -> [add_frame_var(N, F)|Fs].
-
-find_fs_var(N, Fs) -> find_fs_var(N, Fs, 1).
-
-find_fs_var(N, [F|Fs], D) ->
+find_fs_var(N, [F|Fs], Ld, Ed) ->
     case find_frame_var(N, F) of
-	{yes,I} -> {yes,D,I};
-	no -> find_fs_var(N, Fs, D+1)
+	{yes,lvar,Li} -> {yes,lvar,Ld,Li};
+	{yes,evar,Ei} -> {yes,evar,Ed,Ei};
+	no ->
+	    {Ld1,Ed1} = fs_depth_incr(F, Ld, Ed),
+	    find_fs_var(N, Fs, Ld1, Ed1)
     end;
-find_fs_var(_, [], _) -> no.
+find_fs_var(_, [], _, _) -> no.
+
+fs_depth_incr({_,0,_}, Ld, Ed) -> {Ld+1,Ed};	%No env variables
+fs_depth_incr({_,_,_}, Ld, Ed) -> {Ld+1,Ed+1}.
+
+find_frame_var(N, {_,_,Fs}) ->
+    find_frame_var_1(N, Fs).
+
+find_frame_var_1(N, [{N,Type,I}|_]) -> {yes,Type,I};
+find_frame_var_1(N, [_|F]) -> find_frame_var_1(N, F);
+find_frame_var_1(_, []) -> no.
 
 add_var(N, St) ->
     case var_type(N, St) of
-	env -> add_env_var(N, St);
-	local -> add_local_var(N, St)
+	local -> add_local_var(N, St);
+	env -> add_env_var(N, St)
     end.
 	    
-add_env_var(N, #st{efs=Fs0}=St) ->
-    Fs1 = add_fs_var(N, Fs0),
-    St#st{efs=Fs1}.
+add_env_var(N, #st{fs=[F0|Fs]}=St) ->
+    F1 = add_frame_env_var(N, F0),
+    St#st{fs=[F1|Fs]}.
 	    
-add_local_var(N, #st{lfs=Fs0}=St) ->
-    Fs1 = add_fs_var(N, Fs0),
-    St#st{lfs=Fs1}.
+add_local_var(N, #st{fs=[F0|Fs]}=St) ->
+    F1 = add_frame_local_var(N, F0),
+    St#st{fs=[F1|Fs]}.
 
-get_var(N, St) ->
-    %% io:fwrite("gv: ~p\n", [{N,St}]),
-    case var_type(N, St) of
-	env -> get_env_var(N, St);
-	local -> get_local_var(N, St)
-    end.
+add_frame_local_var(N, {Lc,Ec,Fs}) -> {Lc+1,Ec,[{N,lvar,Lc+1}|Fs]}.
 
-get_env_var(N, #st{efs=Fs}) ->
+add_frame_env_var(N, {Lc,Ec,Fs}) -> {Lc,Ec+1,[{N,evar,Ec+1}|Fs]}.
+
+get_var(N, #st{fs=Fs}) ->
     case find_fs_var(N, Fs) of
-	{yes,D,I} -> #evar{n=N,d=D,i=I};
-	no -> #gvar{n=N}
-    end.
-
-get_local_var(N, #st{lfs=Fs}) ->
-    case find_fs_var(N, Fs) of
-	{yes,D,I} -> #lvar{n=N,d=D,i=I};
+	{yes,lvar,Ld,Li} -> #lvar{n=N,d=Ld,i=Li};
+	{yes,evar,Ed,Ei} -> #evar{n=N,d=Ed,i=Ei};
 	no -> #gvar{n=N}
     end.
 
@@ -156,12 +134,6 @@ var_type(N, #st{vars=#vars{fused=Fused}}) ->
 	true -> env;
 	false -> local
     end.
-
-is_env_var(N, St) ->
-    var_type(N, St) == env.
-
-is_local_var(N, St) ->
-    var_type(N, St) == local.
 
 %% stmt(Stmts, State) -> {Stmts,State}.
 
@@ -236,41 +208,32 @@ return_stmt(#return_stmt{es=Es0}=R, St0) ->
 
 block_stmt(#block_stmt{ss=Ss0,vars=Vars}=B, St0) ->
     Do = fun(S) -> stmts(Ss0, S) end,
-    {Ss1,Lf,Ef,St1} = with_block(Do, Vars, St0),
-    {B#block_stmt{ss=Ss1,lf=Lf,ef=Ef},St1}.
+    {Ss1,Fr,St1} = with_block(Do, Vars, St0),
+    Lsz = frame_local_size(Fr),
+    Esz = frame_env_size(Fr),
+    {B#block_stmt{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% do_block(Block, State) -> {Block,State}.
 %%  Do_block never returns external new variables. Fits into stmt().
 
 do_block(#block{ss=Ss0,vars=Vars}=B, St0) ->
     Do = fun(S) -> stmts(Ss0, S) end,
-    {Ss1,Lf,Ef,St1} = with_block(Do, Vars, St0),
-    {B#block{ss=Ss1,lf=Lf,ef=Ef},St1}.
+    {Ss1,Fr,St1} = with_block(Do, Vars, St0),
+    Lsz = frame_local_size(Fr),
+    Esz = frame_env_size(Fr),
+    {B#block{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% with_block(Do, Vars, State) -> {Ret,State}.
 %% with_block(Do, Env, Vars, State) -> {Ret,State}.
 %%  Do a block initialising/clearing frames. We always push a local
 %%  frame even if it not used.
 
-with_block(Do, #vars{local=Lo,fused=Fu}=Vars, St) ->
-    EnvFrame = intersection(Lo, Fu) /= [],	%Local fused variables?
-    with_block(Do, EnvFrame, Vars, St).
-
-with_block(Do, false, Vars, #st{vars=OldVars}=St0) ->
-    St1 = push_local_frame(St0),
+with_block(Do, Vars, #st{vars=OldVars}=St0) ->
+    St1 = push_frame(St0),
     {Ret,St2} = Do(St1#st{vars=Vars}),
-    Lf = get_local_frame(St2),
-    St3 = pop_local_frame(St2),
-    {Ret,Lf,[],St3#st{vars=OldVars}};
-with_block(Do, true, Vars, #st{vars=OldVars}=St0) ->
-    St1 = push_local_frame(St0),
-    St2 = push_env_frame(St1),
-    {Ret,St3} = Do(St2#st{vars=Vars}),
-    Lf = get_local_frame(St3),
-    Ef = get_env_frame(St3),
-    St4 = pop_env_frame(St3),
-    St5 = pop_local_frame(St4),
-    {Ret,Lf,Ef,St5#st{vars=OldVars}}.
+    Fr = get_frame(St2),
+    St3 = pop_frame(St2),
+    {Ret,Fr,St3#st{vars=OldVars}}.
 
 %% while_stmt(While, State) -> {While,State}.
 
@@ -324,8 +287,10 @@ for_block(Vs0, #block{ss=Ss0,vars=Vars}=B, St0) ->
 		 {Ss1,S2} = stmts(Ss0, S1),
 		 {{Vs1,Ss1},S2}
 	 end,
-    {{Vs1,Ss1},Lf,Ef,St1} = with_block(Do, Vars, St0),
-    {Vs1,B#block{ss=Ss1,lf=Lf,ef=Ef},St1}.
+    {{Vs1,Ss1},Fr,St1} = with_block(Do, Vars, St0),
+    Lsz = frame_local_size(Fr),
+    Esz = frame_env_size(Fr),
+    {Vs1,B#block{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% local_assign_stmt(Local, State) -> {Local,State}.
 
@@ -339,6 +304,7 @@ local_assign_stmt(#local_assign_stmt{vs=Vs0,es=Es0}=L, St0) ->
     {L#local_assign_stmt{vs=Vs1,es=Es1},St2}.
 
 %% local_fdef_stmt(Local, State) -> {Local,State}.
+%%  Add function name first in case of recursive call.
 
 local_fdef_stmt(#local_fdef_stmt{v=#var{n=N},f=F0}=L, St0) ->
     St1 = add_var(N, St0),
@@ -411,8 +377,10 @@ functiondef(#fdef{ps=Ps0,ss=Ss0,vars=Vars}=F, St0) ->
 		 {Ss1,S2} = stmts(Ss0, S1),
 		 {{Ps1,Ss1},S2}
 	 end,
-    {{Ps1,Ss1},Lf,Ef,St1} = with_block(Do, Vars, St0),
-    {F#fdef{ps=Ps1,ss=Ss1,lf=Lf,ef=Ef},St1}.
+    {{Ps1,Ss1},Fr,St1} = with_block(Do, Vars, St0),
+    Lsz = frame_local_size(Fr),
+    Esz = frame_env_size(Fr),
+    {F#fdef{ps=Ps1,ss=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% tableconstructor(Fields, State) -> {Fields,State}.
 

@@ -44,6 +44,7 @@
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+-include("luerl_instrs.hrl").
 
 %% Basic interface.
 -export([init/0,gc/1]).
@@ -76,8 +77,8 @@ init() ->
     St0 = #luerl{meta=#meta{},locf=false,tag=make_ref()},
     %% Initialise the table handling.
     St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
-    %% Initialise the environment and frame handling.
-    St2 = St1#luerl{env=[],ftab=array:new(),ffree=[],fnext=0},
+    %% Initialise the frame handling.
+    St2 = St1#luerl{ftab=array:new(),ffree=[],fnext=0},
     %% Allocate the _G table and initialise the environment
     {_G,St3} = luerl_basic:install(St2),	%Global environment
     St4 = St3#luerl{g=_G},
@@ -116,31 +117,15 @@ get_global_name(Name, St) ->
 get_global_key(Key, #luerl{g=G}=St) ->
     get_table_key(G, Key, St).
 
-%% push_frame(Frame, State) -> State.
-%% pop_frame(State) -> State.
-%% pop_free_frame(State) -> State.
-%%  Pop_frame just pops top frame from environment.
+%% alloc_frame(Frame, State) -> {Fref,State}.
+%%  Allocate the frame in the frame table and return its fref.
 
-push_frame(F, #luerl{env=Fps,ftab=Ft0,ffree=[N|Ns]}=St) ->
-    Ft1 = array:set(N, F, Ft0),
-    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,ffree=Ns};
-push_frame(F, #luerl{env=Fps,ftab=Ft0,ffree=[],fnext=N}=St) ->
-    Ft1 = array:set(N, F, Ft0),
-    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,fnext=N+1}.
-
-push_frame(F, Fps, #luerl{ftab=Ft0,ffree=[N|Ns]}=St) ->
-    Ft1 = array:set(N, F, Ft0),
-    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,ffree=Ns};
-push_frame(F, Fps, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
-    Ft1 = array:set(N, F, Ft0),
-    St#luerl{env=[#fref{i=N}|Fps],ftab=Ft1,fnext=N+1}.
-
-pop_frame(#luerl{env=[_|Fps]}=St) ->		%Pop the frame
-    St#luerl{env=Fps}.
-
-pop_free_frame(#luerl{env=[#fref{i=N}|Fps],ftab=Ft0,ffree=Ff}=St) ->
-    Ft1 = array:reset(N, Ft0),
-    St#luerl{env=Fps,ftab=Ft1,ffree=[N|Ff]}.
+alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[N|Ns]}=St) ->
+    Ft1 = array:set(N, Fr, Ft0),
+    {#fref{i=N},St#luerl{ftab=Ft1,ffree=Ns}};
+alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
+    Ft1 = array:set(N, Fr, Ft0),
+    {#fref{i=N},St#luerl{ftab=Ft1,fnext=N+1}}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -181,7 +166,7 @@ free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
     St#luerl{ttab=Ts1,tfree=[N|Ns]}.
 
 %% set_table_key(Tref, Key, Value, State) -> State.
-%% get_table_key(Tref, Key, State) -> {[Val],State}.
+%% get_table_key(Tref, Key, State) -> {Val,State}.
 %%  Access tables, as opposed to the environment (which are also
 %%  tables). Setting a value to 'nil' will clear it from the array but
 %%  not from the table; however, we won't add a nil value.
@@ -288,61 +273,6 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 	    get_table_key(Meth, Key, St)
     end.
 
-%% set_global_var(Var, Val, State) -> State.
-%% get_global_var(Var, State) -> {Val,State}.
-%%  _G a normal table with metatable so we must use the table
-%%  functions.  However we can optimise a bit as we KNOW that _G is a
-%%  table and the var is always a normal non-integer key.
-
-set_global_var(Var, Val, #luerl{g=G}=St) ->
-    set_table_key_key(G, Var, Val, St).
-
-get_global_var(Var, #luerl{g=G}=St) ->
-    get_table_key_key(G, Var, St).
-
-%% set_env_var(Depth, Index, Val, State) -> State.
-%% get_env_var(Depth, Index, State) -> Val.
-%%  We must have the state as the environments are global in the
-%%  state.
-
-set_env_var(D, I, Val, #luerl{env=Fps,ftab=Ft0}=St) ->
-    Ft1 = set_env_var(D, I, Val, Fps, Ft0),
-    St#luerl{ftab=Ft1}.
-
-set_env_var(1, I, V, [#fref{i=N}|_], Ft) ->
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft);
-set_env_var(2, I, V, [_,#fref{i=N}|_], Ft) ->
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft);
-set_env_var(D, I, V, Fps, Ft) ->
-    #fref{i=N} = lists:nth(D, Fps),
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft).
-
-get_env_var(D, I, #luerl{env=Fps,ftab=Ft}) ->
-    get_env_var(D, I, Fps, Ft).
-
-get_env_var(1, I, [#fref{i=N}|_], Ft) ->
-    element(I, array:get(N, Ft));
-get_env_var(2, I, [_,#fref{i=N}|_], Ft) ->
-    element(I, array:get(N, Ft));
-get_env_var(D, I, Fps, Ft) ->
-    #fref{i=N} = lists:nth(D, Fps),
-    element(I, array:get(N, Ft)).
-
-%% set_frame_var(Depth, Index, Var, Frames) -> Frames.
-%% get_frame_var(Depth, Index, Frames) -> Val.
-
-set_frame_var(1, I, V, [F|Fs]) ->
-    [setelement(I, F, V)|Fs];
-set_frame_var(D, I, V, [F|Fs]) ->
-    [F|set_frame_var(D-1, I, V, Fs)].
-
-get_frame_var(1, I, [F|_]) -> element(I, F);
-get_frame_var(D, I, [_|Fs]) ->
-    get_frame_var(D-1, I, Fs).
-
 %% set_local_var(Depth, Index, Var, Frames) -> Frames.
 %% get_local_var(Depth, Index, Frames) -> Val.
 
@@ -354,6 +284,49 @@ set_local_var(D, I, V, [F|Fs]) ->
 get_local_var(1, I, [F|_]) -> element(I, F);
 get_local_var(D, I, [_|Fs]) ->
     get_local_var(D-1, I, Fs).
+
+%% set_env_var(Depth, Index, Val, Env, State) -> State.
+%% get_env_var(Depth, Index, Env, State) -> Val.
+%%  We must have the state as the environments are global in the
+%%  state.
+
+set_env_var(D, I, Val, Env, #luerl{ftab=Ft0}=St) ->
+    Ft1 = set_env_var_1(D, I, Val, Env, Ft0),
+    St#luerl{ftab=Ft1}.
+
+set_env_var_1(1, I, V, [#fref{i=N}|_], Ft) ->
+    F = setelement(I, array:get(N, Ft), V),
+    array:set(N, F, Ft);
+set_env_var_1(2, I, V, [_,#fref{i=N}|_], Ft) ->
+    F = setelement(I, array:get(N, Ft), V),
+    array:set(N, F, Ft);
+set_env_var_1(D, I, V, Fps, Ft) ->
+    #fref{i=N} = lists:nth(D, Fps),
+    F = setelement(I, array:get(N, Ft), V),
+    array:set(N, F, Ft).
+
+get_env_var(D, I, Env, #luerl{ftab=Ft}) ->
+    get_env_var_1(D, I, Env, Ft).
+
+get_env_var_1(1, I, [#fref{i=N}|_], Ft) ->
+    element(I, array:get(N, Ft));
+get_env_var_1(2, I, [_,#fref{i=N}|_], Ft) ->
+    element(I, array:get(N, Ft));
+get_env_var_1(D, I, Fps, Ft) ->
+    #fref{i=N} = lists:nth(D, Fps),
+    element(I, array:get(N, Ft)).
+
+%% set_global_var(Var, Val, State) -> State.
+%% get_global_var(Var, State) -> {Val,State}.
+%%  _G a normal table with metatable so we must use the table
+%%  functions.  However we can optimise a bit as we KNOW that _G is a
+%%  table and the var is always a normal non-integer key.
+
+set_global_var(Var, Val, #luerl{g=G}=St) ->
+    set_table_key_key(G, Var, Val, St).
+
+get_global_var(Var, #luerl{g=G}=St) ->
+    get_table_key_key(G, Var, St).
 
 %% chunk(Chunk, State) -> {Return,State}.
 %% chunk(Chunk, Args, State) -> {Return,State}.
@@ -370,14 +343,6 @@ call(#code{code=C0}, Args, St0) ->
     {R,_,_,_,St1} = emul(C0, St0),		%R is the accumulator
     itrace_print("e: ~p\n", [R]),
     functioncall(R, Args, St1);
-%% call({functiondef,_,_,_,_}=Fd, Args, St0) ->
-%%     %% Generate function and call it.
-%%     {Fret,St1} = exp(Fd, St0),
-%%     {Ret,St2} = functioncall(first_value(Fret), Args, St1),
-%%     %% Should do GC here.
-%%     {Ret,St2};
-%% call({functiondef,L,_,Sz,Ps,B}, Args, St) ->	%Ignore name
-%%     call({functiondef,L,Sz,Ps,B}, Args, St);
 call(#function{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -396,24 +361,26 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(frame, {acc,var,fs,env}).		%Save these for the GC
+-record(call_frame, {acc,lvs,env}).		%Save these for the GC
 
 %% emul(Instrs, State).
 %% emul(Instrs, Accumulator, LocalVariables, Stack, Env, State).
 
-emul(Is, #luerl{env=Env}=St) ->
-    emul(Is, nil, {}, [], Env, St).
+emul(Is, St) ->
+    emul(Is, nil, {}, [], [], St).
 
-emul([], Acc, Var, Stk, Env, St) ->
-    itrace_print("el: ~p\n", [{Acc,Var,Env}]),
-    emul_1([], Acc, Var, Stk, Env, St);
-emul(Is, Acc, Var, Stk, Env, St) ->
+emul([I|_]=Is, Acc, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
-		   io:fwrite("ei: ~p\n", [{hd(Is),Acc,Var,Env}]),
-		   stack_print(Stk) end),
-    emul_1(Is, Acc, Var, Stk, Env, St).
+		   io:fwrite("ei: ~p\n", [{I,Acc,Lvs,Env}]),
+		   io:fwrite("--> ", []),
+		   stack_print(Stk)
+	       end),
+    emul_1(Is, Acc, Lvs, Stk, Env, St);
+emul([], Acc, Lvs, Stk, Env, St) ->
+    itrace_print("el: ~p\n", [{Acc,Lvs,Env}]),
+    emul_1([], Acc, Lvs, Stk, Env, St).
 
-stack_print([#frame{}|_]) -> io:fwrite(" ...\n");
+stack_print([#call_frame{}|_]) -> io:fwrite(" ...\n");
 stack_print([E|St]) ->
     io:fwrite(" ~p", [E]),
     stack_print(St);
@@ -422,42 +389,26 @@ stack_print([]) -> io:nl().
 %% Expression instructions.
 emul_1([?LOAD_LIT(L)|Is], _, Var, Stk, Env, St) ->
     emul(Is, L, Var, Stk, Env, St);
-emul_1([?LOAD_LVAR(I)|Is], _, Var, Stk, Env, St) ->
-    Acc = element(I, Var),
-    emul(Is, Acc, Var, Stk, Env, St);
-emul_1([?LOAD_FVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
-    Acc = get_frame_var(D, I, Lvs),
-    emul(Is, Acc, Lvs, Stk, Env, St);
-
 emul_1([?LOAD_LVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
     Acc = get_local_var(D, I, Lvs),
     emul(Is, Acc, Lvs, Stk, Env, St);
 emul_1([?LOAD_EVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
-    Acc = get_env_var(D, I, St),
+    Acc = get_env_var(D, I, Env, St),
     emul(Is, Acc, Lvs, Stk, Env, St);
 emul_1([?LOAD_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
     {Acc,St1} = get_global_var(K, St0),
     emul(Is, Acc, Var, Stk, Env, St1);
 
-emul_1([?STORE_LVAR(I)|Is], Acc, Var0, Stk, Env, St) ->
-    Var1 = setelement(I, Var0, Acc),
-    emul(Is, Acc, Var1, Stk, Env, St);
-emul_1([?STORE_FVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
-    St1 = set_frame_var(D, I, Acc, St0),
-    emul(Is, Acc, Var, Stk, Env, St1);
-
-emul_1([?STORE_LVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
-    St1 = set_local_var(D, I, Acc, St0),
-    emul(Is, Acc, Var, Stk, Env, St1);
-emul_1([?STORE_EVAR(D, I)|Is], Acc, Var, Stk, Env, St0) ->
-    St1 = set_env_var(D, I, Acc, St0),
-    emul(Is, Acc, Var, Stk, Env, St1);
-
-emul_1([?STORE_GVAR(K)|Is], Acc, Var, Stk, Env, St0) ->
+emul_1([?STORE_LVAR(D, I)|Is], Acc, Lvs0, Stk, Env, St) ->
+    Lvs1 = set_local_var(D, I, Acc, Lvs0),
+    emul(Is, Acc, Lvs1, Stk, Env, St);
+emul_1([?STORE_EVAR(D, I)|Is], Acc, Lvs, Stk, Env, St0) ->
+    St1 = set_env_var(D, I, Acc, Env, St0),
+    emul(Is, Acc, Lvs, Stk, Env, St1);
+emul_1([?STORE_GVAR(K)|Is], Acc, Lvs, Stk, Env, St0) ->
     St1 = set_global_var(K, Acc, St0),
-    emul(Is, Acc, Var, Stk, Env, St1);
-emul_1([?SINGLE|Is], Acc, Var, Stk, Env, St) ->
-    emul(Is, first_value(Acc), Var, Stk, Env, St);
+    emul(Is, Acc, Lvs, Stk, Env, St1);
+
 emul_1([?GET_KEY|Is], Acc, Var, [Tab|Stk], Env, St0) ->
     {Val,St1} = get_table_key(Tab, Acc, St0),
     emul(Is, Val, Var, Stk, Env, St1);
@@ -472,8 +423,11 @@ emul_1([?SET_LIT_KEY(K)|Is], Acc, Var, [Val|Stk], Env, St0) ->
     %% [?PUSH,?LOAD_LIT(K),?SET_KEY]
     St1 = set_table_key(Acc, K, Val, St0),
     emul_1(Is, Acc, Var, Stk, Env, St1);
-emul_1([?BUILD_TAB(Fc)|Is], _, Var, Stk0, Env, St0) ->
-    {Tab,Stk1,St1} = build_tab(Fc, Stk0, St0),
+
+emul_1([?SINGLE|Is], Acc, Var, Stk, Env, St) ->
+    emul(Is, first_value(Acc), Var, Stk, Env, St);
+emul_1([?BUILD_TAB(Fc, I)|Is], Acc, Var, Stk0, Env, St0) ->
+    {Tab,Stk1,St1} = build_tab(Fc, I, Acc, Stk0, St0),
     emul(Is, Tab, Var, Stk1, Env, St1);
 emul_1([?CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_call(Is, Acc, Var, Stk, Env, St, Ac);
@@ -481,15 +435,12 @@ emul_1([?TAIL_CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_tail_call(Is, Acc, Var, Stk, Env, St, Ac);
 emul_1([?OP(Op,Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_op(Is, Acc, Var, Stk, Env, St, Op, Ac);
-emul_1([?FDEF(Fps, Fis, Loc, Sz)|Is], _, Var, Stk, Env, St) ->
-    Func = do_fdef(Fps, Fis, Loc, Sz, Env, St),
-    emul(Is, Func, Var, Stk, Env, St);
-emul_1([?FDEF(Lsz, Lps, Esz, Eps, Fis)|Is], _, Var, Stk, Env, St) ->
-    Func = do_fdef(Lsz, Lps, Esz, Eps, Fis, Env, St),
+emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], _, Var, Stk, Env, St) ->
+    Func = do_fdef(Lsz, Esz, Pars, Fis, Env, St),
     emul(Is, Func, Var, Stk, Env, St);
 %% Control instructions.
 emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Acc, Var, Stk, Env, St) ->
-    do_block(Is, Acc, Var, Stk, Env, St, Bis, Lsz, Bsz);
+    do_block(Is, Acc, Var, Stk, Env, St, Lsz, Esz, Bis);
 emul_1([?WHILE(Eis, Wis)|Is], Acc, Var, Stk, Env, St) ->
     do_while(Is, Acc, Var, Stk, Env, St, Eis, Wis);
 emul_1([?REPEAT(Ris)|Is], Acc, Var, Stk, Env, St) ->
@@ -518,8 +469,8 @@ emul_1([?NFOR(V, Fis)|Is], Acc, Var, Stk, Env, St) ->
     do_numfor(Is, Acc, Var, Stk, Env, St, V, Fis);
 emul_1([?GFOR(Vs, Fis)|Is], Acc, Var, Stk, Env, St) ->
     do_genfor(Is, Acc, Var, Stk, Env, St, Vs, Fis);
-emul_1([?BREAK|_], _, _, _, _, St) ->
-    throw({break,St#luerl.tag,St});
+emul_1([?BREAK|_], _, Lvs, Stk, Env, St) ->
+    throw({break,St#luerl.tag,Lvs,Stk,Env,St});
 emul_1([?RETURN(0)|_], _, _, _, _, St) ->
     throw({return,St#luerl.tag,[],St});
 emul_1([?RETURN(Ac)|_], Acc, _, Stk, _, St) ->
@@ -544,12 +495,13 @@ emul_1([?POP_VALS(Vc)|Is], Acc, Var, Stk0, Env, St) ->
 %% These also put the value into acc the same as ?LOAD,?PUSH.
 emul_1([?PUSH_LIT(L)|Is], _, Var, Stk, Env, St) ->
     emul(Is, L, Var, [L|Stk], Env, St);
-emul_1([?PUSH_LVAR(I)|Is], _, Var, Stk, Env, St) ->
-    Acc = element(I, Var),
+emul_1([?PUSH_LVAR(D, I)|Is], _, Var, Stk, Env, St) ->
+    Acc = get_local_var(D, I, Var),
     emul(Is, Acc, Var, [Acc|Stk], Env, St);
-emul_1([?PUSH_FVAR(D, I)|Is], _, Var, Stk, Env, St) ->
-    Acc = get_frame_var(D, I, St),
-    emul(Is, Acc, Var, [Acc|Stk], Env, St);
+emul_1([?PUSH_EVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
+    %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
+    Acc = get_env_var(D, I, Env, St),
+    emul(Is, Acc, Lvs, [Acc|Stk], Env, St);
 emul_1([?PUSH_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
     {Acc,St1} = get_global_var(K, St0),
     emul(Is, Acc, Var, [Acc|Stk], Env, St1);
@@ -588,54 +540,46 @@ pop_args(0, Stk, _) -> {[],Stk};
 pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
 
 %% do_block(Instrs, Acc, Vars, Stack, Env, State,
-%%          BlockInstrs, LocalSize, EnvSize) -> ReturnFromEmul.
+%%          LocalSize, EnvSize, BlockInstrs) -> ReturnFromEmul.
+%%  Local vars may have been updated so must continue with returned
+%%  version.
 
-do_block(Is, Acc0, Lvs, Stk, Env, St0, Bis, Lsz, 0) ->
+do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, 0, Bis) ->
     L = erlang:make_tuple(Lsz, nil),
-    {Acc1,_,_,_,St1} = emul(Bis, Acc0, [L|Lvs], Stk, Env, St0),
-    emul(Is, Acc1, Lvs, Stk, Env, St1);
-do_block(Is, Acc0, Lvs, Stk, Env, St0, Bis, Lsz, Esz) ->
-    OldEnv = St0#luerl.env,
+    {Acc1,[_|Lvs1],_,_,St1} = emul(Bis, Acc0, [L|Lvs0], Stk, Env, St0),
+    emul(Is, Acc1, Lvs1, Stk, Env, St1);
+do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, Esz, Bis) ->
     L = erlang:make_tuple(Lsz, nil),
     E = erlang:make_tuple(Esz, nil),
-    St1 = push_frame(E, St0),
-    {Acc1,_,_,_,St2} = emul(Bis, Acc0, [L|Lvs], Stk, Env, St1),
-    St3 = St2#luerl{env=OldEnv},		%pop_frame ?
-    emul(Is, Acc1, Lvs, Stk, Env, St1).
+    {Fref,St1} = alloc_frame(E, St0),
+    {Acc1,[_|Lvs1],_,_,St2} = emul(Bis, Acc0, [L|Lvs0], Stk, [Fref|Env], St1),
+    emul(Is, Acc1, Lvs1, Stk, Env, St2).
 
-do_op(Is, Acc, Var, Stk0, Env, St0, Op, Ac) ->
+do_op(Is, Acc, Lvs, Stk0, Env, #luerl{stk=OldStk}=St0, Op, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),
     %% io:fwrite("op: ~p\n", [{Op,Args}]),
-    %% Fr = #frame{acc=Acc,var=Var,stk=Stk1,env=Env},
-    {Res,St1}= do_op(Op, Args, St0),
-    emul(Is, Res, Var, Stk1, Env, St1).
+    %% Fr = #call_frame{acc=Acc,lvs=Lvs,stk=Stk1,env=Env},
+    {Res,St1}= do_op(Op, Args, St0#luerl{stk=Stk1}),
+    emul(Is, Res, Lvs, Stk1, Env, St1#luerl{stk=OldStk}).
 
 do_op(Op, [A], St) -> op(Op, A, St);
 do_op(Op, [A1,A2], St) -> op(Op, A1, A2, St).
 
-%% do_fdef(Pars, Instrs, LocalVars, Size, Env, State) -> Function.
+%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> Function.
 
-do_fdef(Ps, Is, Local, Sz, Env, _) ->
-    #function{local=Local,sz=Sz,pars=Ps,b=Is,env=Env}.
+do_fdef(Lsz, Esz, Pars, Is, Env, _) ->
+    #function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is}.
 
-do_fdef(Lsz, Lps, Esz, Eps, Is, Env, _) ->
-    #function{lsz=Lsz,lps=Lps,esz=Esz,eps=Eps,env=Env,b=Is}.
+%% do_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%%     ReturnFromEmul.
 
-do_call(Is, Acc, Var, Stk, Env, St, 0) ->
+do_call(Is, Acc, Lvs, Stk, Env, St, 0) ->
     %% The function is in the acc.
-    functioncall(Is, Acc, Var, Stk, Env, St, Acc, []);
-do_call(Is, Acc, Var, Stk0, Env, St, Ac) ->
+    functioncall(Is, Acc, Lvs, Stk, Env, St, Acc, []);
+do_call(Is, Acc, Lvs, Stk0, Env, St, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
-    functioncall(Is, Acc, Var, Stk2, Env, St, Func, Args).
-
-do_tail_call(_Is, Acc, Var, Stk, Env, St, 0) ->
-    %% The function is in the acc.
-    error(boom);
-do_tail_call(_Is, Acc, Var, Stk0, Env, St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
-    [Func|Stk2] = Stk1,				%Get function
-    error(boom).
+    functioncall(Is, Acc, Lvs, Stk2, Env, St, Func, Args).
 
 %% functioncall(Function, Args, State) -> {Return,State}.
 %%  This is called from "within" things, for example metamethods, and
@@ -650,36 +594,40 @@ functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
 %%  call. It must move everything into State.
 
 functioncall(Is, Acc, Lvs, Stk0, Env, St0, Func, Args) ->
-    Fr = #frame{acc=Acc,var=Lvs,env=Env},
+    Fr = #call_frame{acc=Acc,lvs=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
     emul(Is, Ret, Lvs, Stk0, Env, St1).
 
-functioncall(#function{lsz=Lsz,lps=Lps,esz=0,env=Env,b=Fis},
+functioncall(#function{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     L0 = erlang:make_tuple(Lsz, nil),
-    L1 = assign_pars(Lps, Args, L0),
-    {Ret,St1} = functioncall(Fis, [L1], Stk, none, St0),
+    L1 = assign_local_pars(Pars, Args, L0),
+    {Ret,St1} = functioncall(Fis, [L1], Stk, Env, St0),
     {Ret,St1};
-functioncall(#function{lsz=Lsz,lps=Lps,esz=Esz,eps=Eps,env=Env,b=Fis},
-	     Args, Stk, #luerl{env=OldEnv}=St0) ->
+functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
+	     Args, Stk, St0) ->
     L0 = erlang:make_tuple(Lsz, nil),
     E0 = erlang:make_tuple(Esz, nil),
-    L1 = assign_pars(Lps, Args, L0),
-    E1 = assign_pars(Eps, Args, E0),
-    St1 = push_frame(E1, Env, St0),
-    {Ret,St2} = functioncall(Fis, [L1], Stk, none, St1),
-    St3 = St2#luerl{env=OldEnv},		%pop_frame ?
-    {Ret,St3};
+    {L1,E1} = assign_pars(Pars, Args, L0, E0),
+    {Fref,St1} = alloc_frame(E1, St0),
+    {Ret,St2} = functioncall(Fis, [L1], Stk, [Fref|Env], St1),
+    {Ret,St2};
 functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
-    {Ret,St1#luerl{stk=Stk0}}.			%Replace it
+    {Ret,St1#luerl{stk=Stk0}};			%Replace it
+functioncall(Func, Args, Stk, St) ->
+    case getmetamethod(Func, <<"__call">>, St) of
+	nil -> badarg_error(Func, Args);
+	Meta -> functioncall(Meta, Args, Stk, St)
+    end.
+
 
 functioncall(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
     %% Must use different St names else they become 'unsafe'.
-    io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
+    %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     try
 	{_,_,_,_,Sta} = emul(Fis, nil, Lvs, Stk, Env, St0),
 	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
@@ -688,104 +636,140 @@ functioncall(Fis, Lvs, Stk, Env, St0) ->
 	throw:{return,Tag,Ret,Stb} ->
 	    %%io:fwrite("fr: ~p\n", [{Tag,Ret,Stb#luerl.env}]),
 	    {Ret,Stb};
-	throw:{break,Tag,_} ->
+	throw:{break,Tag,_,_,_,_} ->
 	    lua_error({illegal_op,break})
     end.
 
-assign_pars(Vs, As, Var) ->
-    assign_pars_loop(Vs, As, Var).
-
-assign_pars_loop([none|Vs], [_|As], Var) ->	%Ignore this argument
-    assign_pars_loop(Vs, As, Var);
-assign_pars_loop([V|Vs], [A|As], Var) ->
-    assign_pars_loop(Vs, As, setelement(V, Var, A));
-assign_pars_loop([V|Vs], [], Var) ->
-    assign_pars_loop(Vs, [], Var);		%Var default is nil
-assign_pars_loop([], _, Var) -> Var;		%No vararg, drop remain args
-assign_pars_loop(V, As, Var) ->			%This is a vararg!
+assign_local_pars([V|Vs], [A|As], Var) ->
+    assign_local_pars(Vs, As, setelement(V, Var, A));
+assign_local_pars([_|Vs], [], Var) ->
+    assign_local_pars(Vs, [], Var);		%Var default is nil
+assign_local_pars([], _, Var) -> Var;		%No vararg, drop remain args
+assign_local_pars(V, As, Var) ->		%This is a vararg!
     setelement(V, Var, As).
 
-%% do_repeat(Instrs, Acc, Var, Stack, Env, State, RepeatInstrs) -> <emul>
+assign_pars([V|Vs], [A|As], L, E) when V > 0 ->
+    assign_pars(Vs, As, setelement(V, L, A), E);
+assign_pars([V|Vs], [A|As], L, E) ->		%V < 0
+    assign_pars(Vs, As, L, setelement(-V, E, A));
+assign_pars([_|Vs], [], L, E) ->
+    assign_pars(Vs, [], L, E);		  %Var default is nil
+assign_pars([], _, L, E) -> {L,E};		%No vararg, drop remain args
+assign_pars(V, As, L, E) when V > 0 ->		%This is a vararg!
+    {setelement(V, L, As),E};
+assign_pars(V, As, L, E) ->			%This is a vararg!
+    {L,setelement(-V, E, As)}.
 
-do_repeat(Is, Acc, Var, Stk, Env, St, Ris) ->
+%% do_tail_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%%     ReturnFromEmul.
+
+do_tail_call(_Is, Acc, _Var, Stk, _Env, _St, 0) ->
+    error({boom,Acc,[],Stk});
+do_tail_call(_Is, Acc, _Var, Stk0, _Env, _St, Ac) ->
+    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
+    [Func|Stk2] = Stk1,				%Get function
+    error({boom,Func,Args,Stk2}).
+
+%% do_repeat(Instrs, Acc, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
+
+do_repeat(Is, Acc, Lvs, Stk, Env, St, Ris) ->
     Do = fun (S) ->
-		 repeat_loop(Ris, Acc, Var, Stk, Env, S)
+		 repeat_loop(Ris, Acc, Lvs, Stk, Env, S)
 	 end,
-    loop_block(Is, Var, Stk, Env, St, Do).
+    loop_block(Is, Lvs, Stk, Env, St, Do).
 
-repeat_loop(Ris, Acc0, Var0, Stk0, Env0, St0) ->
-    {Acc1,Var1,Stk1,Env1,St1} =
-	emul(Ris, Acc0, Var0, Stk0, Env0, St0),
+repeat_loop(Ris, Acc0, Lvs0, Stk0, Env0, St0) ->
+    {Acc1,Lvs1,Stk1,Env1,St1} =
+	emul(Ris, Acc0, Lvs0, Stk0, Env0, St0),
     case is_true_value(Acc1) of
-	true -> St1;
-	false -> repeat_loop(Ris, Acc1, Var1, Stk1, Env1, St1)
+	true -> {Lvs1,St1};
+	false -> repeat_loop(Ris, Acc1, Lvs1, Stk1, Env1, St1)
     end.
 
-%% do_while(Instrs, Acc, Var, Stack, Env, State, WhileEis, WhileBis) -> <emul>
+%% do_while(Instrs, Acc, LocalVars, Stack, Env, State, WhileEis, WhileBis) ->
+%%     <emul>
 
-do_while(Is, Acc, Var, Stk, Env, St, Eis, Wis) ->
+do_while(Is, Acc, Lvs, Stk, Env, St, Eis, Wis) ->
     Do = fun (S) ->
-		 while_loop(Eis, Acc, Var, Stk, Env, S, Wis)
+		 while_loop(Eis, Acc, Lvs, Stk, Env, S, Wis)
 	 end,
-    loop_block(Is, Var, Stk, Env, St, Do).
+    loop_block(Is, Lvs, Stk, Env, St, Do).
 
-while_loop(Eis, Acc0, Var0, Stk0, Env0, St0, Wis) ->
-    {Acc1,Var1,Stk1,Env1,St1} =
-	emul(Eis, Acc0, Var0, Stk0, Env0, St0),
+while_loop(Eis, Acc0, Lvs0, Stk0, Env0, St0, Wis) ->
+    {Acc1,Lvs1,Stk1,Env1,St1} =
+	emul(Eis, Acc0, Lvs0, Stk0, Env0, St0),
     case is_true_value(Acc1) of
 	true ->
-	    {Acc2,Var2,Stk2,Env2,St2} =
-		emul(Wis, Acc1, Var1, Stk1, Env1, St1),
-	    while_loop(Eis, Acc2, Var2, Stk2, Env2, St2, Wis);
-	false -> St1
+	    {Acc2,Lvs2,Stk2,Env2,St2} =
+		emul(Wis, Acc1, Lvs1, Stk1, Env1, St1),
+	    while_loop(Eis, Acc2, Lvs2, Stk2, Env2, St2, Wis);
+	false -> {Lvs1,St1}
     end.
 
-loop_block(Is, Var, Stk, Env, St0, Do) ->
+loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
     Tag = St0#luerl.tag,
-    St1 = try
-	      Do(St0)
-	  catch
-	      throw:{break,Tag,St} -> St
-	  end,
-    emul(Is, nil, Var, Stk, Env, St1).
+    {Lvs2,St1} = try
+		     Do(St0)
+		 catch
+		     throw:{break,Tag,Lvs1,_,_,St} -> {Lvs1,St}
+		 end,
+    %% Trim local variable stack.
+    Lvs3 = lists:nthtail(length(Lvs2)-length(Lvs0), Lvs2),
+    emul(Is, nil, Lvs3, Stk, Env, St1).
 
-do_if(Is, Acc, Var, Stk, Env, St, True, False) ->
+do_if(Is, Acc, Lvs, Stk, Env, St, True, False) ->
     case is_true_value(Acc) of
-	true -> do_if_block(True, Acc, Var, Stk, Env, St, Is);
-	false -> do_if_block(False, Acc, Var, Stk, Env, St, Is)
+	true -> do_if_block(True, Acc, Lvs, Stk, Env, St, Is);
+	false -> do_if_block(False, Acc, Lvs, Stk, Env, St, Is)
     end.
 
-do_if_block([?BLOCK(Bis, Loc, Sz)], Acc, Var, Stk, Env, St, Is) ->
-    do_block(Is, Acc, Var, Stk, Env, St, Bis, Loc, Sz);
-do_if_block(Bis, Acc0, Var, Stk, Env, St0, Is) ->
+do_if_block([?BLOCK(Bis, Loc, Sz)], Acc, Lvs, Stk, Env, St, Is) ->
+    do_block(Is, Acc, Lvs, Stk, Env, St, Bis, Loc, Sz);
+do_if_block(Bis, Acc0, Lvs, Stk, Env, St0, Is) ->
     {Acc1,_,_,_,St1} =
-	emul(Bis, Acc0, Var, Stk, Env, St0),
-    emul(Is, Acc1, Var, Stk, Env, St1).
+	emul(Bis, Acc0, Lvs, Stk, Env, St0),
+    emul(Is, Acc1, Lvs, Stk, Env, St1).
 
 %% do_numfor(Instrs, Acc, Var, Stack, Env, State, Varname, FromInstrs) -> <emul>
 
-do_numfor(Is, Step, Var, [Limit,Init|Stk], Env, St, _, Fis) ->
+do_numfor(Is, Step, Lvs, [Limit,Init|Stk], Env, St, _, Fis) ->
     %% First check if we have numbers.
     case luerl_lib:tonumbers([Init,Limit,Step]) of
 	[I,L,S] ->
 	    Do = fun (St) ->
-			 numfor_loop(I, L, S, Fis, Var, Stk, Env, St)
+			 numfor_loop(I, L, S, Fis, Lvs, Stk, Env, St)
 		 end,
-	    loop_block(Is, Var, Stk, Env, St, Do);
+	    loop_block(Is, Lvs, Stk, Env, St, Do);
 	nil -> badarg_error(loop, [Init,Limit,Step])
     end.
 
-numfor_loop(N, Limit, Step, Fis, Var, Stk, Env, St0) ->
+numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
     %% Leave the counter in the Acc for code to get.
     if Step > 0.0, N =< Limit ->		%Keep going
-	    {_,_,_,_,St1} =
-		emul(Fis, N, Var, Stk, Env, St0),
-	    numfor_loop(N+Step, Limit, Step, Fis, Var, Stk, Env, St1);
+	    {_,Lvs1,Stk1,Env1,St1} =
+		emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
        Step < 0.0, N >= Limit ->		%Keep going
-	    {_,_,_,_,St1} =
-		emul(Fis, N, Var, Stk, Env, St0),
-	    numfor_loop(N+Step, Limit, Step, Fis, Var, Stk, Env, St1);
-       true -> St0				%Done!
+	    {_,Lvs1,Stk1,Env1,St1} =
+		emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
+       true -> {Lvs0,St0}				%Done!
+    end.
+
+numfor_loop_up(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
+    %% Leave the counter in the Acc for code to get.
+    if N =< Limit ->				%Keep going
+	    {_,Lvs1,Stk1,Env1,St1} = emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    numfor_loop_up(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
+       true -> {Lvs0,St0}			%Done!
+    end.
+
+numfor_loop_down(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
+    %% Leave the counter in the Acc for code to get.
+    if N >= Limit ->				%Keep going
+	    {_,Lvs1,Stk1,Env1,St1} = emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    numfor_loop_down(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
+       true -> {Lvs0,St0}			%Done!
     end.
 
 %% do_genfor(Instrs, Acc, Var, Stack, Env, State, Vars, FromInstrs) -> <emul>
@@ -802,14 +786,14 @@ do_genfor(Is, Acc, Var, Stk, Env, St, _, Fis) ->
 	 end,
     loop_block(Is, Var, Stk, Env, St, Do).
 
-genfor_loop(Func, Tab, Val, Fis, Var, Stk, Env, St0) ->
+genfor_loop(Func, Tab, Val, Fis, Lvs0, Stk, Env, St0) ->
     {Vals,St1} = functioncall(Func, [Tab,Val], Stk, St0),
     case is_true_value(Vals) of
 	true ->
-	    {_,_,_,_,St2} =
-		emul(Fis, Vals, Var, Stk, Env, St1),
-	    genfor_loop(Func, Tab, hd(Vals), Fis, Var, Stk, Env, St2);
-	false -> St1
+	    {_,Lvs1,_,_,St2} =
+		emul(Fis, Vals, Lvs0, Stk, Env, St1),
+	    genfor_loop(Func, Tab, hd(Vals), Fis, Lvs1, Stk, Env, St2);
+	false -> {Lvs0,St1}
     end.
 
 %% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
@@ -841,13 +825,22 @@ getmetamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-%% build_table(FieldCount, Stack, State) -> {TableRef,Stack,State}.
+%% build_table(FieldCount, Index, Acc, Stack, State) -> {TableRef,Stack,State}.
+%%  FieldCount is how many Key/Value pairs are on the stack, Index is
+%%  the index of the next value in the acc.
 
-build_tab(Fc, Stk0, St0) ->
-    {Fs,Stk1} = build_tab_loop(Fc, Stk0, []),
-    {Tref,St1} = alloc_table(Fs, St0),
-    %%io:fwrite("bt: ~p\n", [{Fc,Fs,Tref}]),
+build_tab(Fc, I, Acc, Stk0, St0) ->
+    Fs0 = build_tab_acc(I, Acc),
+    {Fs1,Stk1} = build_tab_loop(Fc, Stk0, Fs0),
+    %% io:fwrite("bt: ~p\n", [{Fc,I,Acc,Fs0,Fs1}]),
+    {Tref,St1} = alloc_table(Fs1, St0),
     {Tref,Stk1,St1}.
+
+build_tab_acc(I, [V|Vs]) ->
+    [{I,V}|build_tab_acc(I+1.0, Vs)];
+build_tab_acc(_, []) -> [];
+build_tab_acc(_, nil) -> [];			%Drop final nil
+build_tab_acc(I, V) -> [{I,V}].			%Single value
 
 build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
@@ -914,9 +907,9 @@ numeric_op(_Op, O, E, Raw, St0) ->
     N = luerl_lib:tonumber(O),
     if is_number(N) -> {[Raw(N)],St0};
        true ->
-	    Meta = getmetamethod(O, E, St0),
-	    {Ret,St1} = functioncall(Meta, [O], St0),
-	    {[is_true_value(Ret)],St1}
+    	    Meta = getmetamethod(O, E, St0),
+    	    {Ret,St1} = functioncall(Meta, [O], St0),
+    	    {[is_true_value(Ret)],St1}
     end.
 
 numeric_op(_Op, O1, O2, E, Raw, St0) ->
@@ -924,9 +917,10 @@ numeric_op(_Op, O1, O2, E, Raw, St0) ->
     N2 = luerl_lib:tonumber(O2),
     if is_number(N1), is_number(N2) -> {[Raw(N1, N2)],St0};
        true ->
-	    Meta = getmetamethod(O1, O2, E, St0),
-	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true_value(Ret)],St1}
+    	    io:fwrite("no: ~p\n", [{_Op,O1,O2,N1,N2}]),
+    	    Meta = getmetamethod(O1, O2, E, St0),
+    	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
+    	    {[is_true_value(Ret)],St1}
     end.
 
 eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[true],St};

@@ -54,7 +54,9 @@
 
 -record(block_stmt, {l,ss=[],			%Block statement
 		     vars=none,			%Variable info
+		     lsz=none,			%Local frame size
 		     lf=[],			%Local frame
+		     esz=none,			%Env frame size
 		     ef=[],			%Env frame
 		     local=none,		%Local variables
 		     locf=false}).		%Local functions
@@ -75,13 +77,18 @@
 
 -record(block, {l,ss=[],			%Sub-blocks
 		vars=none,			%Variable info
+		lsz=none,			%Local frame size
 		lf=[],				%Local frame
-		ef=[]}).
+		esz=none,			%Env frame size
+		ef=[],
+		locf=false}).
 
 %% Expressions.
 -record(fdef, {l,ps=[],ss=[],
 	       vars=none,			%Variable info
+	       lsz=none,			%Local frame size
 	       lf=[],
+	       esz=none,			%Env frame size
 	       ef=[],
 	       local=none,			%Local variables
 	       locf=false}).			%Local function
@@ -112,69 +119,3 @@
 -record(lvar, {n,d,i}).				%Local name, depth, index
 -record(evar, {n,d,i}).				%Environment name, depth, index
 -record(gvar, {n}).				%Global name
-
-%% Instructions.
-
-%% Expression instructions.
--define(LOAD_LIT(L), {load_lit,L}).			%Load a literal
-%%-define(LOAD_LVAR(I), {load_lvar,I}).		%Load variable into acc
-%%-define(LOAD_FVAR(D, I), {load_fvar,D,I}).
-
--define(LOAD_LVAR(D, I), {load_lvar,D,I}).
--define(LOAD_EVAR(D, I), {load_evar,D,I}).
-
--define(LOAD_GVAR(K), {load_gvar,K}).
-%%-define(STORE_LVAR(I), {store_lvar,I}).		%Store variable from acc
-%%
--define(STORE_FVAR(D, I), {store_fvar,D,I}).
-
--define(STORE_LVAR(D, I), {store_lvar,D,I}).
--define(STORE_EVAR(D, I), {store_evar,D,I}).
-
--define(STORE_GVAR(K), {store_gvar,K}).
--define(SINGLE, single).
--define(GET_KEY, get_key).			%Acc = Stk[Acc]
--define(GET_LIT_KEY(K), {get_key,K}).		%[?PUSH,?LIT(K),?KEY]
--define(SET_KEY, set_key).			%Stk[
--define(SET_LIT_KEY(K), {set_key,K}).		%[?PUSH,?LIT(K),?SET_KEY]
--define(BUILD_TAB(Fc), {build_tab,Fc}).
--define(CALL(Ac), {call,Ac}).
--define(TAIL_CALL(Ac), {tail_call,Ac}).
--define(OP(Op,Ac), {op,Op,Ac}).
-%% -define(FDEF(Ps, Is, L, Sz), {fdef,Ps,Is,L,Sz}).
-
--define(FDEF(Lsz, Lps, Esz, Eps, Is), {fdef,Lsz,Lps,Esz,Eps,Is}).
-
-%% Control instructions.
-
--define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
-
--define(WHILE(E, B), {while,E,B}).
--define(REPEAT(B), {repeat,B}).
--define(IF_TRUE(T), {if_true,T}).
--define(IF_FALSE(T), {if_false,T}).
--define(IF(T, F), {'if',T,F}).
--define(NFOR(V, B), {nfor,V,B}).
--define(GFOR(Vs, B), {gfor,Vs,B}).
--define(BREAK, break).
--define(RETURN(Ac), {return,Ac}).
-%% Stack instructions, mainly to/from accumulator.
--define(PUSH, push).
--define(POP, pop).
--define(DROP, drop).
--define(SWAP, swap).
--define(PUSH_VALS(Vc), {push_vals,Vc}).
--define(POP_VALS(Vc), {pop_vals,Vc}).
-%% Optimisations and combined instructions.
--define(PUSH_LIT(L), {push_lit,L}).		%?LIT(L), ?PUSH
-%%-define(PUSH_LVAR(I), {push_lvar,I}).		%?LVAR(I), ?PUSH
-%%-define(PUSH_FVAR(D, I), {push_fvar,D,I}).	%?FVAR(D,I), ?PUSH
-
--define(PUSH_LVAR(D,I), {push_lvar,D,I}).	%?LVAR(D,I), ?PUSH
--define(PUSH_EVAR(D, I), {push_evar,D,I}).	%?EVAR(D,I), ?PUSH
-
--define(PUSH_GVAR(K), {push_gvar,K}).		%?GVAR(K), ?PUSH
-
-%% -record(push_vals,{ac}).
-%% #push_vals{ac=Ac}
-%% ?PUSH_VALS(Ac)

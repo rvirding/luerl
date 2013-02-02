@@ -81,8 +81,8 @@ assert(As, St) ->
 
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
-    {[],luerl_emul:gc(St)};
-    %% {[],St};					%No-op for the moment
+    %% {[],luerl_emul:gc(St)};
+    {[],St};					%No-op for the moment
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
@@ -287,18 +287,16 @@ tostring(false) -> <<"false">>;
 tostring(N) when is_number(N) ->
     A = abs(N),
     %% Print really big/small "integers" as floats as well.
-    S = if A < 1.0e-4 ; A > 1.0e14 -> io_lib:write(N);
-	   ?IS_INTEGER(N) -> integer_to_list(round(N));
+    S = if ?IS_INTEGER(N), A < 1.0e14 ->
+		integer_to_list(round(N));
 	   true -> io_lib:write(N)
 	end,
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#function{l=L}) ->			%Functions defined in Lua
-    iolist_to_binary(["function: ",io_lib:write(L)]);
-tostring({function,F}) ->			%Internal functions
-    iolist_to_binary(["function: ",io_lib:write(F)]);
-tostring(#thread{}) -> iolist_to_binary(io_lib:write(thread));
+tostring(#function{}) -> <<"function">>;	%Functions defined in Lua
+tostring({function,_}) -> <<"function">>;	%Internal functions
+tostring(#thread{}) -> <<"thread">>;
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
 
@@ -364,15 +362,7 @@ do_passes([Fun|Funs], St0) ->
 do_passes([], St) -> {ok,St}.
 
 comp_passes() ->
-    [fun (S) ->
-	     %% Make return values "conformant".
-	     case luerl_scan:string(S) of
-		 {ok,Ts,_} -> {ok,Ts};
-		 {error,Error,_} -> {error,Error}
-	     end
-     end,
-     fun (Ts) -> luerl_parse:chunk(Ts) end,
-     fun (Chunk) -> luerl_comp:chunk(Chunk) end].
+    [fun (S) -> luerl_comp:string(S) end].
 
 do_load(Str, St) ->
     case do_passes(comp_passes(), Str) of

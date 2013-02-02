@@ -32,7 +32,6 @@
 -module(luerl_comp_vars).
 
 -include("luerl.hrl").
-
 -include("luerl_comp.hrl").
 
 -export([chunk/2]).
@@ -148,7 +147,7 @@ block_stmt(#block_stmt{ss=Ss0}=B, _, St0) ->
     #vars{local=Bloc,used=Bused,fused=Bfused} = Vars1,
     Used = subtract(Bused, Bloc),
     Fused = subtract(Bfused, Bloc),
-    {B#block_stmt{ss=Ss1,vars=Vars1},Used,Fused,St1}.
+    {B#block_stmt{ss=Ss1,vars=Vars1},[],Used,Fused,St1}.
 
 %% do_block(Block, State) -> {Block,UsedVars,FusedVars,State}.
 %% do_block(Block, LocalVars, State) -> {Block,UsedVars,FusedVars,State}.
@@ -323,10 +322,8 @@ functiondef(#fdef{ps=Ps,ss=Ss0}=F, _, St0) ->
 		      end, [], Ps),
     Vars0 = #vars{local=Loc0,free=[],used=[],fused=[]},
     {Ss1,Vars1,St1} = stmts(Ss0, Vars0, St0),
-    %% Make all free variables "fused" as well.
-    #vars{free=Fr,fused=Fu} = Vars1,
-    Fused = union(Fr, Fu),
-    {F#fdef{ss=Ss1,vars=Vars1#vars{fused=Fused}},[],Fused,St1}.
+    %% Make all free variables "fused" in outside block.
+    {F#fdef{ss=Ss1,vars=Vars1},[],Vars1#vars.free,St1}.
 
 %% tableconstructor(Fields, LocalVars, State) ->
 %%     {Fields,UsedVars,FusedVars,State}.

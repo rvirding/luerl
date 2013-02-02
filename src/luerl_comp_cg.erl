@@ -33,6 +33,7 @@
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+-include("luerl_instrs.hrl").
 
 -export([chunk/2]).
 
@@ -156,18 +157,18 @@ return_stmt(#return_stmt{es=Es}, St0) ->
 
 %% block_stmt(Block, State) -> {BlockIs,State}.
 
-block_stmt(#block_stmt{ss=Ss,lf=Lf,ef=Ef}, St0) ->
+block_stmt(#block_stmt{ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(length(Lf), length(Ef), Iss)],St1}.
+    {[?BLOCK(Lsz, Esz, Iss)],St1}.
 
 %% do_block(Block, State) -> {Block,State}.
 %%  Do_block never returns external new variables. Fits into stmt().
 
 %% do_block(#block{b=Ss,local=[],used=[]}, St) ->	%No local variables in block
 %%     stmts(Ss, St);				%Fold into surrounding block
-do_block(#block{ss=Ss,lf=Lf,ef=Ef}, St0) ->
+do_block(#block{ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(length(Lf), length(Ef), Iss)],St1}.
+    {[?BLOCK(Lsz, Esz, Iss)],St1}.
 
 %% while_stmt(While, State) -> {WhileIs,State}.
 
@@ -199,30 +200,30 @@ if_tests([], Else, St0) ->
 
 %% numfor_stmt(For, State) -> {ForIs,State}.
 
-%% numfor_stmt(#nfor{v=V,init=I,limit=L,step=S,b=B}, St0) ->
-%%     {Ies,St1} = explist([I,L,S], true, St0),
-%%     {Ib0,St2} = do_block(B, St1),
-%%     [?BLOCK(Is,Loc,Sz)] = Ib0,
-%%     Ib1 = [?BLOCK([set_var(V)|Is],Loc,Sz)],
-%%     {Ies ++ [?NFOR(V,Ib1)],St2}.
-
-%% An experiment to put the block *outside* the for loop.
 numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
     {Ies,St1} = explist([I,L,S], true, St0),
     {Ib,St2} = do_block(B, St1),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
-    ForBlock = [?BLOCK(Lsz, Esz, [?NFOR(V,[set_var(V)|Is])])],
-    {Ies ++ ForBlock,St2}.
+    ForBlock = [?BLOCK(Lsz, Esz, [set_var(V)|Is])],
+    {Ies ++ [?NFOR(V,ForBlock)],St2}.
+
+%% %% An experiment to put the block *outside* the for loop.
+%% numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
+%%     {Ies,St1} = explist([I,L,S], true, St0),
+%%     {Ib,St2} = do_block(B, St1),
+%%     [?BLOCK(Lsz, Esz, Is)] = Ib,
+%%     ForBlock = [?BLOCK(Lsz, Esz, [?NFOR(V,[set_var(V)|Is])])],
+%%     {Ies ++ ForBlock,St2}.
 
 %% genfor_stmt(For, State) -> {ForIs,State}.
 
 genfor_stmt(#gfor_stmt{vs=[V|Vs],gens=Gs,b=B}, St0) ->
     {Igs,St1} = explist(Gs, false, St0),
     {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
-    {Ib0,St3} = do_block(B, St2),
-    [?BLOCK(Lsz, Esz, Is)] = Ib0,
-    Ib1 = [?BLOCK(Lsz, Esz, Ias ++ [set_var(V)|Is])],
-    {Igs ++ [?POP_VALS(length(Gs)-1)] ++ [?GFOR(Vs,Ib1)],St3}.
+    {Ib,St3} = do_block(B, St2),
+    [?BLOCK(Lsz, Esz, Is)] = Ib,
+    ForBlock = [?BLOCK(Lsz, Esz, Ias ++ [set_var(V)|Is])],
+    {Igs ++ [?POP_VALS(length(Gs)-1)] ++ [?GFOR(Vs,ForBlock)],St3}.
 
 %% local_assign_stmt(Local, State) -> {Ilocal,State}.
 
@@ -300,8 +301,8 @@ exp(#op{op=Op,as=As}, S, St0) ->
     Iop = Ias ++ [?OP(Op, length(As))],
     {first_value(S, Iop),St1};
 exp(#tc{fs=Fs}, _, St0) ->
-    {Its,St1} = tableconstructor(Fs, St0),
-    {Its ++ [{build_tab,length(Fs)}],St1};
+    {Its,Fc,I,St1} = tableconstructor(Fs, St0),
+    {Its ++ [?BUILD_TAB(Fc,I)],St1};
 exp(#lvar{n= <<"...">>}=V, S, St) ->		%Can be either local or frame
     {first_value(S, [get_var(V)]),St};
 exp(#evar{n= <<"...">>}=V, S, St) ->
@@ -359,27 +360,35 @@ prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
 
 %% functiondef(Func, State) -> {Func,State}.
 
-functiondef(#fdef{ps=Ps0,ss=Ss,lf=Lf,ef=Ef}, St0) ->
+functiondef(#fdef{ps=Ps0,ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     Ps1 = func_pars(Ps0),
     {Iss,St1} = stmts(Ss, St0),
-    {[?FDEF(length(Lf),Ps1,length(Ef),Ps1, Iss)],St1}.
+    {[?FDEF(Lsz,Esz,Ps1,Iss)],St1}.
 
-func_pars([#evar{n= <<"...">>,i=I}]) -> I;	%Tail is index for varargs
+func_pars([#evar{n= <<"...">>,i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n= <<"...">>,i=I}]) -> I;
-func_pars([#evar{i=I}|Ps]) -> [I|func_pars(Ps)];
+func_pars([#evar{i=I}|Ps]) -> [-I|func_pars(Ps)];
 func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
 
 %% tableconstructor(Fields, State) -> {Ifields,State}.
 
-tableconstructor(Fs0, St0) ->
-     Fun = fun (#efield{v=V}, {Ifs,I,S0}) ->
-		  {Iv,S1} = exp(V, true, S0),
-		  {Ifs ++ [?LOAD_LIT(I),?PUSH] ++ Iv ++ [?PUSH],I+1,S1};
-	      (#kfield{k=K,v=V}, {Ifs,I,S0}) ->
-		  {Ik,S1} = exp(K, true, S0),
-		  {Iv,S2} = exp(V, true, S1),
-		  {Ifs ++ Ik ++ [?PUSH] ++ Iv ++ [?PUSH],I,S2}
-	  end,
-    {Its,_,St1} = lists:foldl(Fun, {[],1.0,St0}, Fs0),
-    {Its,St1}.
+tableconstructor(Fs, St0) ->
+    {Its,Fc,I,St1} = tc_fields(Fs, 0.0, St0),
+    {Its,Fc,I,St1}.
+
+tc_fields([#efield{v=V}], I0, St0) ->
+    I1 = I0 + 1.0,				%Index of next element
+    {Iv,St1} = exp(V, false, St0),
+    {Iv,0,I1,St1};
+tc_fields([#efield{v=V}|Fs], I0, St0) ->
+    I1 = I0 + 1.0,				%Index of next element
+    {Iv,St1} = exp(V, true, St0),
+    {Ifs,Fc,I2,St2} = tc_fields(Fs, I1, St1),
+    {[?LOAD_LIT(I1),?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I2,St2};
+tc_fields([#kfield{k=K,v=V}|Fs], I0, St0) ->
+    {Ik,St1} = exp(K, true, St0),
+    {Iv,St2} = exp(V, true, St1),
+    {Ifs,Fc,I1,St3} = tc_fields(Fs, I0, St2),
+    {Ik ++ [?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I1,St3};
+tc_fields([], I, St) -> {[?LOAD_LIT([])],0,I,St}.

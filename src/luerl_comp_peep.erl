@@ -33,6 +33,7 @@
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+-include("luerl_instrs.hrl").
 
 -export([chunk/2]).
 
@@ -43,7 +44,7 @@ chunk(#code{code=Is0}=Code, Opts) ->
     luerl_comp:debug_print(Opts, "cp: ~p\n", [Is1]),
     {ok,Code#code{code=Is1}}.
 
-%% Combining instructions.
+%% Combining instructions, table in Acc.
 instrs([?PUSH,?LOAD_LIT(L),?GET_KEY|Is], St) ->
     instrs([?GET_LIT_KEY(L)|Is], St);
 instrs([?PUSH,?LOAD_LIT(L),?SET_KEY|Is], St) ->
@@ -56,15 +57,13 @@ instrs([?LOAD_GVAR(K),?PUSH|Is], St) -> instrs([?PUSH_GVAR(K)|Is], St);
 instrs([?STORE_LVAR(D,I),?LOAD_LVAR(D,I)|Is], St) ->
     instrs([?STORE_LVAR(D,I)|Is], St);
 instrs([?STORE_EVAR(D,I),?LOAD_EVAR(D,I)|Is], St) ->
-    instrs([?STORE_FVAR(D,I)|Is], St);
+    instrs([?STORE_EVAR(D,I)|Is], St);
 instrs([?STORE_GVAR(K),?LOAD_GVAR(K)|Is], St) ->
     instrs([?STORE_GVAR(K)|Is], St);
 %% Doing sub instructions.
-instrs([?FDEF(Lsz,Lps,Esz,Eps,Fis0)|Is], St) ->
+instrs([?FDEF(Lsz,Esz,Pars,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
-    [?FDEF(Lsz,Lps,Esz,Eps,Fis1)|instrs(Is, St)];
-instrs([?BLOCK(Bis,local,0)|Is], St) ->		%No local variables in block
-    instrs(Bis ++ Is, St);			%Fold into surrounding block
+    [?FDEF(Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
 instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->
     Bis1 = instrs(Bis0, St),
     [?BLOCK(Lsz,Esz,Bis1)|instrs(Is, St)];
