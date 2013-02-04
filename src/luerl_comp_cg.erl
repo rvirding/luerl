@@ -360,7 +360,9 @@ func_pars([#evar{i=I}|Ps]) -> [-I|func_pars(Ps)];
 func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
 
-%% tableconstructor(Fields, State) -> {Ifields,State}.
+%% tableconstructor(Fields, State) -> {Ifields,FieldCount,Index,State}.
+%%  FieldCount is how many Key/Value pairs are on the stack, Index is
+%%  the index of the next value in the acc.
 
 tableconstructor(Fs, St0) ->
     {Its,Fc,I,St1} = tc_fields(Fs, 0.0, St0),

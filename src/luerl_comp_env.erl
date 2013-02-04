@@ -21,12 +21,11 @@
 -module(luerl_comp_env).
 
 -include("luerl.hrl").
-
 -include("luerl_comp.hrl").
 
 -export([chunk/2]).
 
--import(ordsets, [is_element/2,intersection/2]).
+-import(ordsets, [is_element/2,intersection/2,subtract/2]).
 
 %% Local state.
 -record(st, {lfs=[],				%Variable frames
@@ -45,29 +44,49 @@ chunk(#code{code=C0}=Code, Opts) ->
     {ok,Code#code{code=C1}}.
 
 %% push_frame(State) -> State.
-%% push_frame(Frame, State) -> State.
 %% pop_frame(State) -> State.
 %% get_frame(State) -> Frame.
 
-push_frame(St) -> push_frame(new_frame(), St).
-
-push_frame(F, #st{fs=Fs}=St) -> St#st{fs=[F|Fs]}.
+push_frame(#st{vars=#vars{local=Lo,fused=Fu},fs=Fs}=St) ->
+    Lsz = length(subtract(Lo, Fu)),
+    Esz = length(intersection(Lo, Fu)),
+    F = new_frame(Lsz, Esz),
+    St#st{fs=[F|Fs]}.
 
 pop_frame(#st{fs=[_|Fs]}=St) -> St#st{fs=Fs}.
 
 get_frame(#st{fs=[F|_]}) -> F.
 
-%% new_frame() -> Frame.
+%% new_frame(LocalSize, EnvSize) -> Frame.
 %%  We know frame will be tuples which we index from 1. Also Lua has
 %%  the feature that every time you add a local variable you get a new
 %%  version of it which shadows the old one. We handle this by keeping
 %%  them in reverse order and always pushing variable to front of
 %%  list.
+%% {HasLocal,LocalIndex,HasEnv,EnvIndex,Vars}
 
-new_frame() -> {0,0,[]}.			%{Lc,Ec,Vs}
+new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.
 
-frame_local_size({Lc,_,_}) -> Lc.
-frame_env_size({_,Ec,_}) -> Ec.
+find_frame_var(N, {_,_,_,_,Fs}) ->
+    find_frame_var_1(N, Fs).
+
+find_frame_var_1(N, [{N,Type,I}|_]) -> {yes,Type,I};
+find_frame_var_1(N, [_|F]) -> find_frame_var_1(N, F);
+find_frame_var_1(_, []) -> no.
+
+frame_depth_incr({false,_,false,_,_}, Ld, Ed) -> {Ld,Ed};   %No vars at all
+frame_depth_incr({false,_,true,_,_}, Ld, Ed) -> {Ld,Ed+1};  %No local variables
+frame_depth_incr({true,_,false,_,_}, Ld, Ed) -> {Ld+1,Ed};  %No env variables
+frame_depth_incr({true,_,true,_,_}, Ld, Ed) -> {Ld+1,Ed+1}. %Both variables
+
+frame_local_size({_,Lc,_,_,_}) -> Lc.
+frame_env_size({_,_,_,Ec,_}) -> Ec.
+
+add_frame_local_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
+    {Lsz,Li+1,Esz,Ei,[{N,lvar,Li+1}|Fs]}.
+
+add_frame_env_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
+    {Lsz,Li,Esz,Ei+1,[{N,evar,Ei+1}|Fs]}.
 
 %% find_fs_var(Name, FrameStack) -> {yes,Type,Depth,Index} | no.
 
@@ -78,20 +97,10 @@ find_fs_var(N, [F|Fs], Ld, Ed) ->
 	{yes,lvar,Li} -> {yes,lvar,Ld,Li};
 	{yes,evar,Ei} -> {yes,evar,Ed,Ei};
 	no ->
-	    {Ld1,Ed1} = fs_depth_incr(F, Ld, Ed),
+	    {Ld1,Ed1} = frame_depth_incr(F, Ld, Ed),
 	    find_fs_var(N, Fs, Ld1, Ed1)
     end;
 find_fs_var(_, [], _, _) -> no.
-
-fs_depth_incr({_,0,_}, Ld, Ed) -> {Ld+1,Ed};	%No env variables
-fs_depth_incr({_,_,_}, Ld, Ed) -> {Ld+1,Ed+1}.
-
-find_frame_var(N, {_,_,Fs}) ->
-    find_frame_var_1(N, Fs).
-
-find_frame_var_1(N, [{N,Type,I}|_]) -> {yes,Type,I};
-find_frame_var_1(N, [_|F]) -> find_frame_var_1(N, F);
-find_frame_var_1(_, []) -> no.
 
 add_var(N, St) ->
     case var_type(N, St) of
@@ -106,10 +115,6 @@ add_env_var(N, #st{fs=[F0|Fs]}=St) ->
 add_local_var(N, #st{fs=[F0|Fs]}=St) ->
     F1 = add_frame_local_var(N, F0),
     St#st{fs=[F1|Fs]}.
-
-add_frame_local_var(N, {Lc,Ec,Fs}) -> {Lc+1,Ec,[{N,lvar,Lc+1}|Fs]}.
-
-add_frame_env_var(N, {Lc,Ec,Fs}) -> {Lc,Ec+1,[{N,evar,Ec+1}|Fs]}.
 
 get_var(N, #st{fs=Fs}) ->
     case find_fs_var(N, Fs) of
@@ -218,8 +223,8 @@ do_block(#block{ss=Ss0,vars=Vars}=B, St0) ->
 %%  frame even if it not used.
 
 with_block(Do, Vars, #st{vars=OldVars}=St0) ->
-    St1 = push_frame(St0),
-    {Ret,St2} = Do(St1#st{vars=Vars}),
+    St1 = push_frame(St0#st{vars=Vars}),
+    {Ret,St2} = Do(St1),
     Fr = get_frame(St2),
     St3 = pop_frame(St2),
     {Ret,Fr,St3#st{vars=OldVars}}.
@@ -284,12 +289,15 @@ for_block(Vs0, #block{ss=Ss0,vars=Vars}=B, St0) ->
 %% local_assign_stmt(Local, State) -> {Local,State}.
 
 local_assign_stmt(#local_assign_stmt{vs=Vs0,es=Es0}=L, St0) ->
+    %% io:fwrite("las: ~p\n", [{Es0,St0}]),
     {Es1,St1} = explist(Es0, St0),
-    Fun = fun (#var{n=N}, S0) ->
-		  S1 = add_var(N, S0),
-		  {get_var(N, S1),S1}
-	  end,
-    {Vs1,St2} = lists:mapfoldl(Fun, St1, Vs0),
+    %% io:fwrite("las> ~p\n", [{Es1,St1}]),
+    AddVar = fun (#var{n=N}, S0) ->
+		     S1 = add_var(N, S0),
+		     {get_var(N, S1),S1}
+	     end,
+    {Vs1,St2} = lists:mapfoldl(AddVar, St1, Vs0),
+    %% io:fwrite("las> ~p\n", [{Vs1,St2}]),
     {L#local_assign_stmt{vs=Vs1,es=Es1},St2}.
 
 %% local_fdef_stmt(Local, State) -> {Local,State}.

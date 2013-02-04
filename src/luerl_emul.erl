@@ -531,13 +531,25 @@ pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
 %% do_block(Instrs, Acc, Vars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> ReturnFromEmul.
 %%  Local vars may have been updated so must continue with returned
-%%  version.
+%%  version. There should be no changes in the stack and env.
 
+do_block(Is, Acc0, Lvs0, Stk, Env, St0, 0, 0, Bis) ->
+    %% No variables at all.
+    {Acc1,Lvs1,_,_,St1} = emul(Bis, Acc0, Lvs0, Stk, Env, St0),
+    emul(Is, Acc1, Lvs1, Stk, Env, St1);
+do_block(Is, Acc0, Lvs0, Stk, Env, St0, 0, Esz, Bis) ->
+    %% No local variables, only env variables.
+    E = erlang:make_tuple(Esz, nil),
+    {Fref,St1} = alloc_frame(E, St0),
+    {Acc1,Lvs1,_,_,St2} = emul(Bis, Acc0, Lvs0, Stk, [Fref|Env], St1),
+    emul(Is, Acc1, Lvs1, Stk, Env, St2);
 do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, 0, Bis) ->
+    %% No env variables, only local variables.
     L = erlang:make_tuple(Lsz, nil),
     {Acc1,[_|Lvs1],_,_,St1} = emul(Bis, Acc0, [L|Lvs0], Stk, Env, St0),
     emul(Is, Acc1, Lvs1, Stk, Env, St1);
 do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, Esz, Bis) ->
+    %% Both local and env variables.
     L = erlang:make_tuple(Lsz, nil),
     E = erlang:make_tuple(Esz, nil),
     {Fref,St1} = alloc_frame(E, St0),
@@ -588,8 +600,20 @@ functioncall(Is, Acc, Lvs, Stk0, Env, St0, Func, Args) ->
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
     emul(Is, Ret, Lvs, Stk0, Env, St1).
 
+functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
+    %% No variables at all.
+    functioncall(Fis, [], Stk, Env, St0);
+functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
+	     Args, Stk, St0) ->
+    %% No local variables, only env variables.
+    E0 = erlang:make_tuple(Esz, nil),
+    E1 = assign_env_pars(Pars, Args, E0),
+    {Fref,St1} = alloc_frame(E1, St0),
+    {Ret,St2} = functioncall(Fis, [], Stk, [Fref|Env], St1),
+    {Ret,St2};
 functioncall(#function{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
+    %% No env variables, only local variables.
     L0 = erlang:make_tuple(Lsz, nil),
     L1 = assign_local_pars(Pars, Args, L0),
     {Ret,St1} = functioncall(Fis, [L1], Stk, Env, St0),
@@ -636,6 +660,14 @@ assign_local_pars([_|Vs], [], Var) ->
 assign_local_pars([], _, Var) -> Var;		%No vararg, drop remain args
 assign_local_pars(V, As, Var) ->		%This is a vararg!
     setelement(V, Var, As).
+
+assign_env_pars([V|Vs], [A|As], Var) ->
+    assign_env_pars(Vs, As, setelement(-V, Var, A));
+assign_env_pars([_|Vs], [], Var) ->
+    assign_env_pars(Vs, [], Var);		%Var default is nil
+assign_env_pars([], _, Var) -> Var;		%No vararg, drop remain args
+assign_env_pars(V, As, Var) ->			%This is a vararg!
+    setelement(-V, Var, As).
 
 assign_pars([V|Vs], [A|As], L, E) when V > 0 ->
     assign_pars(Vs, As, setelement(V, L, A), E);
