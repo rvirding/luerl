@@ -25,7 +25,7 @@
 -export([test_gsub/3,test_do_match/3,test_pat/1,	%Test functions
 	 test_byte/3,test_find/4,test_sub/2,test_sub/3]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
 
 %%-compile([bin_opt_info]).			%For when we are optimising
 
@@ -60,7 +60,7 @@ byte(As, St) ->
 	[S|Is] ->
 	    Bs = do_byte(S, byte_size(S), Is),
 	    {Bs,St};
-	_ -> lua_error({badarg,byte,As})	%nil or []
+	_ -> badarg_error(byte, As)		%nil or []
     end.
 
 test_byte(S, I, J) ->
@@ -85,7 +85,7 @@ do_byte_ij(S, _, I, J) ->
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
     case catch list_to_binary(luerl_lib:to_ints(As)) of
-	{'EXIT',_} -> lua_error({badarg,char,As});
+	{'EXIT',_} -> badarg_error(char, As);
 	B -> {[B],St}
     end.
 
@@ -94,7 +94,7 @@ find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
 find(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer,lua_bool]) of
 	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St};
-	_ -> lua_error({badarg,find,As})	%nil, [_] or []
+	_ -> badarg_error(find, As)		%nil, [_] or []
     end.
 
 test_find(S, P, I, Pl) -> find(S, byte_size(S), P, I, Pl).
@@ -129,7 +129,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 format([F|As], St) ->
     L = format_loop(F, As),
     {[iolist_to_binary(L)],St};
-format(As, _) -> lua_error({badarg,format,As}).
+format(As, _) -> badarg_error(format, As).
 
 format_loop(<<$%,F0/binary>>, As0) ->
     {Fo,F1} = collect(F0),
@@ -160,12 +160,21 @@ build({$s,_,_,_}, [A|As]) ->
     {io_lib:fwrite("~s", [S]),As};
 build({$q,_,_,_}, [A|As]) ->
     S = luerl_lib:tostring(A),
-    {io_lib:fwrite("\"~s\"", [S]),As};
+    %% You don't really want to know!
+    Ss0 = re:split(S, "([\\0-\\39\\\n\\\"\\\\\\177-\\237])", [trim]),
+    Ss1 = build_q(Ss0),
+    {[$",Ss1,$"],As};
+build({$c,_,_,_}, [A|As]) ->
+    I = luerl_lib:to_int(A),
+    {[I],As};
 build({$d,_,_,_}, [A|As]) ->
-    I = luerl_lib:tointeger(A),
+    I = luerl_lib:to_int(A),
     {io_lib:write(I),As};
+build({$x,_,_,_}, [A|As]) ->
+    I = luerl_lib:to_int(A),
+    {io_lib:format("~.16b", [I]),As};
 build({$i,_,_,_}, [A|As]) ->
-    I = luerl_lib:tointeger(A),
+    I = luerl_lib:to_int(A),
     {io_lib:write(I),As};
 build({$e,_,_,_}, [A|As]) ->
     F = luerl_lib:tonumber(A),
@@ -175,9 +184,27 @@ build({$f,_,_,_}, [A|As]) ->
     {io_lib:format("~f", [F]),As};
 build({$g,_,_,_}, [A|As]) ->
     F = luerl_lib:tonumber(A),
-    {io_lib:format("~g", [F]),As}.
+    {io_lib:format("~g", [F]),As};
+build({F,_,_,_}, _) ->
+    badarg_error(format, [F]).
 
-gmatch(As, _) -> lua_error({badarg,gmatch,As}).
+build_q([<<>>|Ss]) -> build_q(Ss);
+build_q([<<$\n>>|Ss]) -> [$\\,$\n|build_q(Ss)];
+build_q([<<$">>|Ss]) -> [$\\,$"|build_q(Ss)];
+build_q([<<$\\>>|Ss]) -> [$\\,$\\|build_q(Ss)];
+build_q([<<C1>>=B1|Ss0]) when C1 >=0, C1 =< 31 ->
+    case Ss0 of
+	[<<C2,_/binary>>|_] when C2 >= $0, C2 =< $9 ->
+	    [io_lib:format("\\~.3.0w", [C1])|build_q(Ss0)];
+	[<<>>|Ss1] -> build_q([B1|Ss1]);
+	_ -> [io_lib:format("\\~w", [C1])|build_q(Ss0)]
+    end;
+build_q([<<B>>|Ss0]) when B >= 127, B =< 159 ->
+    [io_lib:write(B)|build_q(Ss0)];
+build_q([S|Ss]) -> [S|build_q(Ss)];
+build_q([]) -> [].
+
+gmatch(As, _) -> badarg_error(gmatch, As).
 
 gsub(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,integer]) of
@@ -185,7 +212,7 @@ gsub(As, St) ->
 	    gsub(S, byte_size(S), P, R, N, St);
 	[S,P,R] ->				%'all' bigger than any number
 	    gsub(S, byte_size(S), P, R, all, St);
-	_ -> lua_error({badarg,gsub,As})
+	_ -> badarg_error(gsub, As)
     end.
 
 test_gsub(S, P, N) ->
@@ -285,12 +312,12 @@ gsub_repl_val(S, Val, Ca) ->
 len([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
-len(As, _) -> lua_error({badarg,len,As}).
+len(As, _) -> badarg_error(len, As).
 
 lower(As, St) ->
     case luerl_lib:conv_list(As, [list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
-	nil -> lua_error({badarg,lower,As})
+	nil -> badarg_error(lower, As)
     end.
 
 %% match(Args, State) -> {[Match],State}.
@@ -299,7 +326,7 @@ match([A1,A2], St) -> match([A1,A2,1.0], St);
 match(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer]) of
 	[S,P,I] -> {match(S, byte_size(S), P, I),St};
-	_ -> lua_error({badarg,match,As})
+	_ -> badarg_error(match, As)
     end.
 
 %% match(String, Length, Pattern, Start) -> [Return].
@@ -355,16 +382,16 @@ rep([_,_,_|_]=As, St) ->
 	       true -> {[<<>>],St}
 	    end;
 	nil ->					%Error or bad values
-	    lua_error({badarg,rep,As})
+	    badarg_error(rep, As)
     end;
-rep(As, _) -> lua_error({badarg,rep,As}).
+rep(As, _) -> badarg_error(rep, As).
 
 %% reverse(Args, State) -> {[Res],St}.
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
-reverse(As, _) -> lua_error({badarg,reverse,As}).
+reverse(As, _) -> badarg_error(reverse, As).
 
 %% sub(Args, State) -> {[Res],State}.
 
@@ -374,7 +401,7 @@ sub(As, St) ->
 	    Len = byte_size(S),
 	    Sub = do_sub(S, Len, I, Js),	%Just I, or both I and J
 	    {[Sub],St};
-	_ -> lua_error({badarg,sub,As})		%nil, [_] or []
+	_ -> badarg_error(sub, As)		%nil, [_] or []
     end.
 
 test_sub(S, I) -> do_sub(S, byte_size(S), I, []).
@@ -401,7 +428,7 @@ do_sub_ij(S, _, I, J) ->
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
-upper(As, _) -> lua_error({badarg,upper,As}).
+upper(As, _) -> badarg_error(upper, As).
 
 %% This is the pattern grammar used. It may actually be overkill to
 %% first parse the pattern as the pattern is relativey simple and we

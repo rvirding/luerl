@@ -283,8 +283,8 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#function{}) -> <<"function">>;	%Functions defined in Lua
-tostring({function,_}) -> <<"function">>;	%Internal functions
+tostring(#function{}) -> <<"function:">>;	%Functions defined in Lua
+tostring({function,_}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
