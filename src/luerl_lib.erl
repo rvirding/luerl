@@ -24,7 +24,7 @@
 
 -include("luerl.hrl").
 
--export([lua_error/1,badarg_error/2,format_error/1,
+-export([lua_error/2,badarg_error/3,format_error/1,
 	 is_true_value/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
@@ -33,11 +33,12 @@
 
 -export([anew/1,asiz/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
 
--spec lua_error(_) -> no_return().
+-spec lua_error(_,_) -> no_return().
+-spec badarg_error(_,_,_) -> no_return().
 
-badarg_error(What, Args) -> lua_error({badarg,What,Args}). 
+lua_error(E, St) -> error({lua_error,E,St}).
 
-lua_error(E) -> error({lua_error,E}).
+badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 
 %% Experimental structure for the array/list part of a table. List of
 %% segments containing values, all nil fields are gaps.

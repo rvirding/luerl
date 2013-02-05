@@ -51,7 +51,7 @@
 %% For testing.
 -export([pop_vals/3,push_vals/3]).
 
--import(luerl_lib, [lua_error/1,badarg_error/2]).
+-import(luerl_lib, [lua_error/2,badarg_error/3]).
 
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[is_true_value/1,first_value/1]}).
@@ -168,8 +168,8 @@ set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
     end;
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
-set_table_key(Tab, Key, _, _) ->
-    lua_error({illegal_index,Tab,Key}).
+set_table_key(Tab, Key, _, St) ->
+    lua_error({illegal_index,Tab,Key}, St).
 
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
@@ -226,7 +226,7 @@ get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
-	nil -> lua_error({illegal_index,Tab,Key});
+	nil -> lua_error({illegal_index,Tab,Key}, St);
 	Meth when element(1, Meth) =:= function ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {first_value(Vs),St1};
@@ -632,7 +632,7 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
-	nil -> badarg_error(Func, Args);
+	nil -> badarg_error(Func, Args, St);
 	Meta -> functioncall(Meta, Args, Stk, St)
     end.
 
@@ -649,8 +649,8 @@ functioncall(Fis, Lvs, Stk, Env, St0) ->
 	throw:{return,Tag,Ret,Stb} ->
 	    %%io:fwrite("fr: ~p\n", [{Tag,Ret,Stb#luerl.env}]),
 	    {Ret,Stb};
-	throw:{break,Tag,_,_,_,_} ->
-	    lua_error({illegal_op,break})
+	throw:{break,Tag,_,_,_,St} ->
+	    lua_error({illegal_op,break}, St)
     end.
 
 assign_local_pars([V|Vs], [A|As], Var) ->
@@ -761,7 +761,7 @@ do_numfor(Is, Step, Lvs, [Limit,Init|Stk], Env, St, _, Fis) ->
 			 numfor_loop(I, L, S, Fis, Lvs, Stk, Env, St)
 		 end,
 	    loop_block(Is, Lvs, Stk, Env, St, Do);
-	nil -> badarg_error(loop, [Init,Limit,Step])
+	nil -> badarg_error(loop, [Init,Limit,Step], St)
     end.
 
 numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
@@ -880,7 +880,7 @@ op('not', A, St) -> {[not ?IS_TRUE(A)],St};
 op('#', B, St) when is_binary(B) -> {[float(byte_size(B))],St};
 op('#', #tref{}=T, St) ->
     luerl_table:length(T, St);
-op(Op, A, _) -> badarg_error(Op, [A]).
+op(Op, A, St) -> badarg_error(Op, [A], St).
 
 %% Numeric operators.
 op('+', A1, A2, St) ->
@@ -914,7 +914,7 @@ op('..', A1, A2, St) ->
 	    functioncall(Meta, [A1,A2], St)
     end;
 %% Bad args here.
-op(Op, A1, A2, _) -> badarg_error(Op, [A1,A2]).
+op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
 
 %% numeric_op(Op, Arg, Event, Raw, State) -> {[Ret],State}.
 %% numeric_op(Op, Arg, Arg, Event, Raw, State) -> {[Ret],State}.
@@ -1000,9 +1000,6 @@ is_true_value(_) -> true.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
-
-illegal_val_error(Val) ->
-    lua_error({illegal_val,Val}).
 
 %% gc(State) -> State.
 %%  The garbage collector. Its main job is to reclaim unused tables
