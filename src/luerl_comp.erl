@@ -268,10 +268,9 @@ stmt({functiondef,Line,Fname,Ps,B}, St) ->
     fdef_stmt(Line, Fname, Ps, B, St);
 stmt({local,Line,Local}, St) ->
     local_stmt(Line, Local, St);
-stmt(Exp, St0) ->				%This is really just a call
+stmt(Exp, St) ->				%This is really just a call
     Line = element(2, Exp),
-    {Ce,St1} = exp(Exp, St0),
-    {#call_stmt{l=Line,call=Ce},St1}.
+    call_stmt(Line, Exp, St).
 
 %% assign_stmt(Line, Vars, Exps, State) -> {Assign,State}.
 
@@ -311,6 +310,12 @@ var_last({key_field,L,Exp}, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {#key{l=L,k=Ce},St1}.
 
+%% call_stmt(Line, Exp, State) -> {Call,State}.
+
+call_stmt(Line, Exp, St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {#call_stmt{l=Line,call=Ce},St1}.
+
 %% return_stmt(Line, Exps, State) -> {Return,State}.
 
 return_stmt(Line, Es, St0) ->
@@ -335,11 +340,14 @@ while_stmt(Line, Exp, B, St0) ->
     {#while_stmt{l=Line,e=Ce,b=Cb},St2}.
 
 %% repeat_stmt(Line, Block, Exp, State) -> {Repeat,State}.
+%%  Append the test expression into the block as a single value
+%%  expression.
 
 repeat_stmt(Line, B, Exp, St0) ->
-    {Cb,St1} = block(Line, B, St0),
-    {Ce,St2} = exp(Exp, St1),
-    {#repeat_stmt{l=Line,b=Cb,e=Ce},St2}.
+    {Cb0,St1} = block(Line, B, St0),
+    {Ce,St2} = expr_stmt(Line, {single,Line,Exp}, St1),
+    Cb1 = Cb0#block{ss=Cb0#block.ss ++ [Ce]},
+    {#repeat_stmt{l=Line,b=Cb1},St2}.
 
 %% if_stmt(Line, Test, Else, State) -> {If,State}.
 
@@ -445,6 +453,13 @@ local_stmt(Line, {assign,_,Ns,Es}, St0) ->
     {Ces,St1} = explist(Es, St0),
     {Cns,St2} = mapfoldl(fun (V, St) -> var(V, St) end, St1, Ns),
     {#local_assign_stmt{l=Line,vs=Cns,es=Ces},St2}.
+
+%% expr_stmt(Line, Exp, State) -> {Call,State}.
+%%  The expression pseudo statement. This will return a single value.
+
+expr_stmt(Line, Exp, St0) ->
+    {Ce,St1} = exp(Exp, St0),
+    {#expr_stmt{l=Line,exp=Ce},St1}.
 
 %% explist(Exprs, State) -> {Ins,State}.
 %% exp(Expression, State) -> {Ins,State}.

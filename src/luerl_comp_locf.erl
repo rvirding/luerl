@@ -57,7 +57,9 @@ stmt(#gfor_stmt{}=For, St) -> genfor_stmt(For, St);
 stmt(#local_assign_stmt{}=L, St) ->
     local_assign_stmt(L, St);
 stmt(#local_fdef_stmt{}=L, St) ->
-    local_fdef_stmt(L, St).
+    local_fdef_stmt(L, St);
+stmt(#expr_stmt{}=E, St) ->
+    expr_stmt(E, St).
 
 %% assign_stmt(Assign, State) -> {Assign,LocalFunc,State}.
 
@@ -127,11 +129,9 @@ while_stmt(#while_stmt{e=E0,b=B0}=W, St0) ->
 %% repeat_stmt(Repeat, State) -> {Repeat,LocalFunc,State}.
 %%  The test expression is done in the context of the repeat block.
 
-repeat_stmt(#repeat_stmt{b=B0,e=E0}=R, St0) ->
+repeat_stmt(#repeat_stmt{b=B0}=R, St0) ->
     {B1,Blocf,St1} = do_block(B0, St0),
-    {E1,Elocf,St2} = exp(E0, St1),
-    Locf = Blocf or Elocf,
-    {R#repeat_stmt{b=B1,e=E1},Locf,St2}.
+    {R#repeat_stmt{b=B1},Blocf,St1}.
 
 %% if_stmt(If, State) -> {If,LocalFunc,State}.
 %%  The block info includes anything from the test expressions even
@@ -178,6 +178,13 @@ local_assign_stmt(#local_assign_stmt{es=Es0}=L, St0) ->
 local_fdef_stmt(#local_fdef_stmt{f=F0}=L, St0) ->
     {F1,_,St1} = functiondef(F0, St0),		%Don't care what's in func
     {L#local_fdef_stmt{f=F1},true,St1}.
+
+%% expr_stmt(Expr, State) -> {Expr,LocalFunc,State}.
+%%  The expression pseudo statement. This will return a single value.
+
+expr_stmt(#expr_stmt{exp=Exp0}=E, St0) ->
+    {Exp1,Locf,St1} = exp(Exp0, St0),
+    {E#expr_stmt{exp=Exp1},Locf,St1}.
 
 %% explist(Exprs, State) -> {Exprs,LocalFunc,State}.
 %% exp(Expr, State) -> {Expr,LocalFunc,State}.

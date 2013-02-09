@@ -153,7 +153,9 @@ stmt(#gfor_stmt{}=F, _, St) -> genfor_stmt(F, St);
 stmt(#local_assign_stmt{}=L, _, St) ->
     local_assign_stmt(L, St);
 stmt(#local_fdef_stmt{}=L, _, St) ->
-    local_fdef_stmt(L, St).
+    local_fdef_stmt(L, St);
+stmt(#expr_stmt{}=E, _, St) ->
+    expr_stmt(E, St).
 
 %% assign_stmt(Assign, State) -> {Assign,State}.
 
@@ -238,10 +240,9 @@ while_stmt(#while_stmt{e=E0,b=B0}=W, St0) ->
 
 %% repeat_stmt(Repeat, State) -> {Repeat,State}.
 
-repeat_stmt(#repeat_stmt{b=B0,e=E0}=R, St0) ->
+repeat_stmt(#repeat_stmt{b=B0}=R, St0) ->
     {B1,St1} = do_block(B0, St0),
-    {E1,St2} = exp(E0, St1),
-    {R#repeat_stmt{b=B1,e=E1},St2}.
+    {R#repeat_stmt{b=B1},St1}.
 
 %% if_stmt(If, State) -> {If,State}.
 
@@ -311,6 +312,13 @@ local_fdef_stmt(#local_fdef_stmt{v=#var{n=N},f=F0}=L, St0) ->
     %% io:fwrite("lf: ~p\n", [St1]),
     %% io:fwrite("lf: ~p\n", [St2]),
     {L#local_fdef_stmt{v=V1,f=F1},St2}.
+
+%% expr_stmt(Expr, State) -> {Call,State}.
+%%  The expression pseudo statement. This will return a single value.
+
+expr_stmt(#expr_stmt{exp=Exp0}=E, St0) ->
+    {Exp1,St1} = exp(Exp0, St0),
+    {E#expr_stmt{exp=Exp1},St1}.
 
 %% explist(Exprs, LocalVars, State) -> {Exprs,FreeVars,State}.
 %% exp(Expr, LocalVars, State) -> {Expr,FreeVars,State}.

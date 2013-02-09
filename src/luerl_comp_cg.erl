@@ -71,7 +71,9 @@ stmt(#gfor_stmt{}=F, _, St) -> genfor_stmt(F, St);
 stmt(#local_assign_stmt{}=L, _, St) ->
     local_assign_stmt(L, St);
 stmt(#local_fdef_stmt{}=L, _, St) ->
-    local_fdef_stmt(L, St).
+    local_fdef_stmt(L, St);
+stmt(#expr_stmt{}=E, _, St) ->
+    expr_stmt(E, St).
 
 %% assign_stmt(Assign, State) -> {AssignIs,State}.
 
@@ -153,8 +155,6 @@ block_stmt(#block_stmt{ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
 %% do_block(Block, State) -> {Block,State}.
 %%  Do_block never returns external new variables. Fits into stmt().
 
-%% do_block(#block{b=Ss,local=[],used=[]}, St) ->	%No local variables in block
-%%     stmts(Ss, St);				%Fold into surrounding block
 do_block(#block{ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
     {[?BLOCK(Lsz, Esz, Iss)],St1}.
@@ -168,10 +168,9 @@ while_stmt(#while_stmt{e=E,b=B}, St0) ->
 
 %% repeat_stmt(Repeat, State) -> {RepeatIs,State}.
 
-repeat_stmt(#repeat_stmt{b=B,e=E}, St0) ->
+repeat_stmt(#repeat_stmt{b=B}, St0) ->
     {Ib,St1} = do_block(B, St0),
-    {Ie,St2} = exp(E, true, St1),
-    {[?REPEAT(Ib ++ Ie)],St2}.
+    {[?REPEAT(Ib)],St1}.
 
 %% if_stmt(If, State) -> {If,State}.
 
@@ -262,6 +261,12 @@ assign_local_loop_exp([E|Es], St0) ->
     {Ie ++ Ias,St2};
 assign_local_loop_exp([], St) -> {[],St}.
 
+%% expr_stmt(Expr, State) -> {ExprIs,State}.
+%%  The expression pseudo statement. This will return a single value.
+expr_stmt(#expr_stmt{exp=Exp}, St0) ->
+    {Ie,St1} = exp(Exp, true, St0),
+    {Ie,St1}.
+
 %% explist(Exprs, State) -> {Instrs,State}.
 %% explist(Exprs, SingleValue, State) -> {Instrs,State}.
 %% exp(Expr, SingleValue, State) -> {Instrs,State}.
@@ -301,6 +306,13 @@ exp(E, S, St) ->
 
 first_value(true, Is) -> Is ++ [?SINGLE];
 first_value(false, Is) -> Is.
+
+%% prefixexp(Expr, SingleValue, State) -> {Instrs,State}.
+%% prefixexp_rest(Expr, SingleValue, State) -> {Instrs,State}.
+%% prefixexp_first(Expr, SingleValue, State) -> {Instrs,State}.
+%% prefixexp_element(Expr, SingleValue, State) -> {Instrs,State}.
+%%  Single determines if we are to only return the first value of a
+%%  list of values. Single false does not make us a return a list.
 
 prefixexp(#dot{e=Exp,r=Rest}, S, St0) ->
     {Ie,St1} = prefixexp_first(Exp, true, St0),

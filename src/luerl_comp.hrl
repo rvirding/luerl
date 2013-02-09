@@ -52,7 +52,7 @@
 
 -record(while_stmt, {l,e,b=[]}).
 
--record(repeat_stmt, {l,b=[],e}).
+-record(repeat_stmt, {l,b=[]}).
 
 -record(nfor_stmt, {l,v,init,limit,step,b=[]}).
 
@@ -63,6 +63,8 @@
 -record(local_assign_stmt, {l,vs,es}).
 
 -record(local_fdef_stmt, {l,v,f}).
+
+-record(expr_stmt, {l,exp}).			%Pseudo stmt for expressions
 
 -record(block, {l,ss=[],			%Sub-blocks
 		vars=none,			%Variable info

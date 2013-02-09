@@ -71,7 +71,10 @@ stmt(#gfor_stmt{}=For, Loc, St) -> genfor_stmt(For, Loc, St);
 stmt(#local_assign_stmt{}=L, Loc, St) ->
     local_assign_stmt(L, Loc, St);
 stmt(#local_fdef_stmt{}=L, Loc, St) ->
-    local_fdef_stmt(L, Loc, St).
+    local_fdef_stmt(L, Loc, St);
+stmt(#expr_stmt{}=E, Loc, St) ->		%Expressions "statement"
+    expr_stmt(E, Loc, St).
+
 
 %% assign_stmt(Assign, LocalVars, State) ->
 %%     {Assign,NewVars,UsedVars,FusedVars,State}.
@@ -156,9 +159,8 @@ do_block(#block{ss=Ss0}=B, Loc, St0) ->
 
 %% while_stmt(While, LocalVars, State) ->
 %%     {While,NewVars,UsedVars,FusedVars,State}.
-%%  While_stmt never returns external new variables. Fits into stmt().
-%%  The test expression is done in the context of the surrounding
-%%  block.
+%%  While_stmt never returns external new variables.  The test
+%%  expression is done in the context of the surrounding block.
 
 while_stmt(#while_stmt{e=E0,b=B0}=W, Loc, St0) ->
     {E1,Eused,Efused,St1} = exp(E0, Loc, St0),
@@ -169,21 +171,13 @@ while_stmt(#while_stmt{e=E0,b=B0}=W, Loc, St0) ->
 
 %% repeat_stmt(Repeat, LocalVars, State) ->
 %%     {Repeat,NewVars,UsedVars,FusedVars,State}.
-%%  Repeat_stmt never returns external new variables. Fits into
-%%  stmt(). The test expression is done in the context of the repeat
-%%  block.
+%%  Repeat_stmt never returns external new variables. The test
+%%  expression is done in the context of the repeat block and is
+%%  already inside the block.
 
-repeat_stmt(#repeat_stmt{b=B0,e=E0}=R, _, St0) ->
-    {B1,E1,Used,Fused,St1} = repeat_block(B0, E0, St0),
-    {R#repeat_stmt{b=B1,e=E1},[],Used,Fused,St1}.
-
-repeat_block(#block{ss=B0}=B, E0, St0) ->
-    Vars0 = #vars{local=[],free=[],used=[],fused=[]},
-    {B1,Vars1,St1} = stmts(B0, Vars0, St0),
-    %% Now do the test in the context of the block.
-    {E1,Eused,Efused,St2} = exp(E0, Vars1#vars.local, St1),
-    Vars2 = update_vars(Vars1, [], Eused, Efused),
-    {B#block{ss=B1,vars=Vars2},E1,Vars2#vars.used,Vars2#vars.fused,St2}.
+repeat_stmt(#repeat_stmt{b=B0}=R, _, St0) ->
+    {B1,Used,Fused,St1} = do_block(B0, St0),
+    {R#repeat_stmt{b=B1},[],Used,Fused,St1}.
 
 %% if_stmt(If, LocalVars, State) -> {If,NewVars,FreeVars,State}.
 %%  The block info includes anything from the test expressions even
@@ -244,6 +238,14 @@ local_fdef_stmt(#local_fdef_stmt{v=#var{n=N},f=F0}=L, _, St0) ->
     {F1,Used,Fused,St1} = functiondef(F0, nul, St0),
     New = [N],
     {L#local_fdef_stmt{f=F1},New,Used,Fused,St1}.
+
+%% exp_stmt(Expr, LocalVars, State) ->
+%%     {Expr,NewVars,UsedVars,FusedVars,State}.
+%%  This will return a single value.
+
+expr_stmt(#expr_stmt{exp=Exp0}=E, Loc, St0) ->
+    {Exp1,Used,Fused,St1} = exp(Exp0, Loc, St0),
+    {E#expr_stmt{exp=Exp1},[],Used,Fused,St1}.
 
 %% explist(Exprs, LocalVars, State) -> {Exprs,UsedVars,FusedVars,State}.
 %% exp(Expr, LocalVars, State) -> {Expr,UsedVars,FusedVars,State}.
