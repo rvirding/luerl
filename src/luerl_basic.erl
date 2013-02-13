@@ -185,8 +185,19 @@ print(Args, St0) ->
     io:nl(),
     {[],St1}.
 
+%% rawequal([Arg,Arg|_], State) -> {[Bool],State}.
+%% rawlen([Object|_], State) -> {[Length],State}.
+%% rawget([Table,Key|_], State) -> {[Val],State)}.
+%% rawset([Table,Key,Value|_]], State) -> {[Table],State)}.
+
 rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
 rawequal(As, St) -> badarg_error(rawequal, As, St).
+
+rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
+rawlen([#tref{i=N}|_], St) ->
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
+    {[float(array:size(Arr))],St};
+rawlen(As, St) -> badarg_error(rawlen, As, St).
 
 rawget([#tref{i=N},K|_], St) when is_number(K) ->
     #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
@@ -202,12 +213,6 @@ rawget([#tref{i=N},K|_], St) ->
     V = raw_get_key(Tab, K),
     {[V],St};
 rawget(As, St) -> badarg_error(rawget, As, St).
-
-rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
-rawlen([#tref{i=N}|_], St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-    {[float(array:size(Arr))],St};
-rawlen(As, St) -> badarg_error(rawlen, As, St).
 
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_number(K) ->
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),

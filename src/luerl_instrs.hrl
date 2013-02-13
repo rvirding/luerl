@@ -31,7 +31,8 @@
 -define(SET_KEY, set_key).			%Stk[
 -define(SET_LIT_KEY(K), {set_lit_key,K}).	%[?PUSH,?LIT(K),?SET_KEY]
 
--define(SINGLE, single).
+-define(SINGLE, single).			%Ensure single value
+-define(MULTIPLE, multiple).			%Ensure multiple value
 
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
 -define(CALL(Ac), {call,Ac}).
@@ -64,7 +65,3 @@
 -define(PUSH_LVAR(D,I), {push_lvar,D,I}).	%?LVAR(D,I), ?PUSH
 -define(PUSH_EVAR(D, I), {push_evar,D,I}).	%?EVAR(D,I), ?PUSH
 -define(PUSH_GVAR(K), {push_gvar,K}).		%?GVAR(K), ?PUSH
-
-%% -record(push_vals,{ac}).
-%% #push_vals{ac=Ac}
-%% ?PUSH_VALS(Ac)

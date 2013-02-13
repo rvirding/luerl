@@ -402,7 +402,7 @@ emul_1([?GET_KEY|Is], Acc, Var, [Tab|Stk], Env, St0) ->
     {Val,St1} = get_table_key(Tab, Acc, St0),
     emul(Is, Val, Var, Stk, Env, St1);
 emul_1([?GET_LIT_KEY(S)|Is], Acc, Var, Stk, Env, St0) ->
-    %% [?PUSH,?LOAD_LIT(S),?KEY]
+    %% [?PUSH,?LOAD_LIT(S),?GET_KEY]
     {Val,St1} = get_table_key(Acc, S, St0),
     emul(Is, Val, Var, Stk, Env, St1);
 emul_1([?SET_KEY|Is], Acc, Var, [Tab,Val|Stk], Env, St0) ->
@@ -415,6 +415,9 @@ emul_1([?SET_LIT_KEY(K)|Is], Acc, Var, [Val|Stk], Env, St0) ->
 
 emul_1([?SINGLE|Is], Acc, Var, Stk, Env, St) ->
     emul(Is, first_value(Acc), Var, Stk, Env, St);
+emul_1([?MULTIPLE|Is], Acc, Var, Stk, Env, St) ->
+    emul(Is, multiple_value(Acc), Var, Stk, Env, St);
+
 emul_1([?BUILD_TAB(Fc, I)|Is], Acc, Var, Stk0, Env, St0) ->
     {Tab,Stk1,St1} = build_tab(Fc, I, Acc, Stk0, St0),
     emul(Is, Tab, Var, Stk1, Env, St1);
@@ -503,8 +506,7 @@ emul_1([], Acc, Var, Stk, Env, St) ->
 
 pop_vals(C, Stk, Vt) when is_list(Vt) ->	%List tail
     pop_vals_1(C, Stk, Vt);
-pop_vals(C, Stk, V) ->				%Non-list tail
-    pop_vals_1(C, Stk, [V]).
+pop_vals(_, _, Vt) -> error({boom,pop_vals,Vt}).
 
 pop_vals_1(0, Stk, Vs) -> {Vs,Stk};
 pop_vals_1(Ac, [A|Stk], Vs) ->
@@ -517,13 +519,11 @@ pop_vals_1(Ac, [A|Stk], Vs) ->
 
 push_vals(0, Stk, []) -> {nil,Stk};
 push_vals(0, Stk, [V|_]) -> {V,Stk};
-push_vals(0, Stk, V) -> {V,Stk};
 push_vals(C, Stk, [V|Vs]) ->
     push_vals(C-1, [V|Stk], Vs);
 push_vals(C, Stk, []) ->
-    push_vals(C-1, [nil|Stk], nil);
-push_vals(C, Stk, Val) ->			%Non-list value
-    push_vals(C-1, [Val|Stk], nil).
+    push_vals(C-1, [nil|Stk], []);
+push_vals(_, _, V) -> error({boom,push_vals,V}).	%Non-list value
 
 pop_args(0, Stk, _) -> {[],Stk};
 pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
@@ -777,22 +777,6 @@ numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
        true -> {Lvs0,St0}				%Done!
     end.
 
-numfor_loop_up(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
-    %% Leave the counter in the Acc for code to get.
-    if N =< Limit ->				%Keep going
-	    {_,Lvs1,Stk1,Env1,St1} = emul(Fis, N, Lvs0, Stk0, Env0, St0),
-	    numfor_loop_up(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
-       true -> {Lvs0,St0}			%Done!
-    end.
-
-numfor_loop_down(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
-    %% Leave the counter in the Acc for code to get.
-    if N >= Limit ->				%Keep going
-	    {_,Lvs1,Stk1,Env1,St1} = emul(Fis, N, Lvs0, Stk0, Env0, St0),
-	    numfor_loop_down(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
-       true -> {Lvs0,St0}			%Done!
-    end.
-
 %% do_genfor(Instrs, Acc, Var, Stack, Env, State, Vars, FromInstrs) -> <emul>
 
 do_genfor(Is, Acc, Var, Stk, Env, St, _, Fis) ->
@@ -860,24 +844,23 @@ build_tab(Fc, I, Acc, Stk0, St0) ->
 build_tab_acc(I, [V|Vs]) ->
     [{I,V}|build_tab_acc(I+1.0, Vs)];
 build_tab_acc(_, []) -> [];
-build_tab_acc(_, nil) -> [];			%Drop final nil
-build_tab_acc(I, V) -> [{I,V}].			%Single value
+build_tab_acc(_, Acc) -> error({boom,build_tab_acc,Acc}).
 
 build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
     build_tab_loop(C-1, Stk, [{K,V}|Fs]).
 
-%% op(Op, Arg, State) -> {[Ret],State}.
-%% op(Op, Arg1, Arg2, State) -> {[Ret],State}.
-%% The built-in operators.
+%% op(Op, Arg, State) -> {Ret,State}.
+%% op(Op, Arg1, Arg2, State) -> {Ret,State}.
+%% The built-in operators. Always return a single value!
 
 op('-', A, St) ->
     numeric_op('-', A, <<"__unm">>, fun (N) -> -N end, St);
-op('not', A, St) -> {[not ?IS_TRUE(A)],St};
+op('not', A, St) -> {not ?IS_TRUE(A),St};
 %% op('not', false, St) -> {[true],St};
 %% op('not', nil, St) -> {[true],St};
 %% op('not', _, St) -> {[false],St};		%Everything else is false
-op('#', B, St) when is_binary(B) -> {[float(byte_size(B))],St};
+op('#', B, St) when is_binary(B) -> {float(byte_size(B)),St};
 op('#', #tref{}=T, St) ->
     luerl_table:length(T, St);
 op(Op, A, St) -> badarg_error(Op, [A], St).
@@ -908,7 +891,7 @@ op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 op('..', A1, A2, St) ->
     B1 = luerl_lib:tostring(A1),
     B2 = luerl_lib:tostring(A2),
-    if B1 =/= nil, B2 =/= nil -> {[<< B1/binary,B2/binary >>],St};
+    if B1 =/= nil, B2 =/= nil -> {<< B1/binary,B2/binary >>,St};
        true ->
 	    Meta = getmetamethod(A1, A2, <<"__concat">>, St),
 	    functioncall(Meta, [A1,A2], St)
@@ -926,64 +909,70 @@ op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
 
 numeric_op(_Op, O, E, Raw, St0) ->
     N = luerl_lib:tonumber(O),
-    if is_number(N) -> {[Raw(N)],St0};
+    if is_number(N) -> {Raw(N),St0};
        true ->
     	    Meta = getmetamethod(O, E, St0),
     	    {Ret,St1} = functioncall(Meta, [O], St0),
-    	    {[is_true_value(Ret)],St1}
+	    {first_value(Ret),St1}
     end.
 
 numeric_op(_Op, O1, O2, E, Raw, St0) ->
     N1 = luerl_lib:tonumber(O1),
     N2 = luerl_lib:tonumber(O2),
-    if is_number(N1), is_number(N2) -> {[Raw(N1, N2)],St0};
+    if is_number(N1), is_number(N2) -> {Raw(N1, N2),St0};
        true ->
     	    io:fwrite("no: ~p\n", [{_Op,O1,O2,N1,N2}]),
     	    Meta = getmetamethod(O1, O2, E, St0),
     	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-    	    {[is_true_value(Ret)],St1}
+	    {first_value(Ret),St1}
     end.
 
-eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[true],St};
-eq_op(_Op, O1, O2, St0) ->
-    {Ret,St1} = eq_meta(O1, O2, St0),
-    {[is_true_value(Ret)],St1}.
+eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {true,St};
+eq_op(_Op, O1, O2, St) ->
+    eq_meta(O1, O2, St).
 
-neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {[false],St};
+neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {false,St};
 neq_op(_Op, O1, O2, St0) ->
     {Ret,St1} = eq_meta(O1, O2, St0),
-    {[not is_true_value(Ret)],St1}.
+    {not Ret,St1}.
 
 eq_meta(O1, O2, St0) ->
     case getmetamethod(O1, <<"__eq">>, St0) of
-	nil -> {[false],St0};			%Tweren't no method
+	nil -> {false,St0};			%Tweren't no method
 	Meta ->
 	    case getmetamethod(O2, <<"__eq">>, St0) of
 		Meta ->				%Must be the same method
-		    functioncall(Meta, [O1,O2], St0);
-		_ -> {[false],St0}
+		    {Ret,St1} =functioncall(Meta, [O1,O2], St0),
+		    {is_true_value(Ret),St1};
+		_ -> {false,St0}
 	    end
     end.
 
-lt_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 < O2],St};
-lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 < O2],St};
-lt_op(_Op, O1, O2, St0) ->
-    Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
-    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-    {[is_true_value(Ret)],St1}.
+lt_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {O1 < O2,St};
+lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {O1 < O2,St};
+lt_op(Op, O1, O2, St0) ->
+    case getmetamethod(O1, O2, <<"__lt">>, St0) of
+	nil -> badarg_error(Op, [O1,O2], St0);
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
+	    {is_true_value(Ret),St1}
+    end.
 
-le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
-le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
-le_op(_Op, O1, O2, St0) ->
+le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {O1 =< O2,St};
+le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {O1 =< O2,St};
+le_op(Op, O1, O2, St0) ->
     case getmetamethod(O1, O2, <<"__le">>, St0) of
 	Meta when Meta =/= nil ->
 	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
-	    {[is_true_value(Ret)],St1};
+	    {is_true_value(Ret),St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
-	    Meta = getmetamethod(O1, O2, <<"__lt">>, St0),
-	    {Ret,St1} = functioncall(Meta, [O2,O1], St0),
-	    {[not is_true_value(Ret)],St1}
+	    case getmetamethod(O1, O2, <<"__lt">>, St0) of
+		nil -> badarg_error(Op, [O1,O2], St0);
+		Meta ->
+		    {Ret,St1} = functioncall(Meta, [O2,O1], St0),
+		    {not is_true_value(Ret),St1}
+	    end
     end.
 
 %% is_true_value(Rets) -> boolean().
@@ -1000,6 +989,9 @@ is_true_value(_) -> true.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
+
+%%multiple_value(nil) -> [];			%Or maybe [nil]?
+multiple_value(V) -> [V].
 
 %% gc(State) -> State.
 %%  The garbage collector. Its main job is to reclaim unused tables

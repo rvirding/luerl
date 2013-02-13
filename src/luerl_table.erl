@@ -29,7 +29,7 @@
 -export([install/1]).
 
 %% Export some functions which can be called from elsewhere.
--export([length/2,unpack/2]).
+-export([rawlength/2,length/2,unpack/2]).
 
 %% Export some test functions.
 -export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
@@ -383,7 +383,13 @@ lt_comp(O1, O2, St0) ->
 	    {[luerl_lib:is_true_value(Ret)],St1}
     end.
 
-%% length(Stable, State) -> {Length,State}.
+%% rawlength(Table, State) -> {Length,Table}.
+
+rawlength(#tref{i=N}, St) ->
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
+    {float(array:size(Arr)),St}.
+
+%% length(Table, State) -> {Length,State}.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
@@ -392,7 +398,7 @@ length(#tref{i=N}=T, St) ->
     if ?IS_TRUE(Meta) -> luerl_emul:functioncall(Meta, [T], St);
        true ->
 	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-	    {[float(length_loop(Arr))],St}
+	    {float(length_loop(Arr)),St}
     end.
 
 length_loop(Arr) ->
