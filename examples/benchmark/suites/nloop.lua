@@ -43,9 +43,5 @@ bench.loop_while = function()
   end
   return i
 end
---[[
-assert(bench.loop_ipairs() == 51)
-assert(bench.loop_for() == 51)
-assert(bench.loop_while() == 51)
---]]
+
 return bench

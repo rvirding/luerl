@@ -21,17 +21,16 @@ local fn_obj = create_closure()
 
 bench = { }
 
--- bench.call_setmetatable = call_setmetatable
+bench.call_setmetatable = call_setmetatable
 
--- bench.create_closure = create_closure
+bench.create_closure = create_closure
 
--- TODO use_setmetatable
 -- bench.use_setmetatable = function()
---   mt_obj("boo!")
+--  mt_obj("boo!")
 -- end
 
--- bench.use_closure = function()
---   fn_obj("boo!")
--- end
+bench.use_closure = function()
+  fn_obj("boo!")
+end
 
 return bench

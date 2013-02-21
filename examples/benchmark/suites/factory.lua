@@ -127,23 +127,22 @@ local invoker = function(factory)
   end
 end
 
--- TODO: these are causing overflows in luerl 
 bench =
 {
-  -- inplace_init = inplace;
-  -- plain_init = plain;
-  -- metatable_init = mt;
-  -- clone_init = clone;
+  inplace_init = inplace;
+  plain_init = plain;
+  metatable_init = mt;
+  clone_init = clone;
 
-  -- inplace_call = inplace();
-  -- plain_call = plain();
-  -- metatable_call = mt();
-  -- clone_call = clone();
+  inplace_call = inplace();
+  plain_call = plain();
+  metatable_call = mt();
+  clone_call = clone();
 
-  -- inplace_method = invoker(inplace());
-  -- plain_method = invoker(plain());
-  -- metatable_method = invoker(mt());
-  -- clone_method = invoker(clone());
+  inplace_method = invoker(inplace());
+  plain_method = invoker(plain());
+  metatable_method = invoker(mt());
+  clone_method = invoker(clone());
 }
 
 return bench
