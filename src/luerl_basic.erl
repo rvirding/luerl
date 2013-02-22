@@ -41,6 +41,7 @@ table() ->
      {<<"ipairs">>,{function,fun ipairs/2}},
      {<<"load">>,{function,fun load/2}},
      {<<"loadfile">>,{function,fun loadfile/2}},
+     {<<"loadstring">>,{function,fun loadstring/2}},
      {<<"next">>,{function,fun next/2}},
      {<<"pairs">>,{function,fun pairs/2}},
      {<<"pcall">>,{function,fun pcall/2}},
@@ -345,6 +346,12 @@ loadfile(As, St) ->
 	nil -> badarg_error(loadfile, As)
     end.
  
+loadstring(As, St) ->
+    case luerl_lib:conv_list(As, [string]) of
+	[S] -> do_load(S, St);
+	nil -> badarg_error(loadstring, As)
+    end.
+
 do_passes([Fun|Funs], St0) ->
     case Fun(St0) of
 	{ok,St1} -> do_passes(Funs, St1);
