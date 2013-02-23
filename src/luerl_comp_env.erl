@@ -63,9 +63,15 @@ get_frame(#st{fs=[F|_]}) -> F.
 %%  version of it which shadows the old one. We handle this by keeping
 %%  them in reverse order and always pushing variable to front of
 %%  list.
+%%
+%%  The size parameters aren't the true size, they are only the number
+%%  of *different* variables. We will only use them as an indicator
+%%  whether each frame contains local and enviroment variables. The
+%%  true size we get at the end from the index value.
+%%
 %% {HasLocal,LocalIndex,HasEnv,EnvIndex,Vars}
 
-new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.
+new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.	%Use size to indicate presence
 
 find_frame_var(N, {_,_,_,_,Fs}) ->
     find_frame_var_1(N, Fs).
@@ -79,8 +85,8 @@ frame_depth_incr({false,_,true,_,_}, Ld, Ed) -> {Ld,Ed+1};  %No local variables
 frame_depth_incr({true,_,false,_,_}, Ld, Ed) -> {Ld+1,Ed};  %No env variables
 frame_depth_incr({true,_,true,_,_}, Ld, Ed) -> {Ld+1,Ed+1}. %Both variables
 
-frame_local_size({_,Lc,_,_,_}) -> Lc.
-frame_env_size({_,_,_,Ec,_}) -> Ec.
+frame_local_size({_,Li,_,_,_}) -> Li.		%Use the index for the size
+frame_env_size({_,_,_,Ei,_}) -> Ei.
 
 add_frame_local_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
     {Lsz,Li+1,Esz,Ei,[{N,lvar,Li+1}|Fs]}.
@@ -89,6 +95,11 @@ add_frame_env_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
     {Lsz,Li,Esz,Ei+1,[{N,evar,Ei+1}|Fs]}.
 
 %% find_fs_var(Name, FrameStack) -> {yes,Type,Depth,Index} | no.
+%%  Find a variable in the frame stack returning its depth and
+%%  index. N.B. that we DON'T increment the local or env depth for
+%%  unless their is actually any local or env variables
+%%  respectively. This ensures that there are no empty frames in the
+%%  stacks. The emulator assumes this.
 
 find_fs_var(N, Fs) -> find_fs_var(N, Fs, 1, 1).
 
@@ -101,6 +112,9 @@ find_fs_var(N, [F|Fs], Ld, Ed) ->
 	    find_fs_var(N, Fs, Ld1, Ed1)
     end;
 find_fs_var(_, [], _, _) -> no.
+
+%% add_var(Name, State) -> State.
+%% get_var(Name, State) -> #lvar{} | #evar{} | #gvar{}.
 
 add_var(N, St) ->
     case var_type(N, St) of
@@ -210,7 +224,6 @@ block_stmt(#block_stmt{ss=Ss0,vars=Vars}=B, St0) ->
     {B#block_stmt{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% do_block(Block, State) -> {Block,State}.
-%%  Do_block never returns external new variables. Fits into stmt().
 
 do_block(#block{ss=Ss0,vars=Vars}=B, St0) ->
     Do = fun(S) -> stmts(Ss0, S) end,
@@ -320,9 +333,9 @@ expr_stmt(#expr_stmt{exp=Exp0}=E, St0) ->
     {Exp1,St1} = exp(Exp0, St0),
     {E#expr_stmt{exp=Exp1},St1}.
 
-%% explist(Exprs, LocalVars, State) -> {Exprs,FreeVars,State}.
-%% exp(Expr, LocalVars, State) -> {Expr,FreeVars,State}.
-%%  An expression can never create new local variables.
+%% explist(Exprs, State) -> {Exprs,State}.
+%% exp(Expr, State) -> {Expr,State}.
+%% prefixexp(Expr, State) -> {Expr,State}.
 
 explist([E0|Es0], St0) ->
     {E1,St1} = exp(E0, St0),
