@@ -296,8 +296,8 @@ exp(#op{op='or',as=[A1,A2]}, S, St0) ->
     {Ia2,St2} = exp(A2, S, St1),
     {Ia1 ++ [?IF_FALSE(Ia2)],St2};		%Must handle single/multiple
 exp(#op{op=Op,as=As}, S, St0) ->
-    {Ias,St1} = explist(As, false, St0),
-    Iop = Ias ++ [?OP(Op, length(As))],
+    {Ias,St1} = explist(As, true, St0),
+    Iop = Ias ++ [?OP(Op,length(As))],
     {multiple_values(S, Iop),St1};
 exp(#tc{fs=Fs}, S, St0) ->
     {Its,Fc,I,St1} = tableconstructor(Fs, St0),

@@ -421,12 +421,20 @@ emul_1([?MULTIPLE|Is], Acc, Var, Stk, Env, St) ->
 emul_1([?BUILD_TAB(Fc, I)|Is], Acc, Var, Stk0, Env, St0) ->
     {Tab,Stk1,St1} = build_tab(Fc, I, Acc, Stk0, St0),
     emul(Is, Tab, Var, Stk1, Env, St1);
+emul_1([?CALL(0)|Is], Acc, Var, Stk, Env, St) ->
+    do_call0(Is, Acc, Var, Stk, Env, St);
+emul_1([?CALL(1)|Is], Acc, Var, Stk, Env, St) ->
+    do_call1(Is, Acc, Var, Stk, Env, St);
+emul_1([?CALL(2)|Is], Acc, Var, Stk, Env, St) ->
+    do_call2(Is, Acc, Var, Stk, Env, St);
 emul_1([?CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_call(Is, Acc, Var, Stk, Env, St, Ac);
 emul_1([?TAIL_CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
     do_tail_call(Is, Acc, Var, Stk, Env, St, Ac);
-emul_1([?OP(Op,Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_op(Is, Acc, Var, Stk, Env, St, Op, Ac);
+emul_1([?OP(Op,1)|Is], Acc, Var, Stk, Env, St) ->
+    do_op1(Is, Acc, Var, Stk, Env, St, Op);
+emul_1([?OP(Op,2)|Is], Acc, Var, Stk, Env, St) ->
+    do_op2(Is, Acc, Var, Stk, Env, St, Op);
 emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], _, Var, Stk, Env, St) ->
     Func = do_fdef(Lsz, Esz, Pars, Fis, Env, St),
     emul(Is, Func, Var, Stk, Env, St);
@@ -509,8 +517,10 @@ pop_vals(C, Stk, Vt) when is_list(Vt) ->	%List tail
 pop_vals(_, _, Vt) -> error({boom,pop_vals,Vt}).
 
 pop_vals_1(0, Stk, Vs) -> {Vs,Stk};
-pop_vals_1(Ac, [A|Stk], Vs) ->
-    pop_vals_1(Ac-1, Stk, [A|Vs]).
+pop_vals_1(1, [A|Stk], Vs) -> {[A|Vs],Stk};
+pop_vals_1(2, [A2,A1|Stk], Vs) -> {[A1,A2|Vs],Stk};
+pop_vals_1(Ac, [A2,A1|Stk], Vs) ->
+    pop_vals_1(Ac-2, Stk, [A1,A2|Vs]).
 
 %% push_vals(Count, Stack, ValList) -> {LastVal,Stack}.
 %%  Push Count values from value list onto the stack. Fill with 'nil'
@@ -556,27 +566,42 @@ do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, Esz, Bis) ->
     {Acc1,[_|Lvs1],_,_,St2} = emul(Bis, Acc0, [L|Lvs0], Stk, [Fref|Env], St1),
     emul(Is, Acc1, Lvs1, Stk, Env, St2).
 
-do_op(Is, Acc, Lvs, Stk0, Env, #luerl{stk=OldStk}=St0, Op, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),
-    %% io:fwrite("op: ~p\n", [{Op,Args}]),
-    %% Fr = #call_frame{acc=Acc,lvs=Lvs,stk=Stk1,env=Env},
-    {Res,St1}= do_op(Op, Args, St0#luerl{stk=Stk1}),
-    emul(Is, Res, Lvs, Stk1, Env, St1#luerl{stk=OldStk}).
+%% do_op1(Instrs, Acc, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
+%% do_op2(Instrs, Acc, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
 
-do_op(Op, [A], St) -> op(Op, A, St);
-do_op(Op, [A1,A2], St) -> op(Op, A1, A2, St).
+do_op1(Is, Acc, Lvs, Stk, Env, #luerl{stk=OldStk}=St0, Op) ->
+    %% The argument is in the acc, already single.
+    {Res,St1} = op(Op, Acc, St0),
+    emul(Is, Res, Lvs, Stk, Env, St1#luerl{stk=OldStk}).
+
+do_op2(Is, Acc, Lvs, [A1|Stk], Env, #luerl{stk=OldStk}=St0, Op) ->
+    %% The 1st argument is on the stack, the 2nd in the acc.
+    {Res,St1} = op(Op, A1, Acc, St0),
+    emul(Is, Res, Lvs, Stk, Env, St1#luerl{stk=OldStk}).
 
 %% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> Function.
 
 do_fdef(Lsz, Esz, Pars, Is, Env, _) ->
     #function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is}.
 
+%% do_call0(Instrs, Acc, LocalVars, Stack, Env, State) ->
+%% do_call1(Instrs, Acc, LocalVars, Stack, Env, State) ->
+%% do_call2(Instrs, Acc, LocalVars, Stack, Env, State) ->
 %% do_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
 %%     ReturnFromEmul.
 
-do_call(Is, Acc, Lvs, Stk, Env, St, 0) ->
+do_call0(Is, Acc, Lvs, Stk, Env, St) ->
     %% The function is in the acc.
-    functioncall(Is, Acc, Lvs, Stk, Env, St, Acc, []);
+    functioncall(Is, Acc, Lvs, Stk, Env, St, Acc, []).
+
+do_call1(Is, Acc, Lvs, [Func|Stk], Env, St) ->
+    %% The function is on the stack and the argument is in the acc.
+    functioncall(Is, Acc, Lvs, Stk, Env, St, Func, Acc).
+
+do_call2(Is, Acc, Lvs, [A1,Func|Stk], Env, St) ->
+    %% The function and 1st argument is on the stack, the 2nd is in the acc.
+    functioncall(Is, Acc, Lvs, Stk, Env, St, Func, [A1|Acc]).
+
 do_call(Is, Acc, Lvs, Stk0, Env, St, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
