@@ -23,8 +23,8 @@
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
 	 load/1,loadfile/1,call/2,call/3,call_chunk/2,call_chunk/3,
-	 call_function/3,call_function1/3,function_list/2,
-	 call_method/3,call_method1/3,method_list/2,
+	 call_function/2,call_function/3,call_function1/3,function_list/2,
+	 call_method/2,call_method/3,call_method1/3,method_list/2,
 	 init/0,stop/1,gc/1,
 	 encode/2,encode_list/2,decode/2,decode_list/2]).
 
@@ -97,8 +97,12 @@ call_chunk(C, As, St0) ->
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 
+%% call_function(FuncPath, Args) -> {Result,State}.
 %% call_function(FuncPath, Args, State) -> {Result,State}.
 %% call_function1(FuncPath | Func, LuaArgs, State) -> {LuaResult,State}.
+
+call_function(Fp, As) ->
+    call_function(Fp, As, init()).
 
 call_function(Fp, As, St0) ->
     %% Encode the input arguments.
@@ -121,15 +125,16 @@ call_function1(F, Las, St) ->
 
 function_list([G|Kl], St0) ->
     {First,St1} = luerl_emul:get_global_key(G, St0),	%Start at global env
-    Fun = fun (K, {T,Sta}) ->
-		  {Vs,Stb} = luerl_emul:get_table_key(T, K, Sta),
-		  {luerl_lib:first_value(Vs),Stb}
-	  end,
+    Fun = fun (K, {T,St}) -> luerl_emul:get_table_key(T, K, St) end,
     lists:foldl(Fun, {First,St1}, Kl);
 function_list(_, _) -> error(badarg).
 
+%% call_method(FuncPath, Args) -> {Result,State}.
 %% call_method(FuncPath, Args, State) -> {Result,State}.
 %% call_method1(FuncPath | FuncPath, Args, State) -> {Result,State}.
+
+call_method(Fp, As) ->
+    call_method(Fp, As, init()).
 
 call_method(Fp, As, St0) ->
     %% Encode the input arguments.
@@ -146,16 +151,16 @@ call_method1(Fp, Las, St0) ->
     {O,M,St1} = method_list(Fp, St0),
     luerl_emul:functioncall(M, [O|Las], St1).
 
-method_list([G|Ks], St) ->
-    First = luerl_emul:get_env_key(G, St),
-    method_list(Ks, First, St).
+method_list([G|Ks], St0) ->
+    {First,St1} = luerl_emul:get_global_key(G, St0),
+    method_list(Ks, First, St1).
 
 method_list([K], SoFar, St0) ->
     {Func,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    {SoFar,luerl_lib:first_value(Func),St1};
+    {SoFar,Func,St1};
 method_list([K|Ks], SoFar, St0) ->
     {Next,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    method_list(Ks, luerl_lib:first_value(Next), St1);
+    method_list(Ks, Next, St1);
 method_list(_, _, _) -> error(badarg).
 
 %% stop(State) -> GCedState.
