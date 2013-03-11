@@ -836,16 +836,21 @@ getmetamethod(O1, O2, E, St) ->
 	M -> M
     end.
 
-getmetamethod(#tref{i=N}, E, #luerl{ttab=Ts}) ->
-    #table{m=Meta} = ?GET_TABLE(N, Ts),
-    getmetamethod_tab(Meta, E, Ts);
-getmetamethod(#userdata{}, E, #luerl{ttab=Ts,meta=Meta}) ->
-    getmetamethod_tab(Meta#meta.userdata, E, Ts);
-getmetamethod(S, E, #luerl{ttab=Ts,meta=Meta}) when is_binary(S) ->
-    getmetamethod_tab(Meta#meta.string, E, Ts);
-getmetamethod(N, E, #luerl{ttab=Ts,meta=Meta}) when is_number(N) ->
-    getmetamethod_tab(Meta#meta.number, E, Ts);
-getmetamethod(_, _, _) -> nil.			%Other types have no metatables
+getmetamethod(O, E, St) ->
+    Meta = getmetatable(O, St),			%Can be nil
+    getmetamethod_tab(Meta, E, St#luerl.ttab).
+
+getmetatable(#tref{i=T}, #luerl{ttab=Ts}) ->
+    (?GET_TABLE(T, Ts))#table.m;
+getmetatable(#userdata{m=Meta}, _) -> Meta;
+getmetatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
+getmetatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
+    Meta#meta.boolean;
+getmetatable(N, #luerl{meta=Meta}) when is_number(N) ->
+    Meta#meta.number;
+getmetatable(S, #luerl{meta=Meta}) when is_binary(S) ->
+    Meta#meta.string;
+getmetatable(_, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab(#tref{i=M}, E, Ts) ->
     #table{t=Mtab} = ?GET_TABLE(M, Ts),
@@ -1027,7 +1032,8 @@ multiple_value(V) -> [V].
 
 gc(#luerl{ttab=Tt0,tfree=Tf0,g=G,env=Env,ftab=Ft0,ffree=Ff0,meta=Meta}=St) ->
     %% The root set consisting of global table and environment.
-    Root = [Meta#meta.number,Meta#meta.string,Meta#meta.userdata,G|Env],
+    Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
+	    G|Env],
     %% Mark all seen tables and frames, i.e. return them.
     {SeenT,SeenF} = mark(Root, [], [], [], Tt0, Ft0),
     io:format("gc: ~p\n", [{SeenT,SeenF}]),

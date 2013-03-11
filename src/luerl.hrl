@@ -42,9 +42,10 @@
 
 %% Metatables for atomic datatypes.
 
--record(meta, {number=nil,
-	       string=nil,
-	       userdata=nil}).
+-record(meta, {nil=nil,
+	       boolean=nil,
+	       number=nil,
+	       string=nil}).
 
 %% Data types.
 

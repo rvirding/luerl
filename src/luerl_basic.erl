@@ -312,17 +312,25 @@ type(#thread{}) -> <<"thread">>;
 type(#userdata{}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
 
-%% Meta table functions.
+%% getmetatable([Value|_], State) -> {Table,State}.
+%% setmetatable([Table,Table|nil|_], State) -> {Table,State}.
+%%  Can only set the metatable of tables here. Return tables for all
+%%  values, for tables and userdata it is the table of the object,
+%%  else the metatable for the type.
 
 getmetatable([#tref{i=T}|_], #luerl{ttab=Ts}=St) ->
     #table{m=Meta} = ?GET_TABLE(T, Ts),		%Get the table
     {[Meta],St};
 getmetatable([#userdata{m=Meta}|_], St) ->
     {[Meta],St};
-getmetatable(S, #luerl{meta=Meta}=St) when is_binary(S) ->
-    {[Meta#meta.string],St};
-getmetatable(N, #luerl{meta=Meta}=St) when is_number(N) ->
+getmetatable([nil|_], #luerl{meta=Meta}=St) ->
+    {[Meta#meta.nil],St};
+getmetatable([B|_], #luerl{meta=Meta}=St) when is_boolean(B) ->
+    {[Meta#meta.boolean],St};
+getmetatable([N|_], #luerl{meta=Meta}=St) when is_number(N) ->
     {[Meta#meta.number],St};
+getmetatable([S|_], #luerl{meta=Meta}=St) when is_binary(S) ->
+    {[Meta#meta.string],St};
 getmetatable(_, St) -> {[nil],St}.		%Other types have no metatables
 
 setmetatable([#tref{i=N}=A1,#tref{}=A2|_], St) ->
