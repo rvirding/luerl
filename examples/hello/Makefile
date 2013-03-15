@@ -1,5 +1,5 @@
-EXAMPLES = hello							\
-	   hello2										\
+EXAMPLES = hello \
+	   hello2 \
 	   hello_table
 
 ROOTDIR = ../..
