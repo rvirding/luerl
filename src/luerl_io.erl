@@ -24,10 +24,10 @@
 
 -export([install/1]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -40,7 +40,7 @@ flush(_, St) -> {[true],St}.
 
 write(As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
-	nil -> lua_error({badarg,write,As});
+	nil -> badarg_error(write, As, St);
 	Ss ->
 	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),
 	    {[#userdata{d=standard_io}],St}

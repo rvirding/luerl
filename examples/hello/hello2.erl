@@ -37,10 +37,10 @@ run() ->
     io:format("(7) 2137 * 42 = ~p?~n", [B]),
 
 	% execute a standard function
-	luerl:call([print], [<<"(8) Hello, standard print function!">>]),
-	luerl:call([print], [<<"(9) Hello, standard print function!">>],  luerl:init()),
-	{Result1,_} = luerl:call([table,pack], [<<"a">>,<<"b">>,42]),
-	{Result1,_} = luerl:call([table,pack], [<<"a">>,<<"b">>,42], luerl:init()),
+    luerl:call_function([print], [<<"(8) Hello, standard print function!">>]),
+    luerl:call_function([print], [<<"(9) Hello, standard print function!">>],  luerl:init()),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42]),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], luerl:init()),
     io:format("(10) ~p?~n", [Result1]),
 
     % separately parse, then execute (doubles (11) and Chunk1 as assertion)
@@ -55,14 +55,14 @@ run() ->
     {ok,Result2} = luerl:eval(Chunk2),
     {Result2,State2} = luerl:do(Chunk2),
     {Result2,State2A} = luerl:do(<<"function chunk2() print(\"(12) Hello, Chunk 2!\") end">>),
-    luerl:call([chunk2], [], State2),	
-    luerl:call([chunk2], [], State2A),	
+    luerl:call_function([chunk2], [], State2),
+    luerl:call_function([chunk2], [], State2A),
 
     % separately parse, then execute a file. The file defines a function no()
     {ok,Chunk3} = luerl:loadfile("./hello2-3.lua"),
     {ok,Result3} = luerl:eval(Chunk3),
     {Result3,State3} = luerl:do(Chunk3),
-    {[],_} = luerl:call([no], [], State3),
+    {[],_} = luerl:call_function([no], [], State3),
 
     % separately parse, then execute, get a result
     {ok,Chunk4} = luerl:load("return '(17b) Marvelous wheater today, isn°t it!'"),
@@ -134,7 +134,7 @@ run() ->
     {ok,Chunk12} = luerl:loadfile("./hello2-8.lua"),
     {ok,Result12} = luerl:eval(Chunk12,State06),
     {Result12,State06A} = luerl:do(Chunk12,State06),
-    luerl:call([old],[],State06A),
+    luerl:call_function([old],[],State06A),
 
     % separately parse, then execute, get a result
     {ok,Chunk13} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a"),
@@ -148,7 +148,7 @@ run() ->
     {ok,Result14} = luerl:eval(Chunk14, State07),
     {Result14,State14} = luerl:do(Chunk14, State07),
     io:format("(35) And twice: ~s~n", [Result14]),
-    {Result14A,_} = luerl:call([confirm], [<<"Is it?">>], State14),
+    {Result14A,_} = luerl:call_function([confirm], [<<"Is it?">>], State14),
     io:format("(36) Well: ~s~n", [Result14A]),
 
     % execute a file, get the decoded result of a table

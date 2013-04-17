@@ -62,7 +62,7 @@ Rules.
 	end.
 
 %% Strings.
-\"(\\.|[^"\n])*\" :
+\"(\\.|\\\n|[^"\n])*\" :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
 	case string_chars(Cs) of
@@ -70,7 +70,7 @@ Rules.
 		{token,{'STRING',TokenLine,list_to_binary(S)}};
 	    error -> {error,"illegal string"}
 	end.
-\'(\\.|[^'\n])*\' :
+\'(\\.|\\\n|[^'\n])*\' :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 2, TokenLen - 2),
 	case string_chars(Cs) of

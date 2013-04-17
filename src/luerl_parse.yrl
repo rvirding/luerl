@@ -87,7 +87,7 @@ stat -> repeat_stat : '$1' .
 stat -> if_stat : '$1' .
 stat -> for_stat : '$1' .
 stat -> function funcname funcbody : functiondef(line('$1'),'$2','$3') .
-stat -> local local_decl : {local,'$2'} .
+stat -> local local_decl : {local,line('$1'),'$2'} .
 
 label_stat -> '::' NAME '::' : {label,line('$1'),'$2'} .
 
@@ -229,7 +229,6 @@ chunk(Ts) ->
     case parse(Ts) of
         {error,_}=Error -> Error;
         {ok,Body} -> {ok,{functiondef,1,[{'...',1}],Body}}
-%%         {ok,Body} -> {ok,{functiondef,1,{'NAME',1,chunk},[{'...',1}],Body}}
     end.
 
 cat(T) -> element(1, T).

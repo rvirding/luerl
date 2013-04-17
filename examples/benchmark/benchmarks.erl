@@ -32,7 +32,7 @@ do_benchmark(Benchmark, Lua) ->
 
 do_iteration(0, _Benchmark, _Lua) -> ok;
 do_iteration(Iter, Benchmark, Lua) ->
-  luerl:method1([<<"bench">>, Benchmark], [], Lua),
+  luerl:call_method1([<<"bench">>, Benchmark], [], Lua),
   do_iteration(Iter - 1, Benchmark, Lua).
 
 num_iterations(Lua) ->

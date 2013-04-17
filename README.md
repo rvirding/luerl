@@ -106,17 +106,21 @@ See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
-#### luerl:call(FuncPath, Args[, State]) -> {Result,NewState}
-Call a function already defined in the state. FuncPath is a list of atoms of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+#### luerl:call(Form, Args[, State]) -> {Result,State}
+#### luerl:call_chunk(Form, Args[, State]) -> {Result,State}
+Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.
 
-#### luerl:call1(Keys, Args, State) -> {Result,NewState}
-Call a function already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
+#### luerl:call_function(FuncPath, Args[, State]) -> {Result,NewState}
+Call a function already defined in the state. `FuncPath` is a list of names to the function. `FuncPath`, `Args` and `Result` are automatically encode/decoded.
 
-#### luerl:method(FuncPath, Args[, State]) -> {Result,NewState}.
-Call a method already defined in the state. FuncPath is a list of atoms of names to the function. FuncPath, Args and Result are automatically encode/decoded.
+#### luerl:call_function1(Keys, Args, State) -> {Result,NewState}
+Call a function already defined in the state. `Keys` is a list of keys to the function. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
 
-#### luerl:method1(Keys, Args, State) -> {Result,NewState}
-Call a method already defined in the state. Keys is a list of keys to the function. Keys, Args and Result are NOT encode/decoded.
+#### luerl:call_method(MethPath, Args[, State]) -> {Result,NewState}.
+Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encode/decoded.
+
+#### luerl:call_method1(Keys, Args, State) -> {Result,NewState}
+Call a method already defined in the state. `Keys` is a list of keys to the method. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
 
 #### luerl:stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
@@ -144,13 +148,19 @@ At the command line you are seeing the Lua State dumped, that is returned by the
     {_Ret, _NewState} = luerl:do(Chunk, State).
 
 #### call a function in the state
-    {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42], State0)
+    {Res,State1} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], State0)
 
 executes the call `table.pack("a", "b", 42)` in `State0`. E.g.:
 
     {Res,State1} = luerl:call([table,pack], [<<"a">>,<<"b">>,42]),
     io:format("~p~n",[Res]).
 
+#### call a method in the state
+    {Res,State1} = luerl:call_method([g,h,i], [<<"a">>,<<"b">>,42], State0)
+
+executes the call `g.h:i("a", "b", 42)` in `State0`.
+
+For more examples see `examples/hello/hello2.erl`.
 
 Examples
 --------
@@ -265,9 +275,9 @@ Currently implemented functions in the libraries
 Known Bugs
 ----------
 
-Functions defined in a loop, _while_, _repeat_ and _for_, **and** when the
-loop is exited with a _break_ will generate an error when called. For
-example the functions defined in
+Functions defined in a loop, _while_, _repeat_ and _for_, **and** when
+the loop is exited with a _break_ from inside an _if_ will generate an
+error when called. For example the functions defined in
 
     for i=1,10 do
       a[i] = {set = function(x) i=x end, get = function () return i end}

@@ -20,10 +20,10 @@
 
 -export([install/1]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 table() ->
     [{<<"clock">>,{function,fun clock/2}},
@@ -39,13 +39,13 @@ getenv([A|_], St) when is_binary(A) ; is_number(A) ->
 	    {[list_to_binary(Env)],St};
 	false -> {[nil],St}
     end;
-getenv(As, _) -> lua_error({badarg,getenv,As}).
+getenv(As, St) -> badarg_error(getenv, As, St).
 
 %% Time functions.
 
 clock(_, St) ->					%This is wrong!
-    {Mega,S,Micro} = now(),
-    {[1.0e6*Mega+S+Micro*1.0e-6],St}.
+    {Mega,Sec,Micro} = now(),
+    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),

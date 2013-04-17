@@ -21,12 +21,20 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
--record(luerl, {tabs,free,next,			%Table structure
+-record(luerl, {ttab,tfree,tnext,		%Table table, free, next
+		ftab,ffree,fnext,		%Frame table, free, next
+		g,				%Global table
+		%%
+		env=[],				%Current environment
+		stk=[],				%Current stack
+		%%
 		meta=[],			%Data type metatables
-		env,				%Environment
 		locf=false,			%Started local function
 		tag				%Unique tag
 	       }).
+
+-record(heap, {ttab,tfree,tnext,
+	       ftab,ffree,fnext}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
 %% -record(eenv, {env=[]}).			%Environment
@@ -34,9 +42,10 @@
 
 %% Metatables for atomic datatypes.
 
--record(meta, {number=nil,
-	       string=nil,
-	       userdata=nil}).
+-record(meta, {nil=nil,
+	       boolean=nil,
+	       number=nil,
+	       string=nil}).
 
 %% Data types.
 
@@ -46,10 +55,14 @@
 -record(thread, {}).				%Thread type
 %% There are two function types, this the Lua one, and an Erlang one
 %% with the same name. So no type for it.
--record(function,{l=0,				%Line number (why?)
+-record(function,{lsz,				%Local var size
+		  esz,				%Env var size
 		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block
+
+-record(fref, {i}).				%Frame reference, index
+
 
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
