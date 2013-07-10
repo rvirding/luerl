@@ -772,9 +772,9 @@ do_if(Is, Acc, Lvs, Stk, Env, St, True, False) ->
 do_if_block([?BLOCK(Bis, Loc, Sz)], Acc, Lvs, Stk, Env, St, Is) ->
     do_block(Is, Acc, Lvs, Stk, Env, St, Bis, Loc, Sz);
 do_if_block(Bis, Acc0, Lvs, Stk, Env, St0, Is) ->
-    {Acc1,_,_,_,St1} =
+    {Acc1,Lvs1,Stk1,Env1,St1} =
 	emul(Bis, Acc0, Lvs, Stk, Env, St0),
-    emul(Is, Acc1, Lvs, Stk, Env, St1).
+    emul(Is, Acc1, Lvs1, Stk1, Env1, St1).
 
 %% do_numfor(Instrs, Acc, Var, Stack, Env, State, Varname, FromInstrs) -> <emul>
 

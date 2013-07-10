@@ -19,7 +19,7 @@ all: $(OBJECTS)
 
 $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
 	@ mkdir -p $(BEAMDIR) 
-	erlc -o $(BEAMDIR) $<
+	erlc $(ERLCFLAGS) -o $(BEAMDIR) $<
 
 %.erl: %.xrl
 	erlc -o $(SRCDIR) $<
@@ -40,6 +40,9 @@ echo:
 
 examples: all
 	$(MAKE) -C examples
+
+debug:
+	ERLCFLAGS="+debug_info" make all
 
 .PHONY: all examples clean
 
