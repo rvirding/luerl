@@ -653,8 +653,12 @@ functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Ret,St2};
 functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
-    {Ret,St1#luerl{stk=Stk0}};			%Replace it
+    case Func(Args, St0#luerl{stk=Stk}) of
+        {Ret,St1} when is_list(Ret) ->
+            {Ret,St1#luerl{stk=Stk0}};			%Replace it
+        {Ret,St1} ->
+            error({invalid_reply,Ret,function,Func})
+    end;
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
 	nil -> badarg_error(Func, Args, St);
