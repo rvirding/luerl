@@ -32,7 +32,7 @@
 %% chunk(St0, Opts) -> {ok,St0}.
 
 chunk(#code{code=C0}=Code, Opts) ->
-    {Is,nul} = exp(C0, true, nul),		%No local state
+    {Is,nul} = exp(C0, single, nul),		%No local state
     luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
     {ok,Code#code{code=Is}}.
 
@@ -87,16 +87,16 @@ assign_stmt(#assign_stmt{vs=Vs,es=Es}, St) ->
 %%  This could most likely be folded together with assign_local_loop/3.
 
 assign_loop([V], [E], St0) ->			%Remove unnecessary ?PUSH_VALS
-    {Ie,St1} = exp(E, true, St0),		%Last argument to one variable
+    {Ie,St1} = exp(E, single, St0),		%Last argument to one variable
     {Iv,St2} = var(V, St1),
     {Ie ++ Iv,St2};
 assign_loop([V|Vs], [E], St0) ->
-    {Ie,St1} = exp(E, false, St0),		%Last argument to rest of vars
+    {Ie,St1} = exp(E, multiple, St0),		%Last argument to rest of vars
     {Ias,St2} = assign_loop_var(Vs, 1, St1),
     {Iv,St3} = var(V, St2),
     {Ie ++ Ias ++ Iv,St3};
 assign_loop([V|Vs], [E|Es], St0) ->
-    {Ie,St1} = exp(E, true, St0),		%Not last argument!
+    {Ie,St1} = exp(E, single, St0),		%Not last argument!
     {Ias,St2} = assign_loop(Vs, Es, St1),
     {Iv,St3} = var(V, St2),
     {Ie ++ [?PUSH] ++ Ias ++ [?POP] ++ Iv,St3};
@@ -111,20 +111,20 @@ assign_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc-1)],St}.			%Last in acc
 
 assign_loop_exp([E|Es], St0) ->
-    {Ie,St1} = exp(E, false, St0),		%It will be dropped anyway
+    {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
     {Ias,St2} = assign_loop_exp(Es, St1),
     {Ie ++ Ias,St2};
 assign_loop_exp([], St) -> {[],St}.
 
 var(#dot{e=Exp,r=Rest}, St0) ->
-    {Ie,St1} = prefixexp_first(Exp, true, St0),
+    {Ie,St1} = prefixexp_first(Exp, single, St0),
     {Ir,St2} = var_rest(Rest, St1),
     {[?PUSH] ++ Ie ++ Ir,St2};			%Save acc
 var(V, St) ->
     {set_var(V),St}.
 
 var_rest(#dot{e=Exp,r=Rest}, St0) ->
-    {Ie,St1} = prefixexp_element(Exp, true, St0),
+    {Ie,St1} = prefixexp_element(Exp, single, St0),
     {Ir,St2} = var_rest(Rest, St1),
     {Ie ++ Ir,St2};
 var_rest(Exp, St) -> var_last(Exp, St).
@@ -132,19 +132,19 @@ var_rest(Exp, St) -> var_last(Exp, St).
 var_last(#key{k=#lit{v=K}}, St) ->
     {[?SET_LIT_KEY(K)],St};			%[?PUSH,?LOAD_LIT(K),?SET_KEY]
 var_last(#key{k=Exp}, St0) ->
-    {Ie,St1} = exp(Exp, true, St0),
+    {Ie,St1} = exp(Exp, single, St0),
     {[?PUSH] ++ Ie ++ [?SET_KEY],St1}.
 
 %% call_stmt(Call, State) -> {CallIs,State}.
 
 call_stmt(#call_stmt{call=Exp}, St0) ->
-    {Ie,St1} = exp(Exp, false, St0),
+    {Ie,St1} = exp(Exp, multiple, St0),
     {Ie,St1}.
 
 %% return_stmt(Return, State) -> {ReturnIs,State}.
 
 return_stmt(#return_stmt{es=Es}, St0) ->
-    {Ies,St1} = explist(Es, false, St0),
+    {Ies,St1} = explist(Es, multiple, St0),
     {Ies ++ [?RETURN(length(Es))],St1}.
 
 %% block_stmt(Block, State) -> {BlockIs,State}.
@@ -163,7 +163,7 @@ do_block(#block{ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
 %% while_stmt(While, State) -> {WhileIs,State}.
 
 while_stmt(#while_stmt{e=E,b=B}, St0) ->
-    {Ie,St1} = exp(E, true, St0),
+    {Ie,St1} = exp(E, single, St0),
     {Ib,St2} = do_block(B, St1),
     {[?WHILE(Ie, Ib)],St2}.
 
@@ -179,7 +179,7 @@ if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
 
 if_tests([{E,B}|Ts], Else, St0) ->
-    {Ie,St1} = exp(E, true, St0),
+    {Ie,St1} = exp(E, single, St0),
     {Ib,St2} = do_block(B, St1),
     {Its,St3} = if_tests(Ts, Else, St2),
     {Ie ++ [?IF(Ib, Its)],St3};
@@ -190,7 +190,7 @@ if_tests([], Else, St0) ->
 %% numfor_stmt(For, State) -> {ForIs,State}.
 
 numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
-    {Ies,St1} = explist([I,L,S], true, St0),
+    {Ies,St1} = explist([I,L,S], single, St0),
     {Ib,St2} = do_block(B, St1),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
     ForBlock = [?BLOCK(Lsz, Esz, set_var(V) ++ Is)],
@@ -198,7 +198,7 @@ numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
 
 %% %% An experiment to put the block *outside* the for loop.
 %% numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
-%%     {Ies,St1} = explist([I,L,S], true, St0),
+%%     {Ies,St1} = explist([I,L,S], single, St0),
 %%     {Ib,St2} = do_block(B, St1),
 %%     [?BLOCK(Lsz, Esz, Is)] = Ib,
 %%     ForBlock = [?BLOCK(Lsz, Esz, [?NFOR(V,set_var(V) ++ Is)])],
@@ -207,7 +207,7 @@ numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
 %% genfor_stmt(For, State) -> {ForIs,State}.
 
 genfor_stmt(#gfor_stmt{vs=[V|Vs],gens=Gs,b=B}, St0) ->
-    {Igs,St1} = explist(Gs, false, St0),
+    {Igs,St1} = explist(Gs, multiple, St0),
     {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
     {Ib,St3} = do_block(B, St2),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
@@ -235,15 +235,15 @@ local_fdef_stmt(#local_fdef_stmt{v=V,f=F}, St0) ->
 %%  This could most likely be folded together with assign_loop/3.
 
 assign_local_loop([V], [E], St0) ->		%Remove unnecessary ?PUSH_VALS
-    {Ie,St1} = exp(E, true, St0),		%Last argument to one variable!
+    {Ie,St1} = exp(E, single, St0),		%Last argument to one variable!
     {Ie ++ set_var(V),St1};
 assign_local_loop([V|Vs], [E], St0) ->
-    {Ie,St1} = exp(E, false, St0),		%Last argument to many vars!
+    {Ie,St1} = exp(E, multiple, St0),		%Last argument to many vars!
     {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
     {Ie ++ Ias ++ set_var(V),St2};
     %%{Ie ++ [puss1] ++ Ias ++ [popp1|set_var(V)],St2};
 assign_local_loop([V|Vs], [E|Es], St0) ->
-    {Ie,St1} = exp(E, true, St0),		%Not last argument!
+    {Ie,St1} = exp(E, single, St0),		%Not last argument!
     {Ias,St2} = assign_local_loop(Vs, Es, St1),
     {Ie ++ [?PUSH] ++ Ias ++ [?POP|set_var(V)],St2};
 assign_local_loop([], Es, St) ->
@@ -257,7 +257,7 @@ assign_local_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc-1)],St}.			%Last in Acc
 
 assign_local_loop_exp([E|Es], St0) ->
-    {Ie,St1} = exp(E, false, St0),		%It will be dropped anyway
+    {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
     {Ias,St2} = assign_local_loop_exp(Es, St1),
     {Ie ++ Ias,St2};
 assign_local_loop_exp([], St) -> {[],St}.
@@ -265,18 +265,17 @@ assign_local_loop_exp([], St) -> {[],St}.
 %% expr_stmt(Expr, State) -> {ExprIs,State}.
 %%  The expression pseudo statement. This will return a single value.
 expr_stmt(#expr_stmt{exp=Exp}, St0) ->
-    {Ie,St1} = exp(Exp, true, St0),
+    {Ie,St1} = exp(Exp, single, St0),
     {Ie,St1}.
 
-%% explist(Exprs, State) -> {Instrs,State}.
-%% explist(Exprs, SingleValue, State) -> {Instrs,State}.
-%% exp(Expr, SingleValue, State) -> {Instrs,State}.
-%%  Single determines if we are to only return the first value of a
-%%  list of values. Single false makes us a return a list!
+%% explist(Exprs, Values, State) -> {Instrs,State}.
+%% exp(Expr, Values, State) -> {Instrs,State}.
+%%  Values determines if we are to only return the first value of a
+%%  list of values. Values multiple makes us a return a list!
 
 explist([E], S, St) -> exp(E, S, St);		%Append values to output?
 explist([E|Es], S, St0) ->
-    {Ie,St1} = exp(E, true, St0),
+    {Ie,St1} = exp(E, single, St0),
     {Ies,St2} = explist(Es, S, St1),
     {Ie ++ [?PUSH] ++ Ies,St2};
 explist([], _, St) -> {[],St}.			%No expressions at all
@@ -296,7 +295,7 @@ exp(#op{op='or',as=[A1,A2]}, S, St0) ->
     {Ia2,St2} = exp(A2, S, St1),
     {Ia1 ++ [?IF_FALSE(Ia2)],St2};		%Must handle single/multiple
 exp(#op{op=Op,as=As}, S, St0) ->
-    {Ias,St1} = explist(As, true, St0),
+    {Ias,St1} = explist(As, single, St0),
     Iop = Ias ++ [?OP(Op,length(As))],
     {multiple_values(S, Iop),St1};
 exp(#tc{fs=Fs}, S, St0) ->
@@ -309,37 +308,37 @@ exp(#evar{n= <<"...">>}=V, S, St) ->
 exp(E, S, St) ->
     prefixexp(E, S, St).
 
-%% single_value(Single, Instrs) -> Instrs.
-%% multiple_values(Single, Instrs) -> Instrs.
+%% single_value(Values, Instrs) -> Instrs.
+%% multiple_values(Values, Instrs) -> Instrs.
 %%  Ensure either single value or multiple value.
 
-single_value(true, Is) -> Is ++ [?SINGLE];
-single_value(false, Is) -> Is.
+single_value(single, Is) -> Is ++ [?SINGLE];
+single_value(multiple, Is) -> Is.
 
-multiple_values(true, Is) -> Is;
-multiple_values(false, Is) -> Is ++ [?MULTIPLE].
+multiple_values(single, Is) -> Is;
+multiple_values(multiple, Is) -> Is ++ [?MULTIPLE].
 
-%% prefixexp(Expr, SingleValue, State) -> {Instrs,State}.
-%% prefixexp_rest(Expr, SingleValue, State) -> {Instrs,State}.
-%% prefixexp_first(Expr, SingleValue, State) -> {Instrs,State}.
-%% prefixexp_element(Expr, SingleValue, State) -> {Instrs,State}.
+%% prefixexp(Expr, Values, State) -> {Instrs,State}.
+%% prefixexp_rest(Expr, Values, State) -> {Instrs,State}.
+%% prefixexp_first(Expr, Values, State) -> {Instrs,State}.
+%% prefixexp_element(Expr, Values, State) -> {Instrs,State}.
 %%  Single determines if we are to only return the first value of a
 %%  list of values. Single false makes us a return a list!
 
 prefixexp(#dot{e=Exp,r=Rest}, S, St0) ->
-    {Ie,St1} = prefixexp_first(Exp, true, St0),
+    {Ie,St1} = prefixexp_first(Exp, single, St0),
     {Ir,St2} = prefixexp_rest(Rest, S, St1),
     {Ie ++ Ir,St2};
 prefixexp(Exp, S, St) -> prefixexp_first(Exp, S, St).
 
 prefixexp_first(#single{e=E}, S, St0) ->
-    {Ie,St1} = exp(E, true, St0),		%Will make it single
+    {Ie,St1} = exp(E, single, St0),		%Will make it single
     {multiple_values(S, Ie),St1};
 prefixexp_first(Var, S, St) ->
     {multiple_values(S, get_var(Var)),St}.
 
 prefixexp_rest(#dot{e=Exp,r=Rest}, S, St0) ->
-    {Ie,St1} = prefixexp_element(Exp, true, St0),
+    {Ie,St1} = prefixexp_element(Exp, single, St0),
     {Ir,St2} = prefixexp_rest(Rest, S, St1),
     {Ie ++ Ir,St2};
 prefixexp_rest(Exp, S, St) -> prefixexp_element(Exp, S, St).
@@ -347,13 +346,13 @@ prefixexp_rest(Exp, S, St) -> prefixexp_element(Exp, S, St).
 prefixexp_element(#key{k=#lit{v=K}}, S, St) ->
     {multiple_values(S, [?GET_LIT_KEY(K)]),St};	%Table is in Acc
 prefixexp_element(#key{k=E}, S, St0) ->
-    {Ie,St1} = exp(E, true, St0),		%Table is in Acc
+    {Ie,St1} = exp(E, single, St0),		%Table is in Acc
     {[?PUSH] ++ Ie ++ multiple_values(S, [?GET_KEY]),St1};
 prefixexp_element(#fcall{as=[]}, S, St) ->
     Ifs = [?CALL(0)],
     {single_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{as=As}, S, St0) ->
-    {Ias,St1} = explist(As, false, St0),
+    {Ias,St1} = explist(As, multiple, St0),
     Ifs = [?PUSH] ++ Ias ++ [?CALL(length(As))],
     {single_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
@@ -365,7 +364,7 @@ prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
 	[?CALL(1)],
     {single_value(S, Ims),St};			%Method call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
-    {Ias,St1} = explist(As, false, St0),
+    {Ias,St1} = explist(As, multiple, St0),
     Ims = [?PUSH,				%Push table onto stack
 	   ?GET_LIT_KEY(K),			%Get function into acc
 	   ?SWAP,				%Swap func/table in stack/acc
@@ -396,16 +395,16 @@ tableconstructor(Fs, St0) ->
 
 tc_fields([#efield{v=V}], I0, St0) ->
     I1 = I0 + 1.0,				%Index of next element
-    {Iv,St1} = exp(V, false, St0),
+    {Iv,St1} = exp(V, multiple, St0),
     {Iv,0,I1,St1};
 tc_fields([#efield{v=V}|Fs], I0, St0) ->
     I1 = I0 + 1.0,				%Index of next element
-    {Iv,St1} = exp(V, true, St0),
+    {Iv,St1} = exp(V, single, St0),
     {Ifs,Fc,I2,St2} = tc_fields(Fs, I1, St1),
     {[?LOAD_LIT(I1),?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I2,St2};
 tc_fields([#kfield{k=K,v=V}|Fs], I0, St0) ->
-    {Ik,St1} = exp(K, true, St0),
-    {Iv,St2} = exp(V, true, St1),
+    {Ik,St1} = exp(K, single, St0),
+    {Iv,St2} = exp(V, single, St1),
     {Ifs,Fc,I1,St3} = tc_fields(Fs, I0, St2),
     {Ik ++ [?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I1,St3};
 tc_fields([], I, St) -> {[?LOAD_LIT([])],0,I,St}.
