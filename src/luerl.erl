@@ -213,12 +213,13 @@ gc(St) -> luerl_emul:gc(St).
 encode_list(Ts, St) ->
     lists:mapfoldl(fun encode/2, St, Ts).
 
+encode(nil, St) -> {nil,St};
+encode(false, St) -> {false,St};
+encode(true, St) -> {true,St};
 encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
 encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
-encode(B, St) when is_boolean(B) -> {B,St};
-encode(nil, St) -> {nil,St};
 encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
 					  {K1,S1} = encode(K0, S0),
@@ -238,10 +239,11 @@ encode(_, _) -> error(badarg).			%Can't encode anything else
 decode_list(Lts, St) ->
     lists:map(fun (Lt) -> decode(Lt, St) end, Lts).
 
+decode(nil, _) -> nil;
+decode(false, _) -> false;
+decode(true, _) -> true;
 decode(B, _) when is_binary(B) -> B;
 decode(N, _) when is_number(N) -> N;
-decode(B, _) when is_boolean(B) -> B;
-decode(nil, _) -> nil;
 decode(#tref{i=N}, St) ->
     case ?GET_TABLE(N, St#luerl.ttab) of
 	#table{a=Arr,t=Tab} ->

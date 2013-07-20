@@ -281,8 +281,8 @@ tostring([Arg|_], St) ->
     end.
 
 tostring(nil) -> <<"nil">>;
-tostring(true) -> <<"true">>;
 tostring(false) -> <<"false">>;
+tostring(true) -> <<"true">>;
 tostring(N) when is_number(N) ->
     A = abs(N),
     %% Print really big/small "integers" as floats as well.
