@@ -38,12 +38,16 @@ install(St0) ->
     Meta1 = Meta0#meta{string=M},
     {T,St2#luerl{meta=Meta1}}.
 
+%% metatable(Table) -> [{TableName,Table}].
+%% table() -> [{FuncName,Function}].
+
 metatable(T) ->					%String type metatable
     [{<<"__index">>,T}].
 
 table() ->					%String table
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
+     {<<"dump">>,{function,fun dump/2}},
      {<<"find">>,{function,fun find/2}},
      {<<"format">>,{function, fun format/2}},
      {<<"gmatch">>,{function,fun gmatch/2}},
@@ -56,6 +60,9 @@ table() ->					%String table
      {<<"sub">>,{function,fun sub/2}},
      {<<"upper">>,{function,fun upper/2}}
     ].
+
+%% byte(String [, I [, J]] ) -> [Code]
+%%  Return numerical codes of string between I and J.
 
 byte(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
@@ -84,12 +91,25 @@ do_byte_ij(_, _, I, J) when I > J -> [nil];
 do_byte_ij(S, _, I, J) ->
     [ float(N) || N <- binary_to_list(S, I, J) ].
 
+%% char(...) -> String
+%%  Return string of the numerical arguments.
+
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
     case catch list_to_binary(luerl_lib:to_ints(As)) of
 	{'EXIT',_} -> badarg_error(char, As, St);
 	B -> {[B],St}
     end.
+
+%% dump(Function) -> String.
+%%  Return a string with binary representation of Function.
+
+-spec dump([_], _) -> no_return().
+
+dump(As, St) -> badarg_error(dump, As, St).
+
+%% find(String, Pattern [, Init [, Plain]]) -> [Indice].
+%%  Return first occurrence of Pattern in String.
 
 find(As, St0) ->
     try
@@ -223,6 +243,8 @@ build_q([<<B>>|Ss0]) when B >= 127, B =< 159 ->
     [io_lib:write(B)|build_q(Ss0)];
 build_q([S|Ss]) -> [S|build_q(Ss)];
 build_q([]) -> [].
+
+-spec gmatch([_], _) -> no_return().
 
 gmatch(As, St) -> badarg_error(gmatch, As, St).
 
