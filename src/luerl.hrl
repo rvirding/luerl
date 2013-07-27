@@ -29,7 +29,6 @@
 		stk=[],				%Current stack
 		%%
 		meta=[],			%Data type metatables
-		locf=false,			%Started local function
 		tag				%Unique tag
 	       }).
 
