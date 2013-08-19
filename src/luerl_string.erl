@@ -182,17 +182,24 @@ format_loop(<<C,F/binary>>, As, St, Acc) ->
 format_loop(<<>>, _, St, Acc) ->
     {lists:reverse(Acc),St}.
 
-%% collect(Format) -> {{C,F,Ad,P},Format}.
+%% collect(Format) -> {{C,F,P,Pad},Format}. as in io:format
 
 collect(F0) ->
-    {C,F1} = collect_loop(F0),
-    {{C,0,0,0},F1}.
+    {C,F1} = collect_loop(F0,{undefined,undefined,undefined,undefined}),
+    {C,F1}.
 
-collect_loop(<<D,F/binary>>) when D >= $0, D =< $9 ->
-    collect_loop(F);
-collect_loop(<<$.,F/binary>>) -> collect_loop(F);
-collect_loop(<<$-,F/binary>>) -> collect_loop(F);
-collect_loop(<<C,F/binary>>) -> {C,F}.
+% slot #2 is width
+% slot #3 is precision
+% slot #4 is padding
+collect_loop(<<D,F/binary>>, C) when D >= $0, D =< $9, element(4,C) == undefined ->
+    C1 = setelement(4, C, D - $0),
+    collect_loop(F, C1);
+collect_loop(<<D,F/binary>>, C) when D >= $0, D =< $9, element(2,C) == undefined ->
+    C1 = setelement(2, C, D - $0),
+    collect_loop(F, C1);
+collect_loop(<<$.,F/binary>>, C) -> collect_loop(F, C);
+collect_loop(<<$-,F/binary>>, C) -> collect_loop(F, C);
+collect_loop(<<M,F/binary>>, C) -> {setelement(1,C,M),F}.
 
 %% build({C,F,Ad,P}, Args, St) -> {Out,Args}.
 
@@ -207,9 +214,16 @@ build({$q,_,_,_}, [A|As], St) when is_binary(A) ->
 build({$c,_,_,_}, [A|As], St) ->
     I = luerl_lib:to_int(A),
     {[I],As,St};
-build({$d,_,_,_}, [A|As], St) ->
+build({$d,F,Pad,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {io_lib:write(I),As,St};
+    C = case [F,Pad,P] of
+        [undefined,undefined,undefined] -> 
+            io_lib:write(I);
+        FArgs -> 
+            Format = string:join([case C of undefined -> ""; _ -> integer_to_list(C) end || C <- FArgs], "."),
+            io_lib:format([$~]++Format++[$B], [I])
+    end,
+    {C,As,St};
 build({$x,_,_,_}, [A|As], St) ->
     I = luerl_lib:to_int(A),
     {io_lib:format("~.16b", [I]),As,St};
