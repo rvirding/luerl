@@ -153,80 +153,212 @@ find(S, L, P, I, false) ->			%Pattern search string
 	{error,E} -> throw({error,E})
     end.
 
-%% format([Format,Arg|_], State) -> {String,State}.
-% A VERY primitive format function, barely works.
+%% format(Format, ...) -> [String].
+%%  Format a string. All errors are badarg errors.
 
-format(As, St0) ->
+format([F|As], St0) ->
     try
-	do_format(As, St0)
+	do_format(F, As, St0)
     catch
+	%% If we have a specific error, default is badarg.
 	throw:{error,E,St1} -> lua_error(E, St1);
-	throw:{error,E} -> lua_error(E, St0)
-    end.
+	throw:{error,E} -> lua_error(E, St0);
+	_:_ -> badarg_error(format, [F|As], St0)
+    end;
+format(As, St) -> badarg_error(format, As, St).
 
-do_format([F|As], St0) ->
-    {L,St1} = format_loop(F, As, St0),
-    {[iolist_to_binary(L)],St1};
-do_format(As, St) -> throw({error,{badarg,format,As},St}).
+do_format(F, As, St0) ->
+    {Str,St1} = format_loop(luerl_lib:to_list(F), As, St0),
+    {[iolist_to_binary(Str)],St1}.
 
-format_loop(F, As, St) -> format_loop(F, As, St, []).
+format_loop(Fmt, As, St) -> format_loop(Fmt, As, St, []).
 
-format_loop(<<$%,F0/binary>>, As0, St0, Acc) ->
-    {Fo,F1} = collect(F0),
-    {Out,As1,St1} = build(Fo, As0, St0),
-    format_loop(F1, As1, St1, [Out|Acc]);
-format_loop(<<$\\,C,F/binary>>, As, St, Acc) ->
-    format_loop(F, As, St, [C|Acc]);
-format_loop(<<C,F/binary>>, As, St, Acc) ->
-    format_loop(F, As, St, [C|Acc]);
-format_loop(<<>>, _, St, Acc) ->
+format_loop([$%|Fmt0], As0, St0, Acc) ->
+    {Format,Fmt1} = collect(Fmt0),
+    {Out,As1,St1} = build(Format, As0, St0),
+    format_loop(Fmt1, As1, St1, [Out|Acc]);
+format_loop([$\\,C|Fmt], As, St, Acc) ->
+    format_loop(Fmt, As, St, [C|Acc]);
+format_loop([C|Fmt], As, St, Acc) ->
+    format_loop(Fmt, As, St, [C|Acc]);
+format_loop([], _, St, Acc) ->			%Ignore extra arguments
     {lists:reverse(Acc),St}.
 
-%% collect(Format) -> {{C,F,Ad,P},Format}.
+%% collect(Format) -> {{C,Flag,Field,Precision},Format}.
 
-collect(F0) ->
-    {C,F1} = collect_loop(F0),
-    {{C,0,0,0},F1}.
+collect(Fmt0) ->
+    {Fl,Fmt1} = flag(Fmt0),			%The flag character
+    {F,Fmt2} = field_width(Fmt1),		%The field width
+    {P,Fmt3} = precision(Fmt2),			%The precision
+    {C,Fmt4} = collect_cc(Fmt3),		%The control character
+    {{C,Fl,F,P},Fmt4}.
 
-collect_loop(<<D,F/binary>>) when D >= $0, D =< $9 ->
-    collect_loop(F);
-collect_loop(<<$.,F/binary>>) -> collect_loop(F);
-collect_loop(<<$-,F/binary>>) -> collect_loop(F);
-collect_loop(<<C,F/binary>>) -> {C,F}.
+flag([C|Fmt]) when C == $# ; C == $0 ; C == $- ; C == $\s ; C == $+ ->
+    {C,Fmt};
+flag(Fmt) -> {none,Fmt}.
 
-%% build({C,F,Ad,P}, Args, St) -> {Out,Args}.
+field_width(Fmt) -> field_value(Fmt).
 
-build({$s,_,_,_}, [A|As], St0) ->
-    {S,St1} = luerl_basic:tostring([A], St0),
-    {io_lib:fwrite("~s", [S]),As,St1};
-build({$q,_,_,_}, [A|As], St) when is_binary(A) ->
-    %% You don't really want to know!
-    Ss0 = re:split(A, "([\\0-\\39\\\n\\\"\\\\\\177-\\237])", [trim]),
+precision([$.|Fmt]) -> field_value(Fmt);
+precision(Fmt) -> {none,Fmt}.
+
+collect_cc([C|Fmt]) -> {C,Fmt};
+collect_cc([]) -> {none,[]}.
+
+field_value([C|_]=Fmt) when C >= $0, C =< $9 -> field_value(Fmt, 0);
+field_value(Fmt) -> {none,Fmt}.
+
+field_value([C|Fmt], F) when C >= $0, C =< $9 ->
+    field_value(Fmt, 10*F + (C - $0));
+field_value(Fmt, F) -> {F,Fmt}.
+
+%% build({C,Flag,Field,Precision}, Args) -> {Out,Args}.
+%% No length modifiers, h L l, no conversions n p S C allowed.
+%% Conversions d,i o,u,x,X e,E f,F g,G c s %
+
+build({$q,_,_,_}, [A|As], St0) ->
+    %% No triming or adjusting of the $q string, we only get all of
+    %% it. Use an RE to split string on quote needing characters.
+    {[S0],St1} = luerl_basic:tostring([A], St0),
+    RE = "([\\0-\\39\\\n\\\"\\\\\\177-\\237])",	%You don't really want to know!
+    Ss0 = re:split(S0, RE, [{return,binary},trim]),
     Ss1 = build_q(Ss0),
-    {[$",Ss1,$"],As,St};
-build({$c,_,_,_}, [A|As], St) ->
+    {[$",Ss1,$"],As,St1};
+build({$s,Fl,F,P}, [A|As], St0) ->
+    {[S0],St1} = luerl_basic:tostring([A], St0),
+    S1 = trim_bin(S0, P),
+    {adjust_bin(S1, Fl, F),As,St1};
+build({$c,Fl,F,_}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    C = if is_number(N), N >= 0, N < 256 -> trunc(N);
+	   is_number(N) -> $?
+	end,
+    {adjust_str([C], Fl, F),As,St};
+%% Integer formats.
+build({$i,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {[I],As,St};
-build({$d,_,_,_}, [A|As], St) ->
+    {i_integer(Fl, F, P, I),As,St};
+build({$d,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {io_lib:write(I),As,St};
-build({$x,_,_,_}, [A|As], St) ->
+    {i_integer(Fl, F, P, I),As,St};
+build({$o,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {io_lib:format("~.16b", [I]),As,St};
-build({$i,_,_,_}, [A|As], St) ->
+    {o_integer(Fl, F, P, I),As,St};
+build({$x,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {io_lib:write(I),As,St};
-build({$e,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~e", [F]),As,St};
-build({$f,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~f", [F]),As,St};
-build({$g,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~g", [F]),As,St};
-build({F,_,_,_}, _, St) ->
-    throw({error,{badarg,format,[F]},St}).
+    {x_integer(Fl, F, P, I),As,St};
+%% Float formats.
+build({$e,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {e_float(Fl, F, P, N),As,St};
+build({$E,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {e_float(Fl, F, P, N),As,St};
+build({$f,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {f_float(Fl, F, P, N),As,St};
+build({$F,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {f_float(Fl, F, P, N),As,St};
+build({$g,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {g_float(Fl, F, P, N),As,St};
+build({$G,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:tonumber(A),
+    {g_float(Fl, F, P, N),As,St};
+%% Literal % format.
+build({$%,none,none,none}, As, St) ->		%No flag, field or precision!
+    {"%",As,St}.
+
+%% i_integer(Flag, Field, Precision, Number) -> String.
+%% o_integer(Flag, Field, Precision, Number) -> String.
+%% x_integer(Flag, Field, Precision, Number) -> String.
+%%  Print integer Number with base 10/8/16.
+
+i_integer(Fl, F, P, N) ->
+    print_integer(Fl, F, P, N, 10).
+
+o_integer(Fl, F, P, N) ->
+    print_integer(Fl, F, P, N, 8).
+
+x_integer(Fl, F, P, N) ->
+    print_integer(Fl, F, P, N, 16).
+
+print_integer(Fl, F, P, N, Base) ->
+    Str0 = integer_to_list(abs(N), Base),
+    if P =/= none ->
+	    Str1 = sign(Fl, N) ++ adjust_str(Str0, $0, P),
+	    adjust_str(Str1, Fl, F);
+       true ->
+	    Str1 = sign(Fl, N) ++ Str0,
+	    adjust_str(Str1, Fl, F)
+    end.
+
+%% e_float(Flag, Field, Precision, Number) -> String.
+%% f_float(Flag, Field, Precision, Number) -> String.
+%% g_float(Flag, Field, Precision, Number) -> String.
+%%  Print float Number in e/f/g format.
+
+e_float(Fl, F, P, N) ->
+    print_float(Fl, F, e_float_precision(P), "~.*e", N).
+
+f_float(Fl, F, P, N) ->
+    print_float(Fl, F, f_float_precision(P), "~.*f", N).
+
+g_float(Fl, F, P, N) ->
+    print_float(Fl, F, g_float_precision(P), "~.*g", N).
+
+print_float(Fl, F, P, Format, N) ->
+    Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
+    Str1 = sign(Fl, N) ++ Str0,
+    adjust_str(Str1, Fl, F).
+
+e_float_precision(none) -> 7;
+e_float_precision(P) -> P+1.
+
+f_float_precision(none) -> 6;
+f_float_precision(P) -> P.
+
+g_float_precision(none) -> 6;
+g_float_precision(P) -> P.
+
+%% sign(Flag, Number) -> SignString.
+
+sign(_, N) when N < 0 -> "-";
+sign($\s, _) -> " ";
+sign($+, _) -> "+";
+sign(_, _) -> "".
+
+trim_bin(Bin, Prec) when is_integer(Prec), byte_size(Bin) > Prec ->
+    binary:part(Bin, 0, Prec);
+trim_bin(Bin, _) -> Bin.
+
+%% adjust_bin(Binary, Flag, Field) -> iolist().
+%% adjust_str(String, Flag, Field) -> iolist().
+
+adjust_bin(Bin, none, none) -> Bin;
+adjust_bin(Bin, Fl, F) when is_integer(F), byte_size(Bin) < F ->
+    Size = byte_size(Bin),
+    Padding = lists:duplicate(F-Size, pad_char(Fl, F)),
+    if Fl =:= $- -> [Bin,Padding];
+       true -> [Padding,Bin]
+    end;
+adjust_bin(Bin, _, _) -> Bin.
+
+adjust_str(Str, none, none) -> Str;
+adjust_str(Str, Fl, F) when is_integer(F), length(Str) < F ->
+    Size = length(Str),
+    Padding = lists:duplicate(F-Size, pad_char(Fl, F)),
+    if Fl =:= $- -> [Str,Padding];
+       true -> [Padding,Str]
+    end;
+adjust_str(Str, _, _) -> Str.
+
+%% pad_char(Flag, Field) -> Char.
+
+pad_char($0, F) when F =/= none -> $0;
+pad_char($-, _) -> $\s;
+pad_char(_, _) -> $\s.
 
 build_q([<<>>|Ss]) -> build_q(Ss);
 build_q([<<$\n>>|Ss]) -> [$\\,$\n|build_q(Ss)];
@@ -246,7 +378,11 @@ build_q([]) -> [].
 
 -spec gmatch([_], _) -> no_return().
 
+%% gmatch(String, Pattern) -> [Function].
+
 gmatch(As, St) -> badarg_error(gmatch, As, St).
+
+%% gsub(String, Pattern, Repl [, N]) -> [String]
 
 gsub(As, St0) ->
     try
