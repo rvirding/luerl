@@ -187,15 +187,35 @@ format_loop([], _, St, Acc) ->			%Ignore extra arguments
 %% collect(Format) -> {{C,Flag,Field,Precision},Format}.
 
 collect(Fmt0) ->
-    {Fl,Fmt1} = flag(Fmt0),			%The flag character
+    {Fl,Fmt1} = flags(Fmt0),			%The flags characters
     {F,Fmt2} = field_width(Fmt1),		%The field width
     {P,Fmt3} = precision(Fmt2),			%The precision
     {C,Fmt4} = collect_cc(Fmt3),		%The control character
     {{C,Fl,F,P},Fmt4}.
 
-flag([C|Fmt]) when C == $# ; C == $0 ; C == $- ; C == $\s ; C == $+ ->
-    {C,Fmt};
-flag(Fmt) -> {none,Fmt}.
+%% Handling the flags of a format.
+%% Yes, we should use a tuple or record, but this is much more fun.
+
+-define(FL_NONE, 0).
+-define(FL_H, 2#00001).
+-define(FL_Z, 2#00010).
+-define(FL_M, 2#00100).
+-define(FL_S, 2#01000).
+-define(FL_P, 2#10000).
+
+-define(SET_BIT(FL,B), (FL bor (B))).
+-define(ANY_BITS(Fl, B), ((Fl band (B)) =/= 0)).
+-define(ALL_BITS(Fl, B), ((Fl band (B)) =:= (B))).
+-define(NO_BITS(Fl, B), ((Fl band (B)) =:= 0)).
+
+flags(Fmt) -> flags(Fmt, ?FL_NONE).
+
+flags([$#|Fmt], Fl) -> flags(Fmt, ?SET_BIT(Fl, ?FL_H));
+flags([$0|Fmt], Fl) -> flags(Fmt, ?SET_BIT(Fl, ?FL_Z));
+flags([$-|Fmt], Fl) -> flags(Fmt, ?SET_BIT(Fl, ?FL_M));
+flags([$\s|Fmt], Fl) -> flags(Fmt, ?SET_BIT(Fl, ?FL_S));
+flags([$+|Fmt], Fl) -> flags(Fmt, ?SET_BIT(Fl, ?FL_P));
+flags(Fmt, Fl) -> {Fl,Fmt}.
 
 field_width(Fmt) -> field_value(Fmt).
 
@@ -212,7 +232,7 @@ field_value([C|Fmt], F) when C >= $0, C =< $9 ->
     field_value(Fmt, 10*F + (C - $0));
 field_value(Fmt, F) -> {F,Fmt}.
 
-%% build({C,Flag,Field,Precision}, Args) -> {Out,Args}.
+%% build({C,Flags,Field,Precision}, Args) -> {Out,Args}.
 %% No length modifiers, h L l, no conversions n p S C allowed.
 %% Conversions d,i o,u,x,X e,E f,F g,G c s %
 
@@ -237,16 +257,19 @@ build({$c,Fl,F,_}, [A|As], St) ->
 %% Integer formats.
 build({$i,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {i_integer(Fl, F, P, I),As,St};
+    {format_integer(Fl, F, P, I, 10),As,St};
 build({$d,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {i_integer(Fl, F, P, I),As,St};
+    {format_integer(Fl, F, P, I, 10),As,St};
 build({$o,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {o_integer(Fl, F, P, I),As,St};
+    {format_integer(Fl, F, P, I, 8),As,St};
 build({$x,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {x_integer(Fl, F, P, I),As,St};
+    {format_integer(Fl, F, P, I, 16),As,St};
+build({$X,Fl,F,P}, [A|As], St) ->
+    I = luerl_lib:to_int(A),
+    {format_integer(Fl, F, P, I, 16),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->
     N = luerl_lib:tonumber(A),
@@ -267,48 +290,45 @@ build({$G,Fl,F,P}, [A|As], St) ->
     N = luerl_lib:tonumber(A),
     {g_float(Fl, F, P, N),As,St};
 %% Literal % format.
-build({$%,none,none,none}, As, St) ->		%No flag, field or precision!
+build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!
     {"%",As,St}.
 
-%% i_integer(Flag, Field, Precision, Number) -> String.
-%% o_integer(Flag, Field, Precision, Number) -> String.
-%% x_integer(Flag, Field, Precision, Number) -> String.
-%%  Print integer Number with base 10/8/16.
+%% format_integer(Flags, Field, Precision, Number, Base) -> String.
+%%  Print integer Number with base Base. This is a bit messy as we are
+%%  following string.format handling.
 
-i_integer(Fl, F, P, N) ->
-    print_integer(Fl, F, P, N, 10).
-
-o_integer(Fl, F, P, N) ->
-    print_integer(Fl, F, P, N, 8).
-
-x_integer(Fl, F, P, N) ->
-    print_integer(Fl, F, P, N, 16).
-
-print_integer(Fl, F, P, N, Base) ->
+format_integer(Fl, F, P, N, Base) ->
     Str0 = integer_to_list(abs(N), Base),
     if P =/= none ->
-	    Str1 = sign(Fl, N) ++ adjust_str(Str0, $0, P),
+	    Str1 = sign(Fl, N) ++ lists:flatten(adjust_str(Str0, ?FL_Z, P)),
+	    adjust_str(Str1, (Fl band ?FL_M), F);
+       ?ANY_BITS(Fl, ?FL_M) ->
+	    Str1 = sign(Fl, N) ++ Str0,
 	    adjust_str(Str1, Fl, F);
+       ?ANY_BITS(Fl, ?FL_Z), F =/= none ->
+	    Sign = sign(Fl, N),
+	    Str1 = adjust_str(Str0, ?FL_Z, F-length(Sign)),
+	    Sign ++ Str1;
        true ->
 	    Str1 = sign(Fl, N) ++ Str0,
 	    adjust_str(Str1, Fl, F)
     end.
 
-%% e_float(Flag, Field, Precision, Number) -> String.
-%% f_float(Flag, Field, Precision, Number) -> String.
-%% g_float(Flag, Field, Precision, Number) -> String.
+%% e_float(Flags, Field, Precision, Number) -> String.
+%% f_float(Flags, Field, Precision, Number) -> String.
+%% g_float(Flags, Field, Precision, Number) -> String.
 %%  Print float Number in e/f/g format.
 
 e_float(Fl, F, P, N) ->
-    print_float(Fl, F, e_float_precision(P), "~.*e", N).
+    format_float(Fl, F, e_float_precision(P), "~.*e", N).
 
 f_float(Fl, F, P, N) ->
-    print_float(Fl, F, f_float_precision(P), "~.*f", N).
+    format_float(Fl, F, f_float_precision(P), "~.*f", N).
 
 g_float(Fl, F, P, N) ->
-    print_float(Fl, F, g_float_precision(P), "~.*g", N).
+    format_float(Fl, F, g_float_precision(P), "~.*g", N).
 
-print_float(Fl, F, P, Format, N) ->
+format_float(Fl, F, P, Format, N) ->
     Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
     Str1 = sign(Fl, N) ++ Str0,
     adjust_str(Str1, Fl, F).
@@ -322,43 +342,47 @@ f_float_precision(P) -> P.
 g_float_precision(none) -> 6;
 g_float_precision(P) -> P.
 
-%% sign(Flag, Number) -> SignString.
+%% sign(Flags, Number) -> SignString.
 
-sign(_, N) when N < 0 -> "-";
-sign($\s, _) -> " ";
-sign($+, _) -> "+";
-sign(_, _) -> "".
+sign(_, N) when N < 0 -> "-";			%Always sign when N<0
+sign(Fl, _) ->
+    if ?ALL_BITS(Fl, ?FL_P) -> "+";		%+ flag has priority
+       ?ALL_BITS(Fl, ?FL_S) -> " ";
+       true -> ""
+    end.
 
 trim_bin(Bin, Prec) when is_integer(Prec), byte_size(Bin) > Prec ->
     binary:part(Bin, 0, Prec);
 trim_bin(Bin, _) -> Bin.
 
-%% adjust_bin(Binary, Flag, Field) -> iolist().
-%% adjust_str(String, Flag, Field) -> iolist().
+%% adjust_bin(Binary, Flags, Field) -> iolist().
+%% adjust_str(String, Flags, Field) -> iolist().
 
-adjust_bin(Bin, none, none) -> Bin;
+adjust_bin(Bin, ?FL_NONE, none) -> Bin;
 adjust_bin(Bin, Fl, F) when is_integer(F), byte_size(Bin) < F ->
     Size = byte_size(Bin),
     Padding = lists:duplicate(F-Size, pad_char(Fl, F)),
-    if Fl =:= $- -> [Bin,Padding];
+    if ?ALL_BITS(Fl, ?FL_M) -> [Bin,Padding];
        true -> [Padding,Bin]
     end;
 adjust_bin(Bin, _, _) -> Bin.
 
-adjust_str(Str, none, none) -> Str;
+adjust_str(Str, ?FL_NONE, none) -> Str;
 adjust_str(Str, Fl, F) when is_integer(F), length(Str) < F ->
     Size = length(Str),
     Padding = lists:duplicate(F-Size, pad_char(Fl, F)),
-    if Fl =:= $- -> [Str,Padding];
+    if ?ALL_BITS(Fl, ?FL_M) -> [Str,Padding];
        true -> [Padding,Str]
     end;
 adjust_str(Str, _, _) -> Str.
 
-%% pad_char(Flag, Field) -> Char.
+%% pad_char(Flags, Field) -> Char.
 
-pad_char($0, F) when F =/= none -> $0;
-pad_char($-, _) -> $\s;
-pad_char(_, _) -> $\s.
+pad_char(Fl, F) ->
+    if ?ALL_BITS(Fl, ?FL_M) -> $\s;		%'-' forces padding to " "
+       ?ALL_BITS(Fl, ?FL_Z), F =/= none -> $0;
+       true -> $\s
+    end.
 
 build_q([<<>>|Ss]) -> build_q(Ss);
 build_q([<<$\n>>|Ss]) -> [$\\,$\n|build_q(Ss)];
@@ -376,7 +400,7 @@ build_q([<<B>>|Ss0]) when B >= 127, B =< 159 ->
 build_q([S|Ss]) -> [S|build_q(Ss)];
 build_q([]) -> [].
 
--spec gmatch([_], _) -> no_return().
+-spec gmatch([_], _) -> no_return().		%To keep dialyzer quiet
 
 %% gmatch(String, Pattern) -> [Function].
 
