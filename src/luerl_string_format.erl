@@ -39,7 +39,7 @@ format_loop([C|Fmt], As, St, Acc) ->
 format_loop([], _, St, Acc) ->			%Ignore extra arguments
     {lists:reverse(Acc),St}.
 
-%% collect(Format) -> {{C,Flag,Field,Precision},Format}.
+%% collect(Format) -> {{C,Flags,Field,Precision},Format}.
 %%  Collect a conversion specification.
 
 collect(Fmt0) ->
@@ -156,18 +156,18 @@ build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!
 
 format_integer(Fl, F, P, N, Base) ->
     Str0 = integer_to_list(abs(N), Base),
+    Sign = sign(Fl, N),
     if P =/= none ->
-	    Str1 = sign(Fl, N) ++ lists:flatten(adjust_str(Str0, ?FL_Z, P)),
+	    Str1 = Sign ++ lists:flatten(adjust_str(Str0, ?FL_Z, P)),
 	    adjust_str(Str1, (Fl band ?FL_M), F);
        ?ANY_BITS(Fl, ?FL_M) ->
-	    Str1 = sign(Fl, N) ++ Str0,
+	    Str1 = Sign ++ Str0,
 	    adjust_str(Str1, Fl, F);
        ?ANY_BITS(Fl, ?FL_Z), F =/= none ->
-	    Sign = sign(Fl, N),
 	    Str1 = adjust_str(Str0, ?FL_Z, F-length(Sign)),
 	    Sign ++ Str1;
        true ->
-	    Str1 = sign(Fl, N) ++ Str0,
+	    Str1 = Sign ++ Str0,
 	    adjust_str(Str1, Fl, F)
     end.
 
@@ -187,8 +187,17 @@ g_float(Fl, F, P, N) ->
 
 format_float(Fl, F, P, Format, N) ->
     Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
-    Str1 = sign(Fl, N) ++ Str0,
-    adjust_str(Str1, Fl, F).
+    Sign = sign(Fl, N),
+    if ?ANY_BITS(Fl, ?FL_M) ->
+	    Str1 = Sign ++ Str0,
+	    adjust_str(Str1, Fl, F);
+       ?ANY_BITS(Fl, ?FL_Z) ->
+	    Str1 = adjust_str(Str0, ?FL_Z, F-length(Sign)),
+	    Sign ++ Str1;
+       true ->
+	    Str1 = Sign ++ Str0,
+	    adjust_str(Str1, Fl, F)
+    end.
 
 e_float_precision(none) -> 7;
 e_float_precision(P) -> P+1.
