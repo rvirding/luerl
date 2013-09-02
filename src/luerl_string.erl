@@ -1,27 +1,16 @@
-%% Copyright (c) 2012 Robert Virding. All rights reserved.
+%% Copyright (c) 2013 Robert Virding
 %%
-%% Redistribution and use in source and binary forms, with or without
-%% modification, are permitted provided that the following conditions
-%% are met:
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% 1. Redistributions of source code must retain the above copyright
-%%    notice, this list of conditions and the following disclaimer.
-%% 2. Redistributions in binary form must reproduce the above copyright
-%%    notice, this list of conditions and the following disclaimer in the
-%%    documentation and/or other materials provided with the distribution.
+%%     http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-%% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-%% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-%% FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-%% COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-%% INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-%% BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-%% LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-%% CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-%% LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-%% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-%% POSSIBILITY OF SUCH DAMAGE.
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 %% File    : luerl_string.erl
 %% Author  : Robert Virding
@@ -31,21 +20,26 @@
 
 -include("luerl.hrl").
 
+%% The basic entry point to set up the function table.
 -export([install/1]).
 
--export([test_gsub/3,test_do_match/3,test_pat/1,	%Test functions
+%% Export some test functions.
+-export([test_gsub/3,test_do_match/3,test_pat/1,
 	 test_byte/3,test_find/4,test_sub/2,test_sub/3]).
 
--import(luerl_lib, [lua_error/1]).		%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 %%-compile([bin_opt_info]).			%For when we are optimising
 
 install(St0) ->
-    {T,St1} = luerl_eval:alloc_table(table(), St0),
-    {M,St2} = luerl_eval:alloc_table(metatable(T), St1),
+    {T,St1} = luerl_emul:alloc_table(table(), St0),
+    {M,St2} = luerl_emul:alloc_table(metatable(T), St1),
     Meta0 = St2#luerl.meta,
     Meta1 = Meta0#meta{string=M},
     {T,St2#luerl{meta=Meta1}}.
+
+%% metatable(Table) -> [{TableName,Table}].
+%% table() -> [{FuncName,Function}].
 
 metatable(T) ->					%String type metatable
     [{<<"__index">>,T}].
@@ -53,6 +47,7 @@ metatable(T) ->					%String type metatable
 table() ->					%String table
     [{<<"byte">>,{function,fun byte/2}},
      {<<"char">>,{function,fun char/2}},
+     {<<"dump">>,{function,fun dump/2}},
      {<<"find">>,{function,fun find/2}},
      {<<"format">>,{function, fun format/2}},
      {<<"gmatch">>,{function,fun gmatch/2}},
@@ -66,12 +61,15 @@ table() ->					%String table
      {<<"upper">>,{function,fun upper/2}}
     ].
 
+%% byte(String [, I [, J]] ) -> [Code]
+%%  Return numerical codes of string between I and J.
+
 byte(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
 	[S|Is] ->
 	    Bs = do_byte(S, byte_size(S), Is),
 	    {Bs,St};
-	_ -> lua_error({badarg,byte,As})	%nil or []
+	_ -> badarg_error(byte, As, St)		%nil or []
     end.
 
 test_byte(S, I, J) ->
@@ -93,19 +91,40 @@ do_byte_ij(_, _, I, J) when I > J -> [nil];
 do_byte_ij(S, _, I, J) ->
     [ float(N) || N <- binary_to_list(S, I, J) ].
 
+%% char(...) -> String
+%%  Return string of the numerical arguments.
+
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
     case catch list_to_binary(luerl_lib:to_ints(As)) of
-	{'EXIT',_} -> lua_error({badarg,char,As});
+	{'EXIT',_} -> badarg_error(char, As, St);
 	B -> {[B],St}
     end.
 
-find([A1,A2], St) -> find([A1,A2,1.0], St);
-find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
-find(As, St) ->
+%% dump(Function) -> String.
+%%  Return a string with binary representation of Function.
+
+-spec dump([_], _) -> no_return().
+
+dump(As, St) -> badarg_error(dump, As, St).
+
+%% find(String, Pattern [, Init [, Plain]]) -> [Indice].
+%%  Return first occurrence of Pattern in String.
+
+find(As, St0) ->
+    try
+	do_find(As, St0)
+    catch
+	throw:{error,E,St1} -> lua_error(E, St1);
+	throw:{error,E} -> lua_error(E, St0)
+    end.
+
+do_find([A1,A2], St) -> find([A1,A2,1.0], St);
+do_find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
+do_find(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer,lua_bool]) of
 	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St};
-	_ -> lua_error({badarg,find,As})	%nil, [_] or []
+	_ -> throw({error,{find,As},St})	%nil, [_] or []
     end.
 
 test_find(S, P, I, Pl) -> find(S, byte_size(S), P, I, Pl).
@@ -131,72 +150,47 @@ find(S, L, P, I, false) ->			%Pattern search string
 		    [float(F),float(F+Len-1)|match_cas(Cas, S)];
 		[] -> [nil]			%No match
 	    end;
-	{error,E} -> lua_error(E)
+	{error,E} -> throw({error,E})
     end.
 
-%% format([Format,Arg|_], State) -> {String,State}.
-% A VERY primitive format function, barely works.
+%% format(Format, ...) -> [String].
+%%  Format a string. All errors are badarg errors.
+%%  Do all the work in luerl_string_format but generate errors here.
 
-format([F|As], St) ->
-    L = format_loop(F, As),
-    {[iolist_to_binary(L)],St};
-format(As, _) -> lua_error({badarg,format,As}).
+format([F|As], St0) ->
+    try
+	luerl_string_format:format(F, As, St0)
+    catch
+	%% If we have a specific error, default is badarg.
+	throw:{error,E,St1} -> lua_error(E, St1);
+	throw:{error,E} -> lua_error(E, St0);
+	_:_ -> badarg_error(format, [F|As], St0)
+    end;
+format(As, St) -> badarg_error(format, As, St).
 
-format_loop(<<$%,F0/binary>>, As0) ->
-    {Fo,F1} = collect(F0),
-    {Out,As1} = build(Fo, As0),
-    [Out|format_loop(F1, As1)];
-format_loop(<<$\\,C,Rest/binary>>, As) ->
-    [C|format_loop(Rest, As)];
-format_loop(<<C,Rest/binary>>, As) ->
-    [C|format_loop(Rest, As)];
-format_loop(<<>>, _) -> [].
+-spec gmatch([_], _) -> no_return().		%To keep dialyzer quiet
 
-%% collect(Format) -> {{C,F,Ad,P},Format}.
+%% gmatch(String, Pattern) -> [Function].
 
-collect(F0) ->
-    {C,F1} = collect_loop(F0),
-    {{C,0,0,0},F1}.
+gmatch(As, St) -> badarg_error(gmatch, As, St).
 
-collect_loop(<<D,F/binary>>) when D >= $0, D =< $9 ->
-    collect_loop(F);
-collect_loop(<<$.,F/binary>>) -> collect_loop(F);
-collect_loop(<<$-,F/binary>>) -> collect_loop(F);
-collect_loop(<<C,F/binary>>) -> {C,F}.
+%% gsub(String, Pattern, Repl [, N]) -> [String]
 
-%% build({C,F,Ad,P}, Args) -> {Out,Args}.
+gsub(As, St0) ->
+    try
+	do_gsub(As, St0)
+    catch
+	throw:{error,E,St1} -> lua_error(E, St1);
+	throw:{error,E} -> lua_error(E, St0)
+    end.
 
-build({$s,_,_,_}, [A|As]) ->
-    S = luerl_lib:tostring(A),
-    {io_lib:fwrite("~s", [S]),As};
-build({$q,_,_,_}, [A|As]) ->
-    S = luerl_lib:tostring(A),
-    {io_lib:fwrite("\"~s\"", [S]),As};
-build({$d,_,_,_}, [A|As]) ->
-    I = luerl_lib:tointeger(A),
-    {io_lib:write(I),As};
-build({$i,_,_,_}, [A|As]) ->
-    I = luerl_lib:tointeger(A),
-    {io_lib:write(I),As};
-build({$e,_,_,_}, [A|As]) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~e", [F]),As};
-build({$f,_,_,_}, [A|As]) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~f", [F]),As};
-build({$g,_,_,_}, [A|As]) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~g", [F]),As}.
-
-gmatch(As, _) -> lua_error({badarg,gmatch,As}).
-
-gsub(As, St) ->
+do_gsub(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,integer]) of
 	[S,P,R,N] when N > 0 ->
 	    gsub(S, byte_size(S), P, R, N, St);
 	[S,P,R] ->				%'all' bigger than any number
 	    gsub(S, byte_size(S), P, R, all, St);
-	_ -> lua_error({badarg,gsub,As})
+	_ -> throw({error,{badarg,gsub,As},St})
     end.
 
 test_gsub(S, P, N) ->
@@ -211,7 +205,7 @@ gsub(S, L, P, R, N, St0) ->
 	    %% io:fwrite("g->~p\n", [Fs]),
 	    {Ps,St1} = gsub_repl_loop(Fs, S, 1, L, R, St0),
 	    {[iolist_to_binary(Ps),float(length(Fs))],St1};
-	{error,E} -> lua_error(E)
+	{error,E} -> throw({error,E})
     end.
 
 %% gsub_match_loop(S, L, Pat, I, C, N) -> [Cas].
@@ -254,14 +248,14 @@ gsub_repl(Cas, S, #tref{}=T, St0) ->
 	[Ca] -> Key = match_ca(Ca, S);
 	[Ca,Ca1|_] -> Key = match_ca(Ca1, S)
     end,
-    {Rs,St1} = luerl_eval:get_table_key(T, Key, St0),
-    {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
+    {R,St1} = luerl_emul:get_table_key(T, Key, St0),
+    {[gsub_repl_val(S, R, Ca)],St1};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     case Cas0 of				%Export both Ca and Args
 	[Ca] -> Args = [match_ca(Ca, S)];
 	[Ca|Cas] -> Args = match_cas(Cas, S)
     end,
-    {Rs,St1} = luerl_eval:functioncall(Repl, Args, St0),
+    {Rs,St1} = luerl_emul:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
 gsub_repl(Cas, S, Repl, St) ->			%Replace string
     case luerl_lib:to_list(Repl) of
@@ -279,7 +273,7 @@ gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
 	{value,Ca} ->
 	    Cstr = luerl_lib:tostring(match_ca(Ca, S)),	%Force to string!
 	    [Cstr|gsub_repl_str(Cas, S, R)];
-	false -> lua_error({illegal_index,capture,C-$0})
+	false -> throw({error,{illegal_index,capture,C-$0}})
     end;
 gsub_repl_str(Cas, S, [C|R]) ->
     [C|gsub_repl_str(Cas, S, R)];
@@ -296,21 +290,29 @@ gsub_repl_val(S, Val, Ca) ->
 len([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
-len(As, _) -> lua_error({badarg,len,As}).
+len(As, St) -> badarg_error(len, As, St).
 
 lower(As, St) ->
     case luerl_lib:conv_list(As, [list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
-	nil -> lua_error({badarg,lower,As})
+	nil -> badarg_error(lower, As, St)
     end.
 
 %% match(Args, State) -> {[Match],State}.
 
-match([A1,A2], St) -> match([A1,A2,1.0], St);
-match(As, St) ->
+match(As, St0) ->
+    try
+	do_match(As, St0)
+    catch
+	throw:{error,E,St1} -> lua_error(E, St1);
+	throw:{error,E} -> lua_error(E, St0)
+    end.
+
+do_match([A1,A2], St) -> match([A1,A2,1.0], St);
+do_match(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer]) of
 	[S,P,I] -> {match(S, byte_size(S), P, I),St};
-	_ -> lua_error({badarg,match,As})
+	_ -> throw({error,{badarg,match,As},St})
     end.
 
 %% match(String, Length, Pattern, Start) -> [Return].
@@ -331,7 +333,7 @@ match(S, L, P, I) ->
 		    match_cas(Cas, S);
 		[] -> [nil]			%No match
 	    end;
-	{error,E} -> lua_error(E)
+	{error,E} -> throw({error,E})
     end.
 
 %% match_loop(String, Length, Pattern, Index) -> Cas | [].
@@ -366,16 +368,16 @@ rep([_,_,_|_]=As, St) ->
 	       true -> {[<<>>],St}
 	    end;
 	nil ->					%Error or bad values
-	    lua_error({badarg,rep,As})
+	    badarg_error(rep, As, St)
     end;
-rep(As, _) -> lua_error({badarg,rep,As}).
+rep(As, St) -> badarg_error(rep, As, St).
 
 %% reverse(Args, State) -> {[Res],St}.
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
-reverse(As, _) -> lua_error({badarg,reverse,As}).
+reverse(As, St) -> badarg_error(reverse, As, St).
 
 %% sub(Args, State) -> {[Res],State}.
 
@@ -385,7 +387,7 @@ sub(As, St) ->
 	    Len = byte_size(S),
 	    Sub = do_sub(S, Len, I, Js),	%Just I, or both I and J
 	    {[Sub],St};
-	_ -> lua_error({badarg,sub,As})		%nil, [_] or []
+	_ -> badarg_error(sub, As, St)		%nil, [_] or []
     end.
 
 test_sub(S, I) -> do_sub(S, byte_size(S), I, []).
@@ -412,7 +414,7 @@ do_sub_ij(S, _, I, J) ->
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
-upper(As, _) -> lua_error({badarg,upper,As}).
+upper(As, St) -> badarg_error(upper, As, St).
 
 %% This is the pattern grammar used. It may actually be overkill to
 %% first parse the pattern as the pattern is relativey simple and we

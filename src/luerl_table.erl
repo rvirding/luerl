@@ -1,27 +1,16 @@
-%% Copyright (c) 2012 Robert Virding. All rights reserved.
+%% Copyright (c) 2013 Robert Virding
 %%
-%% Redistribution and use in source and binary forms, with or without
-%% modification, are permitted provided that the following conditions
-%% are met:
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% 1. Redistributions of source code must retain the above copyright
-%%    notice, this list of conditions and the following disclaimer.
-%% 2. Redistributions in binary form must reproduce the above copyright
-%%    notice, this list of conditions and the following disclaimer in the
-%%    documentation and/or other materials provided with the distribution.
+%%     http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-%% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-%% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-%% FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-%% COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-%% INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-%% BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-%% LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-%% CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-%% LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-%% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-%% POSSIBILITY OF SUCH DAMAGE.
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 %% File    : luerl_table.erl
 %% Author  : Robert Virding
@@ -36,14 +25,19 @@
 
 -include("luerl.hrl").
 
--export([install/1,length/2]).
+%% The basic entry point to set up the function table.
+-export([install/1]).
 
+%% Export some functions which can be called from elsewhere.
+-export([rawlength/2,length/2,unpack/2]).
+
+%% Export some test functions.
 -export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
 
--import(luerl_lib, [lua_error/1,badarg_error/2]).	%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_eval:alloc_table(table(), St).
+    luerl_emul:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -58,16 +52,24 @@ table() ->
 
 %% concat - concat the elements of a list into a string.
 
-concat([#tref{i=N}|As], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+concat(As, St0) ->
+    try
+	do_concat(As, St0)
+    catch
+	throw:{error,E,St1} -> lua_error(E, St1);
+	throw:{error,E} -> lua_error(E, St0)
+    end.
+
+do_concat([#tref{i=N}|As], St) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
     case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
 	[Sep,I] ->
 	    {[do_concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
 	    {[do_concat(Arr, Tab, Sep, I, J)],St};
-	_ -> badarg_error(concat, As)
+	_ -> throw({error,{badarg,concat,As},St})
     end;
-concat(As, _) -> badarg_error(concat, As).
+do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 
 test_concat(As) -> concat_args(As).
 
@@ -98,17 +100,17 @@ concat_tab(Arr, Tab, N, J) ->
     case ttdict:find(N, Tab) of
 	{ok,V} ->
 	    case luerl_lib:to_list(V) of
-		nil -> lua_error({illegal_val,concat,V});
+		nil -> throw({error,{illegal_val,concat,V}});
 		S -> [S|concat_tab(Arr, Tab, N+1, J)]
 	    end;
-	error -> lua_error({illegal_val,concat,nil})
+	error -> throw({error,{illegal_val,concat,nil}})
     end.
 
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
     V = array:get(N, Arr),
     case luerl_lib:to_list(V) of
-	nil -> lua_error({illegal_val,concat,V});
+	nil -> throw({error,{illegal_val,concat,V}});
 	S -> [S|concat_arr(Arr, N+1, J)]
     end.
 
@@ -120,25 +122,25 @@ concat_join([], _) -> <<>>.
 %% insert(Table, [Pos,] Value) -> []
 %%  Insert an element into a list shifting following elements.
 
-insert([#tref{i=N},V], St0) ->
-    Ts0 = St0#luerl.tabs,
+insert([#tref{i=N},V], St) ->
+    Ts0 = St#luerl.ttab,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
     %% io:fwrite("ins: ~p\n", [{Arr0,V}]),
     Arr1 = do_insert_last(Arr0, V),
     %% io:fwrite("ins> ~p\n", [Arr1]),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    {[],St0#luerl{tabs=Ts1}};
-insert([#tref{i=N},P0,V]=As, St0) ->
-    Ts0 = St0#luerl.tabs,
+    {[],St#luerl{ttab=Ts1}};
+insert([#tref{i=N},P0,V]=As, St) ->
+    Ts0 = St#luerl.ttab,
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
-	nil -> badarg_error(insert, As);
+	nil -> badarg_error(insert, As, St);
 	P1 ->
 	    {Arr1,Tab1} = do_insert(Arr0, Tab0, P1, V),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
-	    {[],St0#luerl{tabs=Ts1}}
+	    {[],St#luerl{ttab=Ts1}}
     end;
-insert(As, _) -> badarg_error(insert, As).
+insert(As, St) -> badarg_error(insert, As, St).
 
 %% Facit
 %% t={} t={'aa','bb','cc',[6]='zz'} table.insert(t, 8, 'E')
@@ -217,23 +219,23 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 %% remove(Table [,Pos]) -> Value.
 %%  Remove an element from a list shifting following elements.
 
-remove([#tref{i=N}], St0) ->
-    Ts0 = St0#luerl.tabs,
+remove([#tref{i=N}], St) ->
+    Ts0 = St#luerl.ttab,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
     {Ret,Arr1} = do_remove_last(Arr0),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    {Ret,St0#luerl{tabs=Ts1}};
-remove([#tref{i=N},P0]=As, St0) ->
-    Ts0 = St0#luerl.tabs,
+    {Ret,St#luerl{ttab=Ts1}};
+remove([#tref{i=N},P0]=As, St) ->
+    Ts0 = St#luerl.ttab,
     #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
-	nil -> badarg_error(remove, As);
+	nil -> badarg_error(remove, As, St);
 	P1 ->
 	    {Ret,Arr1,Tab1} = do_remove(Arr0, Tab0, P1),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
-	    {Ret,St0#luerl{tabs=Ts1}}
+	    {Ret,St#luerl{ttab=Ts1}}
     end;
-remove(As, _) -> badarg_error(remove, As).
+remove(As, St) -> badarg_error(remove, As, St).
 
 test_remove(Arr) -> do_remove_last(Arr).
 
@@ -285,7 +287,7 @@ remove_array_1(Arr0, N) ->
 
 pack(As, St0) ->
     T = pack_loop(As, 0.0),			%Indexes are floats!
-    {Tab,St1} = luerl_eval:alloc_table(T, St0),
+    {Tab,St1} = luerl_emul:alloc_table(T, St0),
     {[Tab],St1}.
 
 pack_loop([E|Es], N) ->
@@ -295,7 +297,7 @@ pack_loop([], N) -> [{<<"n">>,N}].
 %% unpack - unpack table into return values.
 
 unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.tabs),
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
     case luerl_lib:to_ints(unpack_args(As)) of
 	[I] ->
 	    Unp = do_unpack(Arr, Tab, I, length_loop(Arr)),
@@ -305,9 +307,9 @@ unpack([#tref{i=N}=T|As], St) ->
 	    Unp = do_unpack(Arr, Tab, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
-	nil -> badarg_error(unpack, [T|As])	%Not numbers
+	nil -> badarg_error(unpack, [T|As], St)	%Not numbers
     end;
-unpack([], _) -> badarg_error(unpack, []).
+unpack([], St) -> badarg_error(unpack, [], St).
 
 %% unpack_args(Args) -> Args.
 %% Fix args for unpack getting defaults right and handling 'nil'.
@@ -348,14 +350,14 @@ sort([#tref{i=N}], St0) ->
     {[],St1};
 sort([#tref{i=N},Func|_], St0) ->
     Comp = fun (A, B, St) ->
-		   luerl_eval:functioncall(Func, [A,B], St)
+		   luerl_emul:functioncall(Func, [A,B], St)
 	   end,
     St1 = do_sort(Comp, St0, N),
     {[],St1};
-sort(As, _) -> badarg_error(sort, As).
+sort(As, St) -> badarg_error(sort, As, St).
 
 do_sort(Comp, St0, N) ->
-    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.tabs),
+    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.ttab),
     case array:to_list(Arr0) of
 	[] -> St0;				%Nothing to do
 	[E0|Es0] ->
@@ -363,9 +365,9 @@ do_sort(Comp, St0, N) ->
 	    {Es1,St1} = merge_sort(Comp, St0, Es0),
 	    Arr2 = array:from_list([E0|Es1], nil),
 	    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
-	    Ts0 = St1#luerl.tabs,
+	    Ts0 = St1#luerl.ttab,
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
-	    St1#luerl{tabs=Ts1}
+	    St1#luerl{ttab=Ts1}
     end.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.
@@ -374,23 +376,29 @@ do_sort(Comp, St0, N) ->
 lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St0) ->
-    case luerl_eval:getmetamethod(O1, O2, <<"__lt">>, St0) of
-	nil -> lua_error({illegal_comp,sort});
+    case luerl_emul:getmetamethod(O1, O2, <<"__lt">>, St0) of
+	nil -> lua_error({illegal_comp,sort}, St0);
 	Meta ->
-	    {Ret,St1} = luerl_eval:functioncall(Meta, [O1,O2], St0),
+	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),
 	    {[luerl_lib:is_true_value(Ret)],St1}
     end.
 
-%% length(Stable, State) -> {Length,State}.
+%% rawlength(Table, State) -> {Length,Table}.
+
+rawlength(#tref{i=N}, St) ->
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
+    {float(array:size(Arr)),St}.
+
+%% length(Table, State) -> {Length,State}.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
 length(#tref{i=N}=T, St) ->
-    Meta = luerl_eval:getmetamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meta) -> luerl_eval:functioncall(Meta, [T], St);
+    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St),
+    if ?IS_TRUE(Meta) -> luerl_emul:functioncall(Meta, [T], St);
        true ->
-	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs),
-	    {[float(length_loop(Arr))],St}
+	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
+	    {float(length_loop(Arr)),St}
     end.
 
 length_loop(Arr) ->

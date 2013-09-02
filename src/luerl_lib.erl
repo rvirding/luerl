@@ -1,27 +1,16 @@
-%% Copyright (c) 2012 Robert Virding. All rights reserved.
+%% Copyright (c) 2013 Robert Virding
 %%
-%% Redistribution and use in source and binary forms, with or without
-%% modification, are permitted provided that the following conditions
-%% are met:
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
 %%
-%% 1. Redistributions of source code must retain the above copyright
-%%    notice, this list of conditions and the following disclaimer.
-%% 2. Redistributions in binary form must reproduce the above copyright
-%%    notice, this list of conditions and the following disclaimer in the
-%%    documentation and/or other materials provided with the distribution.
+%%     http://www.apache.org/licenses/LICENSE-2.0
 %%
-%% THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-%% "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-%% LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
-%% FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
-%% COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-%% INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
-%% BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-%% LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-%% CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-%% LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-%% ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-%% POSSIBILITY OF SUCH DAMAGE.
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
 
 %% File    : luerl_lib.erl
 %% Author  : Robert Virding
@@ -35,7 +24,7 @@
 
 -include("luerl.hrl").
 
--export([lua_error/1,badarg_error/2,format_error/1,
+-export([lua_error/2,badarg_error/3,format_error/1,
 	 is_true_value/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
@@ -44,11 +33,12 @@
 
 -export([anew/1,asiz/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
 
--spec lua_error(_) -> no_return().
+-spec lua_error(_,_) -> no_return().
+-spec badarg_error(_,_,_) -> no_return().
 
-badarg_error(What, Args) -> lua_error({badarg,What,Args}). 
+lua_error(E, St) -> error({lua_error,E,St}).
 
-lua_error(E) -> error({lua_error,E}).
+badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 
 %% Experimental structure for the array/list part of a table. List of
 %% segments containing values, all nil fields are gaps.
@@ -89,7 +79,7 @@ aclr(I, [{F,L,Es}|A]) when I > F, I < L ->
     {Bef,[_|Aft]} = lists:split(Bc, Es),	%Split and drop
     [{F,I-1,Bef},{I+1,L,Aft}|A];
 aclr(I, [S|A]) -> [S|aclr(I, A)];
-aclr(I, A) -> A.
+aclr(_, A) -> A.
 
 asl(_, _, A) -> A.
 
@@ -186,7 +176,7 @@ str_to_float(S) ->
 
 %% tonumber(Arg) -> Number | nil.
 %% tonumber(Arg, Base) -> Number | nil.
-%% Tonumber/2 only generates "integers". Lua does it like that.
+%%  Tonumber/2 only generates "integers". Lua does it like that.
 
 tonumber(N) when is_number(N) -> N;
 tonumber(B) when is_binary(B) ->
