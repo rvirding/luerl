@@ -41,7 +41,8 @@
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
-	 functioncall/3,get_table_key/3,set_table_key/4,
+	 functioncall/3,methodcall/4,
+	 get_table_key/3,set_table_key/4,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
@@ -421,16 +422,24 @@ emul_1([?MULTIPLE|Is], Acc, Var, Stk, Env, St) ->
 emul_1([?BUILD_TAB(Fc, I)|Is], Acc, Var, Stk0, Env, St0) ->
     {Tab,Stk1,St1} = build_tab(Fc, I, Acc, Stk0, St0),
     emul(Is, Tab, Var, Stk1, Env, St1);
-emul_1([?CALL(0)|Is], Acc, Var, Stk, Env, St) ->
-    do_call0(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(1)|Is], Acc, Var, Stk, Env, St) ->
-    do_call1(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(2)|Is], Acc, Var, Stk, Env, St) ->
-    do_call2(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_call(Is, Acc, Var, Stk, Env, St, Ac);
-emul_1([?TAIL_CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_tail_call(Is, Acc, Var, Stk, Env, St, Ac);
+emul_1([?FCALL(0)|Is], Acc, Var, Stk, Env, St) ->
+    do_fcall_0(Is, Acc, Var, Stk, Env, St);
+emul_1([?FCALL(1)|Is], Acc, Var, Stk, Env, St) ->
+    do_fcall_1(Is, Acc, Var, Stk, Env, St);
+emul_1([?FCALL(2)|Is], Acc, Var, Stk, Env, St) ->
+    do_fcall_2(Is, Acc, Var, Stk, Env, St);
+emul_1([?FCALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
+    do_fcall(Is, Acc, Var, Stk, Env, St, Ac);
+emul_1([?TAIL_FCALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
+    do_tail_fcall(Is, Acc, Var, Stk, Env, St, Ac);
+emul_1([?MCALL(K, 0)|Is], Acc, Var, Stk, Env, St) ->
+    do_mcall_0(Is, Acc, Var, Stk, Env, St, K);
+emul_1([?MCALL(K, 1)|Is], Acc, Var, Stk, Env, St) ->
+    do_mcall_1(Is, Acc, Var, Stk, Env, St, K);
+emul_1([?MCALL(K, 2)|Is], Acc, Var, Stk, Env, St) ->
+    do_mcall_2(Is, Acc, Var, Stk, Env, St, K);
+emul_1([?MCALL(K, Ac)|Is], Acc, Var, Stk, Env, St) ->
+    do_mcall(Is, Acc, Var, Stk, Env, St, K, Ac);
 emul_1([?OP(Op,1)|Is], Acc, Var, Stk, Env, St) ->
     do_op1(Is, Acc, Var, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Acc, Var, Stk, Env, St) ->
@@ -584,25 +593,25 @@ do_op2(Is, Acc, Lvs, [A1|Stk], Env, #luerl{stk=OldStk}=St0, Op) ->
 do_fdef(Lsz, Esz, Pars, Is, Env, _) ->
     #function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is}.
 
-%% do_call0(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call1(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call2(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%% do_fcall_0(Instrs, Acc, LocalVars, Stack, Env, State) ->
+%% do_fcall_1(Instrs, Acc, LocalVars, Stack, Env, State) ->
+%% do_fcall_2(Instrs, Acc, LocalVars, Stack, Env, State) ->
+%% do_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
 %%     ReturnFromEmul.
 
-do_call0(Is, Acc, Lvs, Stk, Env, St) ->
+do_fcall_0(Is, Acc, Lvs, Stk, Env, St) ->
     %% The function is in the acc.
     functioncall(Is, Acc, Lvs, Stk, Env, St, Acc, []).
 
-do_call1(Is, Acc, Lvs, [Func|Stk], Env, St) ->
+do_fcall_1(Is, Acc, Lvs, [Func|Stk], Env, St) ->
     %% The function is on the stack and the argument is in the acc.
     functioncall(Is, Acc, Lvs, Stk, Env, St, Func, Acc).
 
-do_call2(Is, Acc, Lvs, [A1,Func|Stk], Env, St) ->
-    %% The function and 1st argument is on the stack, the 2nd is in the acc.
+do_fcall_2(Is, Acc, Lvs, [A1,Func|Stk], Env, St) ->
+    %% The function and 1st argument are on the stack, the 2nd is in the acc.
     functioncall(Is, Acc, Lvs, Stk, Env, St, Func, [A1|Acc]).
 
-do_call(Is, Acc, Lvs, Stk0, Env, St, Ac) ->
+do_fcall(Is, Acc, Lvs, Stk0, Env, St, Ac) ->
     {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
     [Func|Stk2] = Stk1,				%Get function
     functioncall(Is, Acc, Lvs, Stk2, Env, St, Func, Args).
@@ -624,6 +633,72 @@ functioncall(Is, Acc, Lvs, Stk0, Env, St0, Func, Args) ->
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
     emul(Is, Ret, Lvs, Stk0, Env, St1).
+
+%% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%%     ReturnFromEmul.
+
+do_tail_fcall(_Is, Acc, _Var, Stk, _Env, _St, 0) ->
+    error({boom,Acc,[],Stk});
+do_tail_fcall(_Is, Acc, _Var, Stk0, _Env, _St, Ac) ->
+    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
+    [Func|Stk2] = Stk1,				%Get function
+    error({boom,Func,Args,Stk2}).
+
+%% do_mcall_0(Instrs, Acc, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall_1(Instrs, Acc, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall_2(Instrs, Acc, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall(Instrs, Acc, LocalVars, Stack, Env, State, Method, ArgCount) ->
+%%     ReturnFromEmul.
+
+do_mcall_0(Is, Acc, Lvs, Stk, Env, St, M) ->
+    %% The object is in the acc.
+    methodcall(Is, Acc, Lvs, Stk, Env, St, Acc, M, []).
+
+do_mcall_1(Is, Acc, Lvs, [Obj|Stk], Env, St, M) ->
+    %% The object is on the stack and the argument is in the acc.
+    methodcall(Is, Acc, Lvs, Stk, Env, St, Obj, M, Acc).
+
+do_mcall_2(Is, Acc, Lvs, [A1,Obj|Stk], Env, St, M) ->
+    %% The object and 1st argument are on the stack, the 2nd is in the acc.
+    methodcall(Is, Acc, Lvs, Stk, Env, St, Obj, M, [A1|Acc]).
+
+do_mcall(Is, Acc, Lvs, Stk0, Env, St, M, Ac) ->
+    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
+    [Obj|Stk2] = Stk1,				%Get function
+    methodcall(Is, Acc, Lvs, Stk2, Env, St, Obj, M, Args).
+
+%% methodcall(Object, Method, Args, State) -> {Return,State}.
+%%  This is called from "within" things, for example metamethods, and
+%%  expects everything necessary to be in the state.
+
+methodcall(Obj, M, Args, St0) ->
+    %% Get the function to call from object and method.
+    case get_table_key(Obj, M, St0) of
+	{nil,St1} ->				%No method
+	    lua_error({undef_method,Obj,M}, St1);
+	{Val,St1} ->
+	    {Ret,St2} = functioncall(Val, [Obj|Args], St1#luerl.stk, St1),
+	    {Ret,St2}
+    end.
+
+%% methodcall(Instrs, Acc, Var, Stk, Env, State, Object, Method, Args) -> <emul>
+%%  This is called from within code and continues with Instrs after
+%%  call. It must move everything into State.
+
+methodcall(Is, Acc, Lvs, Stk0, Env, St0, Obj, M, Args) ->
+    %% Get the function to call from object and method.
+    case get_table_key(Obj, M, St0) of
+	{nil,St1} ->				%No method
+	    lua_error({undef_method,Obj,M}, St1);
+	{Val,St1} ->
+	    Fr = #call_frame{acc=Acc,lvs=Lvs,env=Env},
+	    Stk1 = [Fr|Stk0],
+	    {Ret,St2} = functioncall(Val, [Obj|Args], Stk1, St1),
+	    emul(Is, Ret, Lvs, Stk0, Env, St2)
+    end.
+
+%% functioncall(Function, Args, Stack, State) -> {Return,State}.
+%%  Setup environment for function and do call.
 
 functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
@@ -657,10 +732,9 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
-	nil -> badarg_error(Func, Args, St);
+	nil -> lua_error({undef_function,Func}, St);
 	Meta -> functioncall(Meta, Args, Stk, St)
     end.
-
 
 functioncall(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
@@ -705,16 +779,6 @@ assign_pars(V, As, L, E) when V > 0 ->		%This is a vararg!
     {setelement(V, L, As),E};
 assign_pars(V, As, L, E) ->			%This is a vararg!
     {L,setelement(-V, E, As)}.
-
-%% do_tail_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
-%%     ReturnFromEmul.
-
-do_tail_call(_Is, Acc, _Var, Stk, _Env, _St, 0) ->
-    error({boom,Acc,[],Stk});
-do_tail_call(_Is, Acc, _Var, Stk0, _Env, _St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
-    [Func|Stk2] = Stk1,				%Get function
-    error({boom,Func,Args,Stk2}).
 
 %% do_repeat(Instrs, Acc, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
 

@@ -35,8 +35,10 @@
 -define(MULTIPLE, multiple).			%Ensure multiple value
 
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
--define(CALL(Ac), {call,Ac}).
--define(TAIL_CALL(Ac), {tail_call,Ac}).
+-define(FCALL(Ac), {fcall,Ac}).
+-define(TAIL_FCALL(Ac), {tail_fcall,Ac}).
+-define(MCALL(M, Ac), {mcall,M,Ac}).
+-define(TAIL_MCALL(M, Ac), {tail_mcall,M,Ac}).
 -define(OP(Op,Ac), {op,Op,Ac}).
 -define(FDEF(Lsz, Esz, Pars, Is), {fdef,Lsz,Esz,Pars,Is}).
 

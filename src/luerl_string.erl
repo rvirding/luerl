@@ -295,7 +295,7 @@ len(As, St) -> badarg_error(len, As, St).
 lower(As, St) ->
     case luerl_lib:conv_list(As, [list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
-	nil -> badarg_error(lower, As, St)
+	_ -> badarg_error(lower, As, St)	%nil or []
     end.
 
 %% match(Args, State) -> {[Match],State}.

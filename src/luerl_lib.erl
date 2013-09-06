@@ -112,6 +112,8 @@ format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
 format_error({undef_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
+format_error({undef_method,Obj,Name}) ->
+    io_lib:format("undefined method in ~w: ~w", [Obj,Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);

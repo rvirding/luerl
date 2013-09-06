@@ -349,27 +349,20 @@ prefixexp_element(#key{k=E}, S, St0) ->
     {Ie,St1} = exp(E, single, St0),		%Table is in Acc
     {[?PUSH] ++ Ie ++ multiple_values(S, [?GET_KEY]),St1};
 prefixexp_element(#fcall{as=[]}, S, St) ->
-    Ifs = [?CALL(0)],
+    %% Special case this to leave function in the acc.
+    Ifs = [?FCALL(0)],
     {single_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{as=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ifs = [?PUSH] ++ Ias ++ [?CALL(length(As))],
+    Ifs = [?PUSH] ++ Ias ++ [?FCALL(length(As))],
     {single_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
     %% Special case this to leave table in the acc.
-    Ims = [?PUSH,				%Push table onto stack
-	   ?GET_LIT_KEY(K),			%Get function into acc
-	   ?SWAP,				%Swap func/table in stack/acc
-	   ?MULTIPLE] ++			%Make last argument
-	[?CALL(1)],
+    Ims = [?MCALL(K, 0)],
     {single_value(S, Ims),St};			%Method call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ims = [?PUSH,				%Push table onto stack
-	   ?GET_LIT_KEY(K),			%Get function into acc
-	   ?SWAP,				%Swap func/table in stack/acc
-	   ?PUSH] ++				%Push table as first arg
-	Ias ++ [?CALL(length(As)+1)],
+    Ims = [?PUSH] ++ Ias ++ [?MCALL(K, length(As))],
     {single_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
