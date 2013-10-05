@@ -63,7 +63,7 @@
 
 init() ->
     %% Initialise the general stuff.
-    St0 = #luerl{meta=#meta{},locf=false,tag=make_ref()},
+    St0 = #luerl{meta=#meta{},tag=make_ref()},
     %% Initialise the table handling.
     St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
     %% Initialise the frame handling.
@@ -941,70 +941,82 @@ op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
 %% le_op(Op, Arg, Arg, State) -> {[Ret],State}.
 %%  Straigt out of the reference manual.
 
-numeric_op(_Op, O, E, Raw, St0) ->
-    N = luerl_lib:tonumber(O),
-    if is_number(N) -> {Raw(N),St0};
-       true ->
-    	    Meta = getmetamethod(O, E, St0),
-    	    {Ret,St1} = functioncall(Meta, [O], St0),
+numeric_op(Op, A, E, Raw, St) ->
+    case luerl_lib:tonumber(A) of
+	nil -> numeric_meta(Op, A, E, St);	%Neither number nor string
+	N -> {Raw(N),St}
+    end.
+
+numeric_op(Op, A1, A2, E, Raw, St) ->
+    case luerl_lib:tonumber(A1) of
+	nil -> numeric_meta(Op, A1, A2, E, St);
+	N1 ->
+	    case luerl_lib:tonumber(A2) of
+		nil -> numeric_meta(Op, A1, A2, E, St);
+		N2 -> {Raw(N1, N2),St}
+	    end
+    end.
+
+numeric_meta(Op, A, E, St0) ->
+    case getmetamethod(A, E, St0) of
+	nil -> badarg_error(Op, [A], St0);	%No meta method
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A], St0),
 	    {first_value(Ret),St1}
     end.
 
-numeric_op(_Op, O1, O2, E, Raw, St0) ->
-    N1 = luerl_lib:tonumber(O1),
-    N2 = luerl_lib:tonumber(O2),
-    if is_number(N1), is_number(N2) -> {Raw(N1, N2),St0};
-       true ->
-    	    io:fwrite("no: ~p\n", [{_Op,O1,O2,N1,N2}]),
-    	    Meta = getmetamethod(O1, O2, E, St0),
-    	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
+numeric_meta(Op, A1, A2, E, St0) ->
+    case getmetamethod(A1, A2, E, St0) of
+	nil -> badarg_error(Op, [A1,A2], St0);	%No meta methods
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 	    {first_value(Ret),St1}
     end.
 
-eq_op(_Op, O1, O2, St) when O1 =:= O2 -> {true,St};
-eq_op(_Op, O1, O2, St) ->
-    eq_meta(O1, O2, St).
+eq_op(_Op, A1, A2, St) when A1 =:= A2 -> {true,St};
+eq_op(_Op, A1, A2, St) ->
+    eq_meta(A1, A2, St).
 
-neq_op(_Op, O1, O2, St) when O1 =:= O2 -> {false,St};
-neq_op(_Op, O1, O2, St0) ->
-    {Ret,St1} = eq_meta(O1, O2, St0),
+neq_op(_Op, A1, A2, St) when A1 =:= A2 -> {false,St};
+neq_op(_Op, A1, A2, St0) ->
+    {Ret,St1} = eq_meta(A1, A2, St0),
     {not Ret,St1}.
 
-eq_meta(O1, O2, St0) ->
-    case getmetamethod(O1, <<"__eq">>, St0) of
+eq_meta(A1, A2, St0) ->
+    case getmetamethod(A1, <<"__eq">>, St0) of
 	nil -> {false,St0};			%Tweren't no method
 	Meta ->
-	    case getmetamethod(O2, <<"__eq">>, St0) of
+	    case getmetamethod(A2, <<"__eq">>, St0) of
 		Meta ->				%Must be the same method
-		    {Ret,St1} =functioncall(Meta, [O1,O2], St0),
+		    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 		    {is_true_value(Ret),St1};
 		_ -> {false,St0}
 	    end
     end.
 
-lt_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {O1 < O2,St};
-lt_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {O1 < O2,St};
-lt_op(Op, O1, O2, St0) ->
-    case getmetamethod(O1, O2, <<"__lt">>, St0) of
-	nil -> badarg_error(Op, [O1,O2], St0);
+lt_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 < A2,St};
+lt_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 < A2,St};
+lt_op(Op, A1, A2, St0) ->
+    case getmetamethod(A1, A2, <<"__lt">>, St0) of
+	nil -> badarg_error(Op, [A1,A2], St0);
 	Meta ->
-	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 	    {is_true_value(Ret),St1}
     end.
 
-le_op(_Op, O1, O2, St) when is_number(O1), is_number(O2) -> {O1 =< O2,St};
-le_op(_Op, O1, O2, St) when is_binary(O1), is_binary(O2) -> {O1 =< O2,St};
-le_op(Op, O1, O2, St0) ->
-    case getmetamethod(O1, O2, <<"__le">>, St0) of
+le_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 =< A2,St};
+le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 =< A2,St};
+le_op(Op, A1, A2, St0) ->
+    case getmetamethod(A1, A2, <<"__le">>, St0) of
 	Meta when Meta =/= nil ->
-	    {Ret,St1} = functioncall(Meta, [O1,O2], St0),
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 	    {is_true_value(Ret),St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
-	    case getmetamethod(O1, O2, <<"__lt">>, St0) of
-		nil -> badarg_error(Op, [O1,O2], St0);
+	    case getmetamethod(A1, A2, <<"__lt">>, St0) of
+		nil -> badarg_error(Op, [A1,A2], St0);
 		Meta ->
-		    {Ret,St1} = functioncall(Meta, [O2,O1], St0),
+		    {Ret,St1} = functioncall(Meta, [A2,A1], St0),
 		    {not is_true_value(Ret),St1}
 	    end
     end.

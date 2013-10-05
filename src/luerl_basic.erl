@@ -89,6 +89,8 @@ eprint(Args, St) ->
     io:nl(),
     {[],St}.
 
+-spec error(_, _) -> no_return().
+
 error([M|_], St) -> lua_error(M, St);		%Never returns!
 error(As, St) -> badarg_error(error, As, St).
 

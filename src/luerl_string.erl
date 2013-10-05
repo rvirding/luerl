@@ -153,114 +153,28 @@ find(S, L, P, I, false) ->			%Pattern search string
 	{error,E} -> throw({error,E})
     end.
 
-%% format([Format,Arg|_], State) -> {String,State}.
-% A VERY primitive format function, barely works.
+%% format(Format, ...) -> [String].
+%%  Format a string. All errors are badarg errors.
+%%  Do all the work in luerl_string_format but generate errors here.
 
-format(As, St0) ->
+format([F|As], St0) ->
     try
-	do_format(As, St0)
+	luerl_string_format:format(F, As, St0)
     catch
+	%% If we have a specific error, default is badarg.
 	throw:{error,E,St1} -> lua_error(E, St1);
-	throw:{error,E} -> lua_error(E, St0)
-    end.
-
-do_format([F|As], St0) ->
-    {L,St1} = format_loop(F, As, St0),
-    {[iolist_to_binary(L)],St1};
-do_format(As, St) -> throw({error,{badarg,format,As},St}).
-
-format_loop(F, As, St) -> format_loop(F, As, St, []).
-
-format_loop(<<$%,F0/binary>>, As0, St0, Acc) ->
-    {Fo,F1} = collect(F0),
-    {Out,As1,St1} = build(Fo, As0, St0),
-    format_loop(F1, As1, St1, [Out|Acc]);
-format_loop(<<$\\,C,F/binary>>, As, St, Acc) ->
-    format_loop(F, As, St, [C|Acc]);
-format_loop(<<C,F/binary>>, As, St, Acc) ->
-    format_loop(F, As, St, [C|Acc]);
-format_loop(<<>>, _, St, Acc) ->
-    {lists:reverse(Acc),St}.
-
-%% collect(Format) -> {{C,F,P,Pad},Format}. as in io:format
-
-collect(F0) ->
-    {C,F1} = collect_loop(F0,{undefined,undefined,undefined,undefined}),
-    {C,F1}.
-
-% slot #2 is width
-% slot #3 is precision
-% slot #4 is padding
-collect_loop(<<D,F/binary>>, C) when D >= $0, D =< $9, element(4,C) == undefined ->
-    C1 = setelement(4, C, D - $0),
-    collect_loop(F, C1);
-collect_loop(<<D,F/binary>>, C) when D >= $0, D =< $9, element(2,C) == undefined ->
-    C1 = setelement(2, C, D - $0),
-    collect_loop(F, C1);
-collect_loop(<<$.,F/binary>>, C) -> collect_loop(F, C);
-collect_loop(<<$-,F/binary>>, C) -> collect_loop(F, C);
-collect_loop(<<M,F/binary>>, C) -> {setelement(1,C,M),F}.
-
-%% build({C,F,Ad,P}, Args, St) -> {Out,Args}.
-
-build({$s,_,_,_}, [A|As], St0) ->
-    {S,St1} = luerl_basic:tostring([A], St0),
-    {io_lib:fwrite("~s", [S]),As,St1};
-build({$q,_,_,_}, [A|As], St) when is_binary(A) ->
-    %% You don't really want to know!
-    Ss0 = re:split(A, "([\\0-\\39\\\n\\\"\\\\\\177-\\237])", [trim]),
-    Ss1 = build_q(Ss0),
-    {[$",Ss1,$"],As,St};
-build({$c,_,_,_}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
-    {[I],As,St};
-build({$d,F,Pad,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
-    C = case [F,Pad,P] of
-        [undefined,undefined,undefined] -> 
-            io_lib:write(I);
-        FArgs -> 
-            Format = string:join([case C of undefined -> ""; _ -> integer_to_list(C) end || C <- FArgs], "."),
-            io_lib:format([$~]++Format++[$B], [I])
-    end,
-    {C,As,St};
-build({$x,_,_,_}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
-    {io_lib:format("~.16b", [I]),As,St};
-build({$i,_,_,_}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
-    {io_lib:write(I),As,St};
-build({$e,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~e", [F]),As,St};
-build({$f,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~f", [F]),As,St};
-build({$g,_,_,_}, [A|As], St) ->
-    F = luerl_lib:tonumber(A),
-    {io_lib:format("~g", [F]),As,St};
-build({F,_,_,_}, _, St) ->
-    throw({error,{badarg,format,[F]},St}).
-
-build_q([<<>>|Ss]) -> build_q(Ss);
-build_q([<<$\n>>|Ss]) -> [$\\,$\n|build_q(Ss)];
-build_q([<<$">>|Ss]) -> [$\\,$"|build_q(Ss)];
-build_q([<<$\\>>|Ss]) -> [$\\,$\\|build_q(Ss)];
-build_q([<<C1>>=B1|Ss0]) when C1 >=0, C1 =< 31 ->
-    case Ss0 of
-	[<<C2,_/binary>>|_] when C2 >= $0, C2 =< $9 ->
-	    [io_lib:format("\\~.3.0w", [C1])|build_q(Ss0)];
-	[<<>>|Ss1] -> build_q([B1|Ss1]);
-	_ -> [io_lib:format("\\~w", [C1])|build_q(Ss0)]
+	throw:{error,E} -> lua_error(E, St0);
+	_:_ -> badarg_error(format, [F|As], St0)
     end;
-build_q([<<B>>|Ss0]) when B >= 127, B =< 159 ->
-    [io_lib:write(B)|build_q(Ss0)];
-build_q([S|Ss]) -> [S|build_q(Ss)];
-build_q([]) -> [].
+format(As, St) -> badarg_error(format, As, St).
 
--spec gmatch([_], _) -> no_return().
+-spec gmatch([_], _) -> no_return().		%To keep dialyzer quiet
+
+%% gmatch(String, Pattern) -> [Function].
 
 gmatch(As, St) -> badarg_error(gmatch, As, St).
+
+%% gsub(String, Pattern, Repl [, N]) -> [String]
 
 gsub(As, St0) ->
     try
