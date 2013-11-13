@@ -17,19 +17,24 @@
 %% Purpose : Internal LUA 5.2 instructions.
 
 %% Expression instructions.
--define(LOAD_LIT(L), {load_lit,L}).			%Load a literal
--define(LOAD_LVAR(D, I), {load_lvar,D,I}).
--define(LOAD_EVAR(D, I), {load_evar,D,I}).
--define(LOAD_GVAR(K), {load_gvar,K}).
+-define(PUSH_LIT(L), {push_lit,L}).
+-define(PUSH_LVAR(D,I), {push_lvar,D,I}).
+-define(PUSH_EVAR(D, I), {push_evar,D,I}).
+-define(PUSH_GVAR(K), {push_gvar,K}).
+
+-define(PUSH_LAST_LIT(L), {push_last_lit,L}).	%[?PUSH_LIT,?MULTIPLE]
+-define(PUSH_LAST_LVAR(D,I), {push_last_lvar,D,I}).
+-define(PUSH_LAST_EVAR(D, I), {push_last_evar,D,I}).
+-define(PUSH_LAST_GVAR(K), {push_last_gvar,K}).
 
 -define(STORE_LVAR(D, I), {store_lvar,D,I}).
 -define(STORE_EVAR(D, I), {store_evar,D,I}).
 -define(STORE_GVAR(K), {store_gvar,K}).
 
 -define(GET_KEY, get_key).			%Acc = Stk[Acc]
--define(GET_LIT_KEY(K), {get_lit_key,K}).	%[?PUSH,?LIT(K),?KEY]
+-define(GET_LIT_KEY(K), {get_lit_key,K}).	%[?PUSH_LIT(K),?GET_KEY]
 -define(SET_KEY, set_key).			%Stk[
--define(SET_LIT_KEY(K), {set_lit_key,K}).	%[?PUSH,?LIT(K),?SET_KEY]
+-define(SET_LIT_KEY(K), {set_lit_key,K}).	%[?PUSH_LIT(K),?SET_KEY]
 
 -define(SINGLE, single).			%Ensure single value
 -define(MULTIPLE, multiple).			%Ensure multiple value
@@ -55,15 +60,11 @@
 -define(GFOR(Vs, B), {gfor,Vs,B}).
 -define(BREAK, break).
 -define(RETURN(Ac), {return,Ac}).
-%% Stack instructions, mainly to/from accumulator.
+%% Stack instructions.
 -define(PUSH, push).
 -define(POP, pop).
--define(DROP, drop).
+-define(POP2, pop2).
 -define(SWAP, swap).
+-define(DUP, dup).
 -define(PUSH_VALS(Vc), {push_vals,Vc}).
 -define(POP_VALS(Vc), {pop_vals,Vc}).
-%% Optimisations and combined instructions.
--define(PUSH_LIT(L), {push_lit,L}).		%?LIT(L), ?PUSH
--define(PUSH_LVAR(D,I), {push_lvar,D,I}).	%?LVAR(D,I), ?PUSH
--define(PUSH_EVAR(D, I), {push_evar,D,I}).	%?EVAR(D,I), ?PUSH
--define(PUSH_GVAR(K), {push_gvar,K}).		%?GVAR(K), ?PUSH

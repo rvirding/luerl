@@ -44,9 +44,9 @@ set_var(#lvar{d=D,i=I}) -> [?STORE_LVAR(D, I)];
 set_var(#evar{d=D,i=I}) -> [?STORE_EVAR(D, I)];
 set_var(#gvar{n=N}) -> [?STORE_GVAR(N)].
 
-get_var(#lvar{d=D,i=I}) -> [?LOAD_LVAR(D, I)];
-get_var(#evar{d=D,i=I}) -> [?LOAD_EVAR(D, I)];
-get_var(#gvar{n=N}) -> [?LOAD_GVAR(N)].
+get_var(#lvar{d=D,i=I}) -> [?PUSH_LVAR(D, I)];
+get_var(#evar{d=D,i=I}) -> [?PUSH_EVAR(D, I)];
+get_var(#gvar{n=N}) -> [?PUSH_GVAR(N)].
 
 %% stmt(Stmts, State) -> {Istmts,State}.
 
@@ -82,8 +82,10 @@ assign_stmt(#assign_stmt{vs=Vs,es=Es}, St) ->
     assign_loop(Vs, Es, St).
 
 %% assign_loop(Vars, Exps, State) -> {Iassigns,State}.
-%%  Must be careful with pushing and popping values here. Make sure
-%%  all non-last values are singleton.
+%%  Must be careful with pushing and popping values here. We must
+%%  evaluate all expressions even the unneeded which are popped before
+%%  binding. Make sure all non-last values are singleton.
+%%
 %%  This could most likely be folded together with assign_local_loop/3.
 
 assign_loop([V], [E], St0) ->			%Remove unnecessary ?PUSH_VALS
@@ -99,27 +101,27 @@ assign_loop([V|Vs], [E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%Not last argument!
     {Ias,St2} = assign_loop(Vs, Es, St1),
     {Iv,St3} = var(V, St2),
-    {Ie ++ [?PUSH] ++ Ias ++ [?POP] ++ Iv,St3};
+    {Ie ++ Ias ++ Iv,St3};
 assign_loop([], Es, St) ->
     assign_loop_exp(Es, St).
 
 assign_loop_var([V|Vs], Vc, St0) ->
     {Ias,St1} = assign_loop_var(Vs, Vc+1, St0),
     {Iv,St2} = var(V, St1),
-    {Ias ++ Iv ++ [?POP],St2};
+    {Ias ++ Iv,St2};
 assign_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc-1)],St}.			%Last in acc
 
 assign_loop_exp([E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
     {Ias,St2} = assign_loop_exp(Es, St1),
-    {Ie ++ Ias,St2};
+    {Ie ++ Ias ++ [?POP],St2};			%Pop value off stack
 assign_loop_exp([], St) -> {[],St}.
 
 var(#dot{e=Exp,r=Rest}, St0) ->
     {Ie,St1} = prefixexp_first(Exp, single, St0),
     {Ir,St2} = var_rest(Rest, St1),
-    {[?PUSH] ++ Ie ++ Ir,St2};			%Save acc
+    {Ie ++ Ir,St2};
 var(V, St) ->
     {set_var(V),St}.
 
@@ -130,10 +132,10 @@ var_rest(#dot{e=Exp,r=Rest}, St0) ->
 var_rest(Exp, St) -> var_last(Exp, St).
 
 var_last(#key{k=#lit{v=K}}, St) ->
-    {[?SET_LIT_KEY(K)],St};			%[?PUSH,?LOAD_LIT(K),?SET_KEY]
+    {[?SET_LIT_KEY(K)],St};			%[?PUSH_LIT(K),?SET_KEY]
 var_last(#key{k=Exp}, St0) ->
     {Ie,St1} = exp(Exp, single, St0),
-    {[?PUSH] ++ Ie ++ [?SET_KEY],St1}.
+    {Ie ++ [?SET_KEY],St1}.
 
 %% call_stmt(Call, State) -> {CallIs,State}.
 
@@ -221,7 +223,7 @@ local_assign_stmt(#local_assign_stmt{vs=Vs,es=Es}, St) ->
 
 assign_local([V|Vs], [], St0) ->
     {Ias,St1} = assign_local_loop_var(Vs, 1, St0),
-    {[?LOAD_LIT([])] ++ Ias ++ set_var(V),St1};
+    {[?PUSH_LIT([])] ++ Ias ++ set_var(V),St1};
 assign_local(Vs, Es, St) ->
     assign_local_loop(Vs, Es, St).
 
@@ -230,8 +232,10 @@ local_fdef_stmt(#local_fdef_stmt{v=V,f=F}, St0) ->
     {If ++ set_var(V),St1}.
 
 %% assign_local_loop(Vars, Exps, State) -> {Iassigns,State}.
-%%  Must be careful with pushing and popping values here. Make sure
-%%  all non-last values are singleton.
+%%  Must be careful with pushing and popping values here. We must
+%%  evaluate all expressions even the unneeded which are popped before
+%%  binding. Make sure all non-last values are singleton.
+%%
 %%  This could most likely be folded together with assign_loop/3.
 
 assign_local_loop([V], [E], St0) ->		%Remove unnecessary ?PUSH_VALS
@@ -241,25 +245,23 @@ assign_local_loop([V|Vs], [E], St0) ->
     {Ie,St1} = exp(E, multiple, St0),		%Last argument to many vars!
     {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
     {Ie ++ Ias ++ set_var(V),St2};
-    %%{Ie ++ [puss1] ++ Ias ++ [popp1|set_var(V)],St2};
 assign_local_loop([V|Vs], [E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%Not last argument!
     {Ias,St2} = assign_local_loop(Vs, Es, St1),
-    {Ie ++ [?PUSH] ++ Ias ++ [?POP|set_var(V)],St2};
+    {Ie ++ Ias ++ [set_var(V)],St2};
 assign_local_loop([], Es, St) ->
     assign_local_loop_exp(Es, St).
 
-%% This expects a surrounding setting a variable, otherwise excess ?POP.
 assign_local_loop_var([V|Vs], Vc, St0) ->
     {Ias,St1} = assign_local_loop_var(Vs, Vc+1, St0),
-    {Ias ++ set_var(V) ++ [?POP],St1};
+    {Ias ++ set_var(V),St1};
 assign_local_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc-1)],St}.			%Last in Acc
 
 assign_local_loop_exp([E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
     {Ias,St2} = assign_local_loop_exp(Es, St1),
-    {Ie ++ Ias,St2};
+    {Ie ++ Ias ++ [?POP],St2};			%Pop value off stack
 assign_local_loop_exp([], St) -> {[],St}.
 
 %% expr_stmt(Expr, State) -> {ExprIs,State}.
@@ -277,11 +279,11 @@ explist([E], S, St) -> exp(E, S, St);		%Append values to output?
 explist([E|Es], S, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ies,St2} = explist(Es, S, St1),
-    {Ie ++ [?PUSH] ++ Ies,St2};
+    {Ie ++ Ies,St2};
 explist([], _, St) -> {[],St}.			%No expressions at all
 
 exp(#lit{v=L}, S, St) ->
-    Is = [?LOAD_LIT(L)],
+    Is = [?PUSH_LIT(L)],
     {multiple_values(S, Is),St};
 exp(#fdef{}=F, S, St0) ->
     {If,St1} = functiondef(F, St0),
@@ -347,14 +349,14 @@ prefixexp_element(#key{k=#lit{v=K}}, S, St) ->
     {multiple_values(S, [?GET_LIT_KEY(K)]),St};	%Table is in Acc
 prefixexp_element(#key{k=E}, S, St0) ->
     {Ie,St1} = exp(E, single, St0),		%Table is in Acc
-    {[?PUSH] ++ Ie ++ multiple_values(S, [?GET_KEY]),St1};
+    {Ie ++ multiple_values(S, [?GET_KEY]),St1};
 prefixexp_element(#fcall{as=[]}, S, St) ->
     %% Special case this to leave function in the acc.
     Ifs = [?FCALL(0)],
     {single_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{as=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ifs = [?PUSH] ++ Ias ++ [?FCALL(length(As))],
+    Ifs = Ias ++ [?FCALL(length(As))],
     {single_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
     %% Special case this to leave table in the acc.
@@ -362,7 +364,7 @@ prefixexp_element(#mcall{m=#lit{v=K},as=[]}, S, St) ->
     {single_value(S, Ims),St};			%Method call returns list
 prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ims = [?PUSH] ++ Ias ++ [?MCALL(K, length(As))],
+    Ims = Ias ++ [?MCALL(K, length(As))],
     {single_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
@@ -380,7 +382,8 @@ func_pars([]) -> [].				%No varargs
 
 %% tableconstructor(Fields, State) -> {Ifields,FieldCount,Index,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is
-%%  the index of the next value in the acc.
+%%  the index of the next value in the last value pushed. Make sure
+%%  that the last value is a multiple.
 
 tableconstructor(Fs, St0) ->
     {Its,Fc,I,St1} = tc_fields(Fs, 0.0, St0),
@@ -394,10 +397,10 @@ tc_fields([#efield{v=V}|Fs], I0, St0) ->
     I1 = I0 + 1.0,				%Index of next element
     {Iv,St1} = exp(V, single, St0),
     {Ifs,Fc,I2,St2} = tc_fields(Fs, I1, St1),
-    {[?LOAD_LIT(I1),?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I2,St2};
+    {[?PUSH_LIT(I1)] ++ Iv ++ Ifs,Fc+1,I2,St2};
 tc_fields([#kfield{k=K,v=V}|Fs], I0, St0) ->
     {Ik,St1} = exp(K, single, St0),
     {Iv,St2} = exp(V, single, St1),
     {Ifs,Fc,I1,St3} = tc_fields(Fs, I0, St2),
-    {Ik ++ [?PUSH] ++ Iv ++ [?PUSH] ++ Ifs,Fc+1,I1,St3};
-tc_fields([], I, St) -> {[?LOAD_LIT([])],0,I,St}.
+    {Ik ++ Iv ++ Ifs,Fc+1,I1,St3};
+tc_fields([], I, St) -> {[?PUSH_LIT([])],0,St}.
