@@ -57,6 +57,7 @@
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[is_true_value/1,first_value/1]}).
 
+%% -define(ITRACE_DO(B), ok).
 -define(ITRACE_DO(B), (get(itrace) /= undefined) andalso B).
 
 %% init() -> State.
@@ -351,7 +352,7 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(call_frame, {acc,lvs,env}).		%Save these for the GC
+-record(call_frame, {lvs,env}).			%Save these for the GC
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
@@ -366,7 +367,10 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
 	       end),
     emul_1(Is, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
-    itrace_print("el: ~p\n", [{Lvs,Env}]),
+    ?ITRACE_DO(begin
+		   io:fwrite("el: ~p\n", [{Lvs,Env}]),
+		   stack_print(Stk)
+	       end),
     emul_1([], Lvs, Stk, Env, St).
 
 stack_print([#call_frame{}|_]) -> io:fwrite(" ...\n");
@@ -415,15 +419,15 @@ emul_1([?STORE_GVAR(K)|Is], Lvs, [V|Stk], Env, St0) ->
 emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
     {Val,St1} = get_table_key(Tab, Key, St0),
     emul(Is, Lvs, [Val|Stk], Env, St1);
-emul_1([?GET_LIT_KEY(S)|Is], Lvs, [Tab|Stk], Env, St0) ->
-    %% [?PUSH_LIT(S),?GET_KEY]
-    {Val,St1} = get_table_key(Tab, S, St0),
+emul_1([?GET_LIT_KEY(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
+    %% [?PUSH_LIT(K),?GET_KEY]
+    {Val,St1} = get_table_key(Tab, K, St0),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
     St1 = set_table_key(Tab, Key, Val, St0),
     emul_1(Is, Lvs, Stk, Env, St1);
 emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
-    %% [?PUSH,?LOAD_LIT(K),?SET_KEY]
+    %% [?PUSH_LIT(K),?SET_KEY]
     St1 = set_table_key(Tab, Key, Val, St0),
     emul_1(Is, Lvs, Stk, Env, St1);
 
@@ -467,23 +471,25 @@ emul_1([?WHILE(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
     do_while(Is, Lvs, Stk, Env, St, Eis, Wis);
 emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
     do_repeat(Is, Lvs, Stk, Env, St, Ris);
-emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk], Env, St0) ->
+emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    %% This is an expression and must always leave a value on stack.
     case is_true_value(Val) of
 	true ->
-	    {Lvs1,Stk1,Env1,St1} =
-		emul(T, Lvs, Stk, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1);
+	    {Lvs1,Stk2,Env1,St1} =
+		emul(T, Lvs, Stk1, Env, St0),
+	    emul(Is, Lvs1, Stk2, Env1, St1);
 	false ->
-	    emul(Is, Lvs, Stk, Env, St0)
+	    emul(Is, Lvs, Stk0, Env, St0)
     end;
-emul_1([?IF_FALSE(T)|Is], Lvs, [Val|Stk], Env, St0) ->
+emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    %% This is an expression and must always leave a value on stack.
     case is_true_value(Val) of
 	true ->
-	    emul(Is, Lvs, Stk, Env, St0);
+	    emul(Is, Lvs, Stk0, Env, St0);
 	false ->
-	    {Lvs1,Stk1,Env1,St1} =
-		emul(T, Lvs, Stk, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1)
+	    {Lvs1,Stk2,Env1,St1} =
+		emul(T, Lvs, Stk1, Env, St0),
+	    emul(Is, Lvs1, Stk2, Env1, St1)
     end;
 emul_1([?IF(True, False)|Is], Lvs, Stk, Env, St) ->
     do_if(Is, Lvs, Stk, Env, St, True, False);
@@ -497,7 +503,6 @@ emul_1([?RETURN(0)|_], _, _, _, St) ->
     throw({return,St#luerl.tag,[],St});
 emul_1([?RETURN(Ac)|_], _, Stk, _, St) ->
     {Ret,_} = pop_vals(Ac, Stk),
-    io:format("ret: ~p\n", [{Stk,Ac,Ret}]),
     throw({return,St#luerl.tag,Ret,St});
 %% Stack instructions
 emul_1([?POP|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
@@ -520,57 +525,57 @@ emul_1([], Lvs, Stk, Env, St) ->
     {Lvs,Stk,Env,St}.
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
-%%  Pop Count values off the stack and push onto the argument list.
-%%  First argument is deepest. Always generates list.
+%% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.
+%%  Pop Count values off the stack and push onto the value list.
+%%  First value is deepest. Always generates list.
 
 pop_vals(0, Stk) -> {[],Stk};
-pop_vals(C, [Vtail|Stk]) ->
-    pop_vals_1(C-1, Stk, Vtail).
+pop_vals(C, [Vtail|Stk]) ->			%This a list tail
+    pop_vals(C-1, Stk, Vtail).
 
-pop_vals_1(0, Stk, Vs) -> {Vs,Stk};
-pop_vals_1(1, [V|Stk], Vs) -> {[V|Vs],Stk};
-pop_vals_1(2, [V2,V1|Stk], Vs) -> {[V1,V2|Vs],Stk};
-pop_vals_1(C, [V2,V1|Stk], Vs) ->
-    pop_vals_1(C-2, Stk, [V1,V2|Vs]).
+pop_vals(0, Stk, Vs) -> {Vs,Stk};
+pop_vals(1, [V|Stk], Vs) -> {[V|Vs],Stk};
+pop_vals(2, [V2,V1|Stk], Vs) -> {[V1,V2|Vs],Stk};
+pop_vals(C, [V2,V1|Stk], Vs) ->
+    pop_vals(C-2, Stk, [V1,V2|Vs]).
 
 %% push_vals(Count, ValList, Stack) -> {LastVal,Stack}.
-%%  Push Count values from value list onto the stack. Fill with 'nil'
-%%  if not enough values.
+%%  Push Count values from value list onto the stack. First value is
+%%  deepest. Fill with 'nil' if not enough values.
 
 push_vals(0, _, Stk) -> Stk;
 push_vals(C, [V|Vs], Stk) ->
     push_vals(C-1, Vs, [V|Stk]);
 push_vals(C, [], Stk) ->
-    push_vals(C-1, [], [nil|Stk]);
-push_vals(_, V, _) -> error({boom,push_vals,V}).	%Non-list value
+    push_vals(C-1, [], [nil|Stk]).
 
 %% do_block(Instrs, Vars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> ReturnFromEmul.
 %%  Local vars may have been updated so must continue with returned
 %%  version. There should be no changes in the stack and env.
 
-do_block(Is, Lvs0, Stk, Env, St0, 0, 0, Bis) ->
+do_block(Is, Lvs0, Stk0, Env, St0, 1, 1, Bis) ->
     %% No variables at all.
-    {Lvs1,_,_,St1} = emul(Bis, Lvs0, Stk, Env, St0),
-    emul(Is, Lvs1, Stk, Env, St1);
-do_block(Is, Lvs0, Stk, Env, St0, 0, Esz, Bis) ->
+    {Lvs1,Stk1,_,St1} = emul(Bis, Lvs0, Stk0, Env, St0),
+    emul(Is, Lvs1, Stk1, Env, St1);
+do_block(Is, Lvs0, Stk0, Env, St0, 1, Esz, Bis) ->
     %% No local variables, only env variables.
     E = erlang:make_tuple(Esz, nil),
     {Fref,St1} = alloc_frame(E, St0),
-    {Lvs1,_,_,St2} = emul(Bis, Lvs0, Stk, [Fref|Env], St1),
-    emul(Is, Lvs1, Stk, Env, St2);
-do_block(Is, Lvs0, Stk, Env, St0, Lsz, 0, Bis) ->
+    {Lvs1,Stk1,_,St2} = emul(Bis, Lvs0, Stk0, [Fref|Env], St1),
+    emul(Is, Lvs1, Stk1, Env, St2);
+do_block(Is, Lvs0, Stk0, Env, St0, Lsz, 1, Bis) ->
     %% No env variables, only local variables.
     L = erlang:make_tuple(Lsz, nil),
-    {[_|Lvs1],_,_,St1} = emul(Bis, [L|Lvs0], Stk, Env, St0),
-    emul(Is, Lvs1, Stk, Env, St1);
-do_block(Is, Lvs0, Stk, Env, St0, Lsz, Esz, Bis) ->
+    {[_|Lvs1],Stk1,_,St1} = emul(Bis, [L|Lvs0], Stk0, Env, St0),
+    emul(Is, Lvs1, Stk1, Env, St1);
+do_block(Is, Lvs0, Stk0, Env, St0, Lsz, Esz, Bis) ->
     %% Both local and env variables.
     L = erlang:make_tuple(Lsz, nil),
     E = erlang:make_tuple(Esz, nil),
     {Fref,St1} = alloc_frame(E, St0),
-    {[_|Lvs1],_,_,St2} = emul(Bis, [L|Lvs0], Stk, [Fref|Env], St1),
-    emul(Is, Lvs1, Stk, Env, St2).
+    {[_|Lvs1],Stk1,_,St2} = emul(Bis, [L|Lvs0], Stk0, [Fref|Env], St1),
+    emul(Is, Lvs1, Stk1, Env, St2).
 
 %% do_op1(Instrs, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
 %% do_op2(Instrs, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
@@ -694,10 +699,10 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do call.
 
-functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
+functioncall(#function{lsz=1,esz=1,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
     functioncall(Fis, [], Stk, Env, St0);
-functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
+functioncall(#function{lsz=1,esz=Esz,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No local variables, only env variables.
     E0 = erlang:make_tuple(Esz, nil),
@@ -705,7 +710,7 @@ functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Fref,St1} = alloc_frame(E1, St0),
     {Ret,St2} = functioncall(Fis, [], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall(#function{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
+functioncall(#function{lsz=Lsz,esz=1,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No env variables, only local variables.
     L0 = erlang:make_tuple(Lsz, nil),
@@ -821,14 +826,17 @@ loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
     Lvs3 = lists:nthtail(length(Lvs2)-length(Lvs0), Lvs2),
     emul(Is, Lvs3, Stk, Env, St1).
 
+%% do_if(Instrs, LocalVars, Stack, Env, State, TrueInstrs, FalseInstrs) ->
+%%     <emul>
+
 do_if(Is, Lvs, [Val|Stk], Env, St, True, False) ->
     case is_true_value(Val) of
 	true -> do_if_block(True, Lvs, Stk, Env, St, Is);
 	false -> do_if_block(False, Lvs, Stk, Env, St, Is)
     end.
 
-do_if_block([?BLOCK(Bis, Loc, Sz)], Lvs, Stk, Env, St, Is) ->
-    do_block(Is, Lvs, Stk, Env, St, Bis, Loc, Sz);
+do_if_block([?BLOCK(Lsz, Esz, Bis)], Lvs, Stk, Env, St, Is) ->
+    do_block(Is, Lvs, Stk, Env, St, Lsz, Esz, Bis);
 do_if_block(Bis, Lvs, Stk, Env, St0, Is) ->
     {Lvs1,Stk1,Env1,St1} =
 	emul(Bis, Lvs, Stk, Env, St0),
@@ -849,7 +857,8 @@ do_numfor(Is, Lvs, [Step,Limit,Init|Stk], Env, St, _, Fis) ->
     end.
 
 numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
-    %% Leave the counter in the Acc for code to get.
+    %% Leave the counter at the top of the stack for code to get.
+    itrace_print("nl: ~p\n", [{N,Stk0}]),
     if Step > 0.0, N =< Limit ->		%Keep going
 	    {Lvs1,Stk1,Env1,St1} =
 		emul(Fis, Lvs0, [N|Stk0], Env0, St0),
@@ -919,7 +928,7 @@ getmetamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-%% build_table(FieldCount, Index, Stack, State) -> {TableRef,Stack,State}.
+%% build_tab(FieldCount, Index, Stack, State) -> {TableRef,Stack,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is
 %%  the index of the next value in the acc.
 
@@ -1154,6 +1163,9 @@ mark([#thread{}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, More, St, Sf, Tt, Ft);
 mark([#userdata{m=Meta}|Todo], More, St, Sf, Tt, Ft) ->
     mark([Meta|Todo], More, St, Sf, Tt, Ft);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More, St, Sf, Tt, Ft) ->
+    %% Expand lvs and env?
+    mark(Todo, [Env,Lvs|More], St, Sf, Tt, Ft);
 mark([{K,V}|Todo], More, St, Sf, Tt, Ft) ->	%Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, St, Sf, Tt, Ft);

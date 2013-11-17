@@ -39,6 +39,14 @@ instrs([?PUSH_LIT(L),?GET_KEY|Is], St) ->
 instrs([?PUSH_LIT(L),?SET_KEY|Is], St) ->
     instrs([?SET_LIT_KEY(L)|Is], St);
 
+%% Must check these properly, probably seldom used anyway.
+%% instrs([?STORE_EVAR(D, I),?PUSH_EVAR(D, I)|Is], St) ->
+%%     instrs([?DUP,?STORE_EVAR(D, I)|Is], St);
+%% instrs([?STORE_LVAR(D, I),?PUSH_LVAR(D, I)|Is], St) ->
+%%     instrs([?DUP,?STORE_LVAR(D, I)|Is], St);
+%% instrs([?STORE_GVAR(K),?PUSH_GVAR(K)|Is], St) ->
+%%     instrs([?DUP,?STORE_EVAR(D, I)|Is], St);
+
 instrs([?PUSH_LIT(L),?MULTIPLE|Is], St) ->
     instrs([?PUSH_LAST_LIT(L)|Is], St);
 instrs([?PUSH_LVAR(D, I),?MULTIPLE|Is], St) ->
