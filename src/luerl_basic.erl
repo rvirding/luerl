@@ -45,7 +45,7 @@ table() ->
      {<<"ipairs">>,{function,fun ipairs/2}},
      {<<"load">>,{function,fun load/2}},
      {<<"loadfile">>,{function,fun loadfile/2}},
-     {<<"loadstring">>,{function,fun loadstring/2}},
+     {<<"loadstring">>,{function,fun loadstring/2}}, %For Lua 5.1 compatibility
      {<<"next">>,{function,fun next/2}},
      {<<"pairs">>,{function,fun pairs/2}},
      {<<"pcall">>,{function,fun pcall/2}},
@@ -251,6 +251,8 @@ raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
 raw_set_key(Tab, K, nil) -> ttdict:erase(K, Tab);
 raw_set_key(Tab, K, V) -> ttdict:store(K, V, Tab).
 
+%% select(Args, State) -> {[Element],State}.
+
 select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->
     %%io:fwrite("sel:~p\n", [[A|As]]),
@@ -345,60 +347,51 @@ setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
 %% Load string and files.
 
-load(As, St) ->
+dofile(As, St) ->
     case luerl_lib:conv_list(As, [string]) of
-	[S] -> do_load(S, St);
+	[File] ->
+	    Ret = luerl_comp:file(File),	%Compile the file
+	    dofile_ret(Ret, As, St);
+	_ -> badarg_error(dofile, As, St)
+    end.
+
+dofile_ret({ok,Chunk}, _, St) ->
+    luerl_emul:chunk(Chunk, [], St);
+dofile_ret({error,_}, As, St) ->
+    badarg_error(dofile, As, St).
+
+%% Load string and files.
+
+load(As, St) ->
+    case luerl_lib:conv_list(As, [string,lua_string,lua_string,lua_any]) of
+	[S|_] ->
+	    Ret = luerl_comp:string(S),		%Compile the string
+	    load_ret(Ret, St);
 	nil -> badarg_error(load, As, St)
     end.
 
 loadfile(As, St) ->
-    case luerl_lib:conv_list(As, [string]) of
-	[F] ->
-	    case file:read_file(F) of
-		{ok,B} -> do_load(binary_to_list(B), St);
-		{error,E} ->
-		    Msg = iolist_to_binary(file:format_error(E)),
-		    {[nil,Msg],St}
-	    end;
+    case luerl_lib:conv_list(As, [string,lua_strinf,lua_any]) of
+	[F|_] ->
+	    Ret = luerl_comp:file(F),		%Compile the file
+	    load_ret(Ret, St);
 	nil -> badarg_error(loadfile, As, St)
     end.
  
 loadstring(As, St) ->
     case luerl_lib:conv_list(As, [string]) of
-	[S] -> do_load(S, St);
+	[S] ->
+	    Ret = luerl_comp:string(S),		%Compile the string
+	    load_ret(Ret, St);
 	nil -> badarg_error(loadstring, As, St)
     end.
 
-do_passes([Fun|Funs], St0) ->
-    case Fun(St0) of
-	{ok,St1} -> do_passes(Funs, St1);
-	Error -> Error
-    end;
-do_passes([], St) -> {ok,St}.
-
-comp_passes() ->
-    [fun (S) -> luerl_comp:string(S) end].
-
-do_load(Str, St) ->
-    case do_passes(comp_passes(), Str) of
-	{ok,C} ->
-	    Fun = fun (As, S) -> luerl_emul:chunk(C, As, S) end,
-	    {[{function,Fun}],St};
-	{error,{_,Mod,E}} ->
-	    Msg = iolist_to_binary(Mod:format_error(E)),
-	    {[nil,Msg],St}
-    end.
-
-dofile(As, St) ->
-    case luerl_lib:tostrings(As) of
-	[File|_] ->
-	    {ok,Bin} = file:read_file(File),
-	    case do_passes(comp_passes(), binary_to_list(Bin)) of
-		{ok,Code} -> luerl_emul:chunk(Code, [], St);
-		_ -> badarg_error(dofile, As, St)
-	    end;
-	_ -> badarg_error(dofile, As, St)
-    end.
+load_ret({ok,Chunk}, St) ->
+    Fun = fun (As, S) -> luerl_emul:chunk(Chunk, As, S) end,
+    {[{function,Fun}],St};
+load_ret({error,{_,Mod,E}}, St) ->
+    Msg = iolist_to_binary(Mod:format_error(E)),
+    {[nil,Msg],St}.
 
 pcall([F|As], St0) ->
     try
