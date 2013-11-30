@@ -95,7 +95,7 @@ See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`
  Evaluate a Lua expression and return its result, and the new Lua State.
 
 #### luerl:dofile(Path[, State]) -> {Result, NewState}.
- Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
+ Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:do("return dofile('FileName')").
 
 #### luerl:load(String|Binary) -> {ok, Form} | {error, Reason} .
  Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
