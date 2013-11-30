@@ -524,7 +524,7 @@ prefixexp_element({key_field,L,Exp}, St0) ->
 prefixexp_element({functioncall,L,Args}, St0) ->
     {Cas,St1} = explist(Args, St0),
     {#fcall{l=L,as=Cas},St1};
-prefixexp_element({method,Lm,{'NAME',Ln,N},Args}, St0) ->
+prefixexp_element({methodcall,Lm,{'NAME',Ln,N},Args}, St0) ->
     {Args1,St1} = explist(Args, St0),
     {#mcall{l=Lm,m=lit_name(Ln, N),as=Args1},St1}.
 

@@ -160,7 +160,7 @@ prefixexp -> '(' exp ')' : {single,line('$1'),'$2'} .
 functioncall -> prefixexp args :
 		    dot_append(line('$1'), '$1', {functioncall,line('$1'), '$2'}) .
 functioncall -> prefixexp ':' NAME args :
-		    dot_append(line('$2'), '$1', {method,line('$2'),'$3','$4'}) .
+		    dot_append(line('$2'), '$1', {methodcall,line('$2'),'$3','$4'}) .
 
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
@@ -268,7 +268,7 @@ dot_append(Line, H, Last) -> {'.',Line,H,Last}.
 %%  Check that the PrefixExp is a proper function call/method.
 
 check_functioncall({functioncall,_,_}=C) -> C;
-check_functioncall({method,_,_,_}=M) -> M;
+check_functioncall({methodcall,_,_,_}=M) -> M;
 check_functioncall({'.',L,H,T}) ->
     {'.',L,H,check_functioncall(T)};
 check_functioncall(Other) ->
