@@ -63,6 +63,8 @@ instrs([?POP,?POP|Is], St) ->
 instrs([?FDEF(Lsz,Esz,Pars,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?FDEF(Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
+instrs([?BLOCK(0,0,Bis)|Is], St) ->		%No need for block
+    instrs(Bis ++ Is, St);
 instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->
     Bis1 = instrs(Bis0, St),
     [?BLOCK(Lsz,Esz,Bis1)|instrs(Is, St)];
@@ -73,12 +75,22 @@ instrs([?WHILE(Eis0, Wis0)|Is], St) ->
     Eis1 = instrs(Eis0, St),
     Wis1 = instrs(Wis0, St),
     [?WHILE(Eis1, Wis1)|instrs(Is, St)];
+instrs([?AND_THEN(Tis0)|Is], St) ->
+    Tis1 = instrs(Tis0, St),
+    [?AND_THEN(Tis1)|instrs(Is, St)];
+instrs([?OR_ELSE(Fis0)|Is], St) ->
+    Fis1 = instrs(Fis0, St),
+    [?OR_ELSE(Fis1)|instrs(Is, St)];
 instrs([?IF_TRUE(Tis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     [?IF_TRUE(Tis1)|instrs(Is, St)];
 instrs([?IF_FALSE(Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?IF_FALSE(Fis1)|instrs(Is, St)];
+instrs([?IF(Tis, [])|Is], St) ->
+    instrs([?IF_TRUE(Tis)|Is], St);
+instrs([?IF([], Fis)|Is], St) ->		%This should never happen
+    instrs([?IF_FALSE(Fis)|Is], St);
 instrs([?IF(Tis0, Fis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     Fis1 = instrs(Fis0, St),

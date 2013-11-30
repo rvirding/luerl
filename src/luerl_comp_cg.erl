@@ -182,6 +182,10 @@ repeat_stmt(#repeat_stmt{b=B}, St0) ->
 if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
 
+if_tests([{E,B}], #block{ss=[]}, St0) ->
+    {Ie,St1} = exp(E, single, St0),
+    {Ib,St2} = do_block(B, St1),
+    {Ie ++ [?IF_TRUE(Ib)],St2};
 if_tests([{E,B}|Ts], Else, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ib,St2} = do_block(B, St1),
@@ -216,7 +220,7 @@ genfor_stmt(#gfor_stmt{vs=[V|Vs],gens=Gs,b=B}, St0) ->
     {Ib,St3} = do_block(B, St2),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
     ForBlock = [?BLOCK(Lsz, Esz, Ias ++ set_var(V) ++ Is)],
-    {Igs ++ [?POP_VALS(length(Gs)-1)] ++ [?GFOR(Vs,ForBlock)],St3}.
+    {Igs ++ [?POP_VALS(length(Gs))] ++ [?GFOR(Vs,ForBlock)],St3}.
 
 %% local_assign_stmt(Local, State) -> {Ilocal,State}.
 %%  We must evaluate all expressions, even the unneeded ones.

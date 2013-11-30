@@ -71,7 +71,7 @@ get_frame(#st{fs=[F|_]}) -> F.
 %%
 %% {HasLocal,LocalIndex,HasEnv,EnvIndex,Vars}
 
-new_frame(Lsz, Esz) -> {Lsz>0,1,Esz>0,1,[]}.	%Use size to indicate presence
+new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.	%Use size to indicate presence
 
 find_frame_var(N, {_,_,_,_,Fs}) ->
     find_frame_var_1(N, Fs).
