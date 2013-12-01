@@ -627,13 +627,23 @@ do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz) ->
 %% do_op1(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 %% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
-do_op1(Is, Lvs, [A|Stk], Env, #luerl{stk=OldStk}=St0, Op) ->
-    {Res,St1} = op(Op, A, St0#luerl{stk=Stk}),
-    emul(Is, Lvs, [Res|Stk], Env, St1#luerl{stk=OldStk}).
+do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
+    case op(Op, A) of
+	{ok,Res} ->
+	    emul(Is, Lvs, [Res|Stk], Env, St);
+	{meta,Meta} ->
+	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	{error,E} -> lua_error(E, St)
+    end.
 
-do_op2(Is, Lvs, [A2,A1|Stk], Env, #luerl{stk=OldStk}=St0, Op) ->
-    {Res,St1} = op(Op, A1, A2, St0#luerl{stk=Stk}),
-    emul(Is, Lvs, [Res|Stk], Env, St1#luerl{stk=OldStk}).
+do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
+    case op(Op, A1, A2) of
+	{ok,Res} ->
+	    emul(Is, Lvs, [Res|Stk], Env, St);
+	{meta,Meta} ->
+	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	{error,E} -> lua_error(E, St)
+    end.
 
 %% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> Function.
 
@@ -742,7 +752,7 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
     end.
 
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
-%%  Setup environment for function and do call.
+%%  Setup environment for function and do the actual call.
 
 functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
@@ -1005,76 +1015,72 @@ build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
     build_tab_loop(C-1, Stk, [{K,V}|Fs]).
 
-%% op(Op, Arg, State) -> {Ret,State}.
-%% op(Op, Arg1, Arg2, State) -> {Ret,State}.
-%% The built-in operators. Always return a single value!
+%% op(Op, Arg) -> {ok,Ret} | {meta,Func} | {error,Error}.
+%% op(Op, Arg1, Arg2) -> {ok,Ret} | {meta,Func} | {error,Error}.
+%%  The built-in operators. Always return a single value!
 
-op('-', A, St) ->
-    numeric_op('-', A, <<"__unm">>, fun (N) -> -N end, St);
-op('not', A, St) -> {not ?IS_TRUE(A),St};
-%% op('not', false, St) -> {[true],St};
-%% op('not', nil, St) -> {[true],St};
-%% op('not', _, St) -> {[false],St};		%Everything else is false
-op('#', B, St) when is_binary(B) -> {float(byte_size(B)),St};
-op('#', #tref{}=T, St) ->
-    luerl_table:length(T, St);
-op(Op, A, St) -> badarg_error(Op, [A], St).
+op('-', A) ->
+    numeric_op('-', A, <<"__unm">>, fun (N) -> -N end);
+op('not', A) -> {ok,not ?IS_TRUE(A)};
+%% op('not', false) -> {[true]};
+%% op('not', nil) -> {[true]};
+%% op('not', _) -> {[false]};			%Everything else is false
+op('#', B) when is_binary(B) -> {ok,float(byte_size(B))};
+op('#', #tref{}=T) ->
+    {meta,fun (_, St) -> luerl_table:length(T, St) end};
+op(Op, A) -> {error,{badarg,Op,[A]}}.
 
 %% Numeric operators.
-op('+', A1, A2, St) ->
-    numeric_op('+', A1, A2, <<"__add">>, fun (N1,N2) -> N1+N2 end, St);
-op('-', A1, A2, St) ->
-    numeric_op('-', A1, A2, <<"__sub">>, fun (N1,N2) -> N1-N2 end, St);
-op('*', A1, A2, St) ->
-    numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end, St);
-op('/', A1, A2, St) ->
-    numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end, St);
-op('%', A1, A2, St) ->
+op('+', A1, A2) ->
+    numeric_op('+', A1, A2, <<"__add">>, fun (N1,N2) -> N1+N2 end);
+op('-', A1, A2) ->
+    numeric_op('-', A1, A2, <<"__sub">>, fun (N1,N2) -> N1-N2 end);
+op('*', A1, A2) ->
+    numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
+op('/', A1, A2) ->
+    numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
+op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end, St);
-op('^', A1, A2, St) ->
+	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end);
+op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
-	       fun (N1,N2) -> math:pow(N1, N2) end, St);
+	       fun (N1,N2) -> math:pow(N1, N2) end);
 %% Relational operators, getting close.
-op('==', A1, A2, St) -> eq_op('==', A1, A2, St);
-op('~=', A1, A2, St) -> neq_op('~=', A1, A2, St);
-op('<=', A1, A2, St) -> le_op('<=', A1, A2, St);
-op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
-op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
-op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
+op('==', A1, A2) -> eq_op('==', A1, A2);
+op('~=', A1, A2) -> neq_op('~=', A1, A2);
+op('<=', A1, A2) -> le_op('<=', A1, A2);
+op('>=', A1, A2) -> le_op('>=', A2, A1);
+op('<', A1, A2) -> lt_op('<', A1, A2);
+op('>', A1, A2) -> lt_op('>', A2, A1);
 %% String operator.
-op('..', A1, A2, St) ->
-    B1 = luerl_lib:tostring(A1),
-    B2 = luerl_lib:tostring(A2),
-    if B1 =/= nil, B2 =/= nil -> {<< B1/binary,B2/binary >>,St};
-       true ->
-	    Meta = getmetamethod(A1, A2, <<"__concat">>, St),
-	    functioncall(Meta, [A1,A2], St)
-    end;
+op('..', A1, A2) -> concat_op(A1, A2);
 %% Bad args here.
-op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
+op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
 
-%% numeric_op(Op, Arg, Event, Raw, State) -> {[Ret],State}.
-%% numeric_op(Op, Arg, Arg, Event, Raw, State) -> {[Ret],State}.
-%% eq_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% neq_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% lt_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% le_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%%  Straigt out of the reference manual.
+%% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
+%% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
+%% eq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% neq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% lt_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% le_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% concat_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%%  Together with their metas straight out of the reference manual.
 
-numeric_op(Op, A, E, Raw, St) ->
+numeric_op(Op, A, E, Raw) ->
     case luerl_lib:tonumber(A) of
-	nil -> numeric_meta(Op, A, E, St);	%Neither number nor string
-	N -> {Raw(N),St}
+	nil ->					%Neither number nor string
+	    {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end}; 
+	N -> {ok,Raw(N)}
     end.
 
-numeric_op(Op, A1, A2, E, Raw, St) ->
+numeric_op(Op, A1, A2, E, Raw) ->
     case luerl_lib:tonumber(A1) of
-	nil -> numeric_meta(Op, A1, A2, E, St);
+	nil -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 	N1 ->
 	    case luerl_lib:tonumber(A2) of
-		nil -> numeric_meta(Op, A1, A2, E, St);
-		N2 -> {Raw(N1, N2),St}
+		nil ->
+		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+		N2 -> {ok,Raw(N1, N2)}
 	    end
     end.
 
@@ -1094,16 +1100,19 @@ numeric_meta(Op, A1, A2, E, St0) ->
 	    {first_value(Ret),St1}
     end.
 
-eq_op(_Op, A1, A2, St) when A1 =:= A2 -> {true,St};
-eq_op(_Op, A1, A2, St) ->
-    eq_meta(A1, A2, St).
+eq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,true};
+eq_op(_Op, A1, A2) ->
+    {meta,fun (_, St) -> eq_meta(A1, A2, St) end}.
 
-neq_op(_Op, A1, A2, St) when A1 =:= A2 -> {false,St};
-neq_op(_Op, A1, A2, St0) ->
-    {Ret,St1} = eq_meta(A1, A2, St0),
-    {not Ret,St1}.
+neq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,false};
+neq_op(_Op, A1, A2) ->
+    {meta,fun (_, St0) ->
+		  {Ret,St1} = eq_meta(A1, A2, St0),
+		  {not Ret,St1}
+	  end}.
 
 eq_meta(A1, A2, St0) ->
+    %% Must have "same" metamethod here. How do we test?
     case getmetamethod(A1, <<"__eq">>, St0) of
 	nil -> {false,St0};			%Tweren't no method
 	Meta ->
@@ -1115,9 +1124,12 @@ eq_meta(A1, A2, St0) ->
 	    end
     end.
 
-lt_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 < A2,St};
-lt_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 < A2,St};
-lt_op(Op, A1, A2, St0) ->
+lt_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 < A2};
+lt_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 < A2};
+lt_op(Op, A1, A2) ->
+    {meta,fun (_, St) -> lt_meta(Op, A1, A2, St) end}.
+
+lt_meta(Op, A1, A2, St0) ->
     case getmetamethod(A1, A2, <<"__lt">>, St0) of
 	nil -> badarg_error(Op, [A1,A2], St0);
 	Meta ->
@@ -1125,13 +1137,14 @@ lt_op(Op, A1, A2, St0) ->
 	    {boolean_value(Ret),St1}
     end.
 
-le_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 =< A2,St};
-le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 =< A2,St};
-le_op(Op, A1, A2, St0) ->
+le_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 =< A2};
+le_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 =< A2};
+le_op(Op, A1, A2) ->
+    {meta,fun (_, St) -> le_meta(Op, A1, A2, St) end}.
+
+le_meta(Op, A1, A2, St0) ->
+    %% Must check for first __le then __lt metamethods.
     case getmetamethod(A1, A2, <<"__le">>, St0) of
-	Meta when Meta =/= nil ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {boolean_value(Ret),St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
 	    case getmetamethod(A1, A2, <<"__lt">>, St0) of
@@ -1139,7 +1152,31 @@ le_op(Op, A1, A2, St0) ->
 		Meta ->
 		    {Ret,St1} = functioncall(Meta, [A2,A1], St0),
 		    {not boolean_value(Ret),St1}
+	    end;
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
+	    {boolean_value(Ret),St1}
+    end.
+
+concat_op(A1, A2) ->
+    case luerl_lib:tostring(A1) of
+	nil ->
+	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+	S1 ->
+	    case luerl_lib:tostring(A2) of
+		nil ->
+		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+		S2 ->
+		    {ok,<<S1/binary,S2/binary>>}
 	    end
+    end.
+
+concat_meta(A1, A2, St0) ->
+    case getmetamethod(A1, A2, <<"__concat">>, St0) of
+	nil -> badarg_error('..', [A1,A2], St0);
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
+	    {first_value(Ret),St1}
     end.
 
 %% boolean_value(Rets) -> boolean().
