@@ -155,7 +155,7 @@ do_passes([], St) -> {ok,St}.
 do_read_file(#comp{lfile=Name}=St) ->
     case file:read_file(Name) of
 	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}}; 
-	{error,E} -> {error,St#comp{errors=[E]}}
+	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
 do_scan(#comp{code=Str}=St) ->

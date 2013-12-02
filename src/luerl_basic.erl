@@ -345,7 +345,7 @@ setmetatable([#tref{i=N}=A1,nil|_], St) ->
     {[A1],St#luerl{ttab=Ts}};
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
-%% Load string and files.
+%% Do files.
 
 dofile(As, St) ->
     case luerl_lib:conv_list(As, [string]) of
@@ -357,7 +357,7 @@ dofile(As, St) ->
 
 dofile_ret({ok,Chunk}, _, St) ->
     luerl_emul:chunk(Chunk, [], St);
-dofile_ret({error,_}, As, St) ->
+dofile_ret({error,_,_}, As, St) ->
     badarg_error(dofile, As, St).
 
 %% Load string and files.
@@ -389,7 +389,7 @@ loadstring(As, St) ->
 load_ret({ok,Chunk}, St) ->
     Fun = fun (As, S) -> luerl_emul:chunk(Chunk, As, S) end,
     {[{function,Fun}],St};
-load_ret({error,{_,Mod,E}}, St) ->
+load_ret({error,[{_,Mod,E}|_],_}, St) ->
     Msg = iolist_to_binary(Mod:format_error(E)),
     {[nil,Msg],St}.
 
