@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_os.erl
+%% File    : luerl_lib_os.erl
 %% Author  : Robert Virding
 %% Purpose : The os library for Luerl.
 
--module(luerl_os).
+-module(luerl_lib_os).
 
 -export([install/1]).
 

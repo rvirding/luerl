@@ -71,17 +71,17 @@ init() ->
     %% Initialise the frame handling.
     St2 = St1#luerl{ftab=array:new(),ffree=[],fnext=0},
     %% Allocate the _G table and initialise the environment
-    {_G,St3} = luerl_basic:install(St2),	%Global environment
+    {_G,St3} = luerl_lib_basic:install(St2),	%Global environment
     St4 = St3#luerl{g=_G},
     %% Set _G variable to point to it.
     St5 = set_global_key(<<"_G">>, _G, St4),
     %% Add the other standard libraries.
-    St6 = alloc_libs([{<<"package">>,luerl_package},
-		      {<<"string">>,luerl_string},
-		      {<<"table">>,luerl_table},
-		      {<<"math">>,luerl_math},
-		      {<<"io">>,luerl_io},
-		      {<<"os">>,luerl_os}], St5),
+    St6 = alloc_libs([{<<"package">>,luerl_lib_package},
+		      {<<"string">>,luerl_lib_string},
+		      {<<"table">>,luerl_lib_table},
+		      {<<"math">>,luerl_lib_math},
+		      {<<"io">>,luerl_lib_io},
+		      {<<"os">>,luerl_lib_os}], St5),
     St6.
 
 alloc_libs(Libs, St) ->
@@ -1027,7 +1027,7 @@ op('not', A) -> {ok,not ?IS_TRUE(A)};
 %% op('not', _) -> {[false]};			%Everything else is false
 op('#', B) when is_binary(B) -> {ok,float(byte_size(B))};
 op('#', #tref{}=T) ->
-    {meta,fun (_, St) -> luerl_table:length(T, St) end};
+    {meta,fun (_, St) -> luerl_lib_table:length(T, St) end};
 op(Op, A) -> {error,{badarg,Op,[A]}}.
 
 %% Numeric operators.
@@ -1211,7 +1211,7 @@ gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,g=G,stk=Stk,meta=Meta}=St) ->
 	    G|Stk],
     %% Mark all seen tables and frames, i.e. return them.
     {SeenT,SeenF} = mark(Root, [], [], [], Tt0, Ft0),
-    io:format("gc: ~p\n", [{SeenT,SeenF}]),
+    %% io:format("gc: ~p\n", [{SeenT,SeenF}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
     {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
@@ -1258,9 +1258,9 @@ mark([#thread{}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, More, St, Sf, Tt, Ft);
 mark([#userdata{m=Meta}|Todo], More, St, Sf, Tt, Ft) ->
     mark([Meta|Todo], More, St, Sf, Tt, Ft);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More, St, Sf, Tt, Ft) ->
-    LL = tuple_to_list(Lvs),
-    mark(Todo, [Env,LL|More], St, Sf, Tt, Ft);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, St, Sf, Tt, Ft) ->
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
+    mark(Todo, More1, St, Sf, Tt, Ft);
 mark([{K,V}|Todo], More, St, Sf, Tt, Ft) ->	%Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, St, Sf, Tt, Ft);

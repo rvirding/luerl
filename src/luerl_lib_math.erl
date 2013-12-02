@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_math.erl
+%% File    : luerl_lib_math.erl
 %% Author  : Robert Virding
 %% Purpose : The math library for Luerl.
 
--module(luerl_math).
+-module(luerl_lib_math).
 
 -export([install/1,fmod/2,frexp/2]).
 

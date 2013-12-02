@@ -12,7 +12,7 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_table.erl
+%% File    : luerl_lib_table.erl
 %% Author  : Robert Virding
 %% Purpose : The table library for Luerl.
 
@@ -21,7 +21,7 @@
 %% that a table is a ttdict! We know that the erlang array has default
 %% value 'nil'.
 
--module(luerl_table).
+-module(luerl_lib_table).
 
 -include("luerl.hrl").
 

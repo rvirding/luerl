@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_string.erl
+%% File    : luerl_lib_string.erl
 %% Author  : Robert Virding
 %% Purpose : The string library for Luerl.
 
--module(luerl_string).
+-module(luerl_lib_string).
 
 -include("luerl.hrl").
 

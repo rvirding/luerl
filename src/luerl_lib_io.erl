@@ -12,13 +12,13 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_io.erl
+%% File    : luerl_lib_io.erl
 %% Author  : Robert Virding
 %% Purpose : The io library for Luerl.
 
 %% This is a quick hack to get io working. It will be improved in time.
 
--module(luerl_io).
+-module(luerl_lib_io).
 
 -include("luerl.hrl").
 

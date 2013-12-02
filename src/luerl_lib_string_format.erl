@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_string_format.erl
+%% File    : luerl_lib_string_format.erl
 %% Author  : Robert Virding
 %% Purpose : The string formatting for Luerl.
 
--module(luerl_string_format).
+-module(luerl_lib_string_format).
 
 -include("luerl.hrl").
 
