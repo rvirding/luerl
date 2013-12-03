@@ -322,28 +322,30 @@ type(_) -> <<"unknown">>.
 %%  values, for tables and userdata it is the table of the object,
 %%  else the metatable for the type.
 
-getmetatable([#tref{i=T}|_], #luerl{ttab=Ts}=St) ->
-    #table{m=Meta} = ?GET_TABLE(T, Ts),		%Get the table
-    {[Meta],St};
-getmetatable([#userdata{m=Meta}|_], St) ->
-    {[Meta],St};
-getmetatable([nil|_], #luerl{meta=Meta}=St) ->
-    {[Meta#meta.nil],St};
-getmetatable([B|_], #luerl{meta=Meta}=St) when is_boolean(B) ->
-    {[Meta#meta.boolean],St};
-getmetatable([N|_], #luerl{meta=Meta}=St) when is_number(N) ->
-    {[Meta#meta.number],St};
-getmetatable([S|_], #luerl{meta=Meta}=St) when is_binary(S) ->
-    {[Meta#meta.string],St};
-getmetatable(_, St) -> {[nil],St}.		%Other types have no metatables
+getmetatable([O|_], St) ->
+    case luerl_emul:getmetatable(O, St) of
+	#tref{i=N}=Meta ->
+	    #table{t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+	    case ttdict:find(<<"__metatable">>, Tab) of
+		{ok,MM} -> {[MM],St};
+		error -> {[Meta],St}
+	    end;
+	nil -> {[nil],St}
+    end.
 
-setmetatable([#tref{i=N}=A1,#tref{}=A2|_], St) ->
-    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=A2} end, St#luerl.ttab),
-    {[A1],St#luerl{ttab=Ts}};
-setmetatable([#tref{i=N}=A1,nil|_], St) ->
-    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=nil} end, St#luerl.ttab),
-    {[A1],St#luerl{ttab=Ts}};
+setmetatable([#tref{}=T,#tref{}=M|_], St) ->
+    setmetatable(T, M, St);
+setmetatable([#tref{}=T,nil|_], St) ->
+    setmetatable(T, nil, St);
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
+
+setmetatable(#tref{i=N}=T, M, St) ->
+    case luerl_emul:getmetamethod(T, <<"__metatable">>, St) of
+	nil ->
+	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, St#luerl.ttab),
+	    {[T],St#luerl{ttab=Ts}};
+	_ -> badarg_error(setmetatable, [T], St)
+    end.
 
 %% Do files.
 

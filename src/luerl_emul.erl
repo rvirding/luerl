@@ -43,6 +43,7 @@
 -export([alloc_table/1,alloc_table/2,free_table/2,
 	 functioncall/3,methodcall/4,
 	 get_table_key/3,set_table_key/4,
+	 getmetatable/2,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
