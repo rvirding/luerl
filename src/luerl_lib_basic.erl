@@ -63,7 +63,7 @@ table() ->
     ].
 
 assert(As, St) ->
-    case luerl_lib:is_true_value(As) of
+    case luerl_lib:boolean_value(As) of
 	true -> {As,St};
 	false ->
 	    M = case As of
@@ -334,12 +334,12 @@ getmetatable([O|_], St) ->
     end.
 
 setmetatable([#tref{}=T,#tref{}=M|_], St) ->
-    setmetatable(T, M, St);
+    do_setmetatable(T, M, St);
 setmetatable([#tref{}=T,nil|_], St) ->
-    setmetatable(T, nil, St);
+    do_setmetatable(T, nil, St);
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
-setmetatable(#tref{i=N}=T, M, St) ->
+do_setmetatable(#tref{i=N}=T, M, St) ->
     case luerl_emul:getmetamethod(T, <<"__metatable">>, St) of
 	nil ->
 	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, St#luerl.ttab),

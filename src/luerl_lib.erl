@@ -25,7 +25,7 @@
 -include("luerl.hrl").
 
 -export([lua_error/2,badarg_error/3,format_error/1,
-	 is_true_value/1,first_value/1,number_to_list/1,
+	 boolean_value/1,first_value/1,number_to_list/1,
 	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
 	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
@@ -129,13 +129,13 @@ format_error({illegal_op,Op}) ->
 format_error({undefined_op,Op}) ->
     io_lib:format("undefined op: ~w", [Op]).
 
-%% is_true_value(Rets) -> boolean()>
+%% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
 
-is_true_value([nil|_]) -> false;
-is_true_value([false|_]) -> false;
-is_true_value([_|_]) -> true;
-is_true_value([]) -> false.
+boolean_value([nil|_]) -> false;
+boolean_value([false|_]) -> false;
+boolean_value([_|_]) -> true;
+boolean_value([]) -> false.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
