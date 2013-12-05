@@ -96,13 +96,13 @@ field_value(Fmt, F) -> {F,Fmt}.
 build({$q,_,_,_}, [A|As], St0) ->
     %% No triming or adjusting of the $q string, we only get all of
     %% it. Use an RE to split string on quote needing characters.
-    {[S0],St1} = luerl_basic:tostring([A], St0),
+    {[S0],St1} = luerl_lib_basic:tostring([A], St0),
     RE = "([\\0-\\39\\\n\\\"\\\\\\177-\\237])",	%You don't really want to know!
     Ss0 = re:split(S0, RE, [{return,binary},trim]),
     Ss1 = build_q(Ss0),
     {[$",Ss1,$"],As,St1};
 build({$s,Fl,F,P}, [A|As], St0) ->
-    {[S0],St1} = luerl_basic:tostring([A], St0),
+    {[S0],St1} = luerl_lib_basic:tostring([A], St0),
     S1 = trim_bin(S0, P),
     {adjust_bin(S1, Fl, F),As,St1};
 build({$c,Fl,F,_}, [A|As], St) ->
@@ -114,19 +114,19 @@ build({$c,Fl,F,_}, [A|As], St) ->
 %% Integer formats.
 build({$i,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {format_integer(Fl, F, P, I, 10),As,St};
+    {format_decimal(Fl, F, P, I),As,St};
 build({$d,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {format_integer(Fl, F, P, I, 10),As,St};
+    {format_decimal(Fl, F, P, I),As,St};
 build({$o,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {format_integer(Fl, F, P, I, 8),As,St};
+    {format_octal(Fl, F, P, I),As,St};
 build({$x,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {format_integer(Fl, F, P, I, 16),As,St};
+    {format_hex(Fl, F, P, I),As,St};
 build({$X,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:to_int(A),
-    {format_integer(Fl, F, P, I, 16),As,St};
+    {format_HEX(Fl, F, P, I),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->
     N = luerl_lib:tonumber(A),
@@ -150,12 +150,31 @@ build({$G,Fl,F,P}, [A|As], St) ->
 build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!
     {"%",As,St}.
 
-%% format_integer(Flags, Field, Precision, Number, Base) -> String.
+%% format_decimal(Flags, Field, Precision, Number) -> String.
+%% format_octal(Flags, Field, Precision, Number) -> String.
+%% format_hex(Flags, Field, Precision, Number) -> String.
+%% format_HEX(Flags, Field, Precision, Number) -> String.
+%% format_integer(Flags, Field, Precision, Number, String) -> String.
 %%  Print integer Number with base Base. This is a bit messy as we are
 %%  following string.format handling.
 
-format_integer(Fl, F, P, N, Base) ->
-    Str0 = integer_to_list(abs(N), Base),
+format_decimal(Fl, F, P, N) ->
+    Str = integer_to_list(abs(N), 10),
+    format_integer(Fl, F, P, N, Str).
+
+format_octal(Fl, F, P, N) ->
+    Str = integer_to_list(abs(N), 8),
+    format_integer(Fl, F, P, N, Str).
+
+format_hex(Fl, F, P, N) ->
+    Str = lists:flatten(io_lib:fwrite("~.16b", [N])),
+    format_integer(Fl, F, P, N, Str).
+
+format_HEX(Fl, F, P, N) ->
+    Str = lists:flatten(io_lib:fwrite("~.16B", [N])),
+    format_integer(Fl, F, P, N, Str).
+
+format_integer(Fl, F, P, N, Str0) ->
     Sign = sign(Fl, N),
     if P =/= none ->
 	    Str1 = Sign ++ lists:flatten(adjust_str(Str0, ?FL_Z, P)),
