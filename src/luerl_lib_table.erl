@@ -29,7 +29,7 @@
 -export([install/1]).
 
 %% Export some functions which can be called from elsewhere.
--export([rawlength/2,length/2,unpack/2]).
+-export([concat/4,concat/5,rawlength/2,length/2,unpack/2]).
 
 %% Export some test functions.
 -export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
@@ -70,6 +70,20 @@ do_concat([#tref{i=N}|As], St) ->
 	_ -> throw({error,{badarg,concat,As},St})
     end;
 do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
+
+%% concat(Table, Sep, I, State) -> string().
+%% concat(Table, Sep, I, J, State) -> string().
+%%  Concatenate elements in a list into a string. Callable from
+%%  Erlang.
+
+concat(#tref{i=N}, Sep, I, St) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+    J = length_loop(Arr),
+    do_concat(Arr, Tab, Sep, I, J).
+
+concat(#tref{i=N}, Sep, I, J, St) ->
+    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+    do_concat(Arr, Tab, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
 
@@ -383,7 +397,7 @@ lt_comp(O1, O2, St0) ->
 	    {[luerl_lib:boolean_value(Ret)],St1}
     end.
 
-%% rawlength(Table, State) -> {Length,Table}.
+%% rawlength(Table, State) -> {Length,State}.
 
 rawlength(#tref{i=N}, St) ->
     #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
