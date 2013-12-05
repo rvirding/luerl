@@ -159,7 +159,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 
 format([F|As], St0) ->
     try
-	luerl_string_format:format(F, As, St0)
+	luerl_lib_string_format:format(F, As, St0)
     catch
 	%% If we have a specific error, default is badarg.
 	throw:{error,E,St1} -> lua_error(E, St1);

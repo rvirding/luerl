@@ -127,7 +127,9 @@ format_error(invalid_char_set) ->		%Keep text!
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);
 format_error({undefined_op,Op}) ->
-    io_lib:format("undefined op: ~w", [Op]).
+    io_lib:format("undefined op: ~w", [Op]);
+format_error({no_module,Mod}) ->
+    io_lib:format("module '~s' not found", [Mod]).
 
 %% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.

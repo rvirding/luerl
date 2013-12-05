@@ -208,6 +208,7 @@ Currently implemented functions in the libraries
 - rawget
 - rawlen
 - rawset
+- require
 - select
 - setmetatable
 - tonumber
@@ -251,6 +252,12 @@ Currently implemented functions in the libraries
 - os\.difftime
 - os\.getenv
 - os\.time
+- package\.config
+- package\.loaded
+- package\.preload
+- package\.path
+- package\.searchers
+- package\.searchpath
 - string\.byte
 - string\.char
 - string\.find
