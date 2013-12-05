@@ -393,12 +393,14 @@ rawlength(#tref{i=N}, St) ->
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
-length(#tref{i=N}=T, St) ->
-    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meta) -> luerl_emul:functioncall(Meta, [T], St);
+length(#tref{i=N}=T, St0) ->
+    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St0),
+    if ?IS_TRUE(Meta) ->
+	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
+	    {luerl_lib:first_value(Ret),St1};
        true ->
-	    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-	    {float(length_loop(Arr)),St}
+	    #table{a=Arr} = ?GET_TABLE(N, St0#luerl.ttab),
+	    {float(length_loop(Arr)),St0}
     end.
 
 length_loop(Arr) ->
