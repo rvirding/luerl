@@ -42,6 +42,8 @@
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
 	 functioncall/3,methodcall/4,
+	 get_table_keys/2,get_table_keys/3,
+	 set_table_keys/3,set_table_keys/4,
 	 get_table_key/3,set_table_key/4,
 	 getmetatable/2,
 	 getmetamethod/3,getmetamethod/4]).
@@ -74,23 +76,29 @@ init() ->
     %% Allocate the _G table and initialise the environment
     {_G,St3} = luerl_lib_basic:install(St2),	%Global environment
     St4 = St3#luerl{g=_G},
-    %% Set _G variable to point to it.
-    St5 = set_global_key(<<"_G">>, _G, St4),
+    %% Now we can start adding libraries. Package MUST be first!
+    St5 = load_lib(<<"package">>, luerl_lib_package, St4),
     %% Add the other standard libraries.
-    St6 = alloc_libs([{<<"package">>,luerl_lib_package},
-		      {<<"string">>,luerl_lib_string},
+    St6 = alloc_libs([{<<"string">>,luerl_lib_string},
 		      {<<"table">>,luerl_lib_table},
 		      {<<"math">>,luerl_lib_math},
 		      {<<"io">>,luerl_lib_io},
 		      {<<"os">>,luerl_lib_os}], St5),
-    St6.
+    %% Set _G variable to point to it and add it packages.loaded.
+    St7 = set_global_key(<<"_G">>, _G, St6),
+    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
 
 alloc_libs(Libs, St) ->
-    Fun = fun ({Key,Mod}, St0) ->
-		  {T,St1} = Mod:install(St0),
-		  set_global_key(Key, T, St1)
-	  end,
+    Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
     lists:foldl(Fun, St, Libs).
+
+%% load_lib(Key, Module, State) -> State.
+
+load_lib(Key, Mod, St0) ->
+    {Tab,St1} = Mod:install(St0),
+    %% Add key to global and to package.loaded.
+    St2 = set_global_key(Key, Tab, St1),
+    set_table_keys([<<"package">>,<<"loaded">>,Key], Tab, St2).
 
 %% set_global_name(Name, Value, State) -> State.
 %% set_global_key(Key, Value, State) -> State.
@@ -157,6 +165,31 @@ free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
     %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
     Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{ttab=Ts1,tfree=[N|Ns]}.
+
+%% get_table_keys(Keys, State) -> {Value,State}.
+%% get_table_keys(Tab, Keys, State) -> {Value,State}.
+%%  Search down tables which stops when no more tables.
+
+get_table_keys(Keys, St) ->
+    get_table_keys(St#luerl.g, Keys, St).
+
+get_table_keys(Tab, [K|Ks], St0) ->
+    {Val,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    get_table_keys(Val, Ks, St1);
+get_table_keys(Val, [], St) -> {Val,St}.
+
+%% set_table_keys(Keys, Val, State) -> {Value,State}.
+%% set_table_keys(Tab, Keys, Val, State) -> State.
+%%  Setter down tables.
+
+set_table_keys(Keys, Val, St) ->
+    set_table_keys(St#luerl.g, Keys, Val, St).
+
+set_table_keys(Tab, [K], Val, St) ->
+    luerl_emul:set_table_key(Tab, K, Val, St);
+set_table_keys(Tab0, [K|Ks], Val, St0) ->
+    {Tab1,St1} = luerl_emul:get_table_key(Tab0, K, St0),
+    set_table_keys(Tab1, Ks, Val, St1).
 
 %% set_table_key(Tref, Key, Value, State) -> State.
 %% get_table_key(Tref, Key, State) -> {Val,State}.
