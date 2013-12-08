@@ -98,9 +98,9 @@ call_chunk(C, As, St0) ->
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 
-%% call_function(FuncPath, Args) -> {Result,State}.
-%% call_function(FuncPath, Args, State) -> {Result,State}.
-%% call_function1(FuncPath | Func, LuaArgs, State) -> {LuaResult,State}.
+%% call_function(Table, Args) -> {Result,State}.
+%% call_function(TablePath, Args, State) -> {Result,State}.
+%% call_function1(LuaTablePath | Func, LuaArgs, State) -> {LuaResult,State}.
 
 call_function(Fp, As) ->
     call_function(Fp, As, init()).
@@ -110,13 +110,12 @@ call_function(Fp, As, St0) ->
     {Lfp,St1} = encode_list(Fp, St0),
     {Las,St2} = encode_list(As, St1),
     %% Find the function definition and call function.
-    {F,St3} = function_list(Lfp, St2),
-    {Lrs,St4} = luerl_emul:functioncall(F, Las, St3),
-    Rs = decode_list(Lrs, St4),
-    {Rs,St4}.
+    {Lrs,St3} = call_function1(Lfp, Las, St2),
+    Rs = decode_list(Lrs, St3),
+    {Rs,St3}.
 
-call_function1(Fp, Las, St0) when is_list(Fp) ->
-    {F,St1} = function_list(Fp, St0),
+call_function1(Lfp, Las, St0) when is_list(Lfp) ->
+    {F,St1} = luerl_emul:get_table_keys(Lfp, St0),
     luerl_emul:functioncall(F, Las, St1);
 call_function1(F, Las, St) ->
     luerl_emul:functioncall(F, Las, St).
@@ -124,11 +123,7 @@ call_function1(F, Las, St) ->
 %% function_list(Keys, State) -> {V,State}.
 %%  Go down a list of keys and return final value.
 
-function_list([G|Kl], St0) ->
-    {First,St1} = luerl_emul:get_global_key(G, St0),	%Start at global env
-    Fun = fun (K, {T,St}) -> luerl_emul:get_table_key(T, K, St) end,
-    lists:foldl(Fun, {First,St1}, Kl);
-function_list(_, _) -> error(badarg).
+function_list(Ks, St) -> luerl_emul:get_table_keys(Ks, St).
 
 %% call_method(FuncPath, Args) -> {Result,State}.
 %% call_method(FuncPath, Args, State) -> {Result,State}.
@@ -154,33 +149,33 @@ call_method1(Fp, Las, St0) ->
 
 method_list([G|Ks], St0) ->
     {First,St1} = luerl_emul:get_global_key(G, St0),
-    method_list(Ks, First, St1).
+    method_list(First, Ks, St1).
 
-method_list([K], SoFar, St0) ->
-    {Func,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    {SoFar,Func,St1};
-method_list([K|Ks], SoFar, St0) ->
-    {Next,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    method_list(Ks, Next, St1);
+method_list(Tab, [K], St0) ->
+    {Func,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    {Tab,Func,St1};
+method_list(Tab, [K|Ks], St0) ->
+    {Next,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    method_list(Next, Ks, St1);
 method_list(_, _, _) -> error(badarg).
 
-%% get_table(FuncPath, State) -> {Result, State}.
+%% get_table(TablePath, State) -> {Result, State}.
 %% Go down a list of keys and return decoded final value.
 
 get_table(Fp, St0) when is_list(Fp) ->
     {Lfp,St1} = encode_list(Fp, St0),
-    {V,St1} = function_list(Lfp, St0),
+    {V,St1} = luerl_emul:get_table_keys(Lfp, St0),
     Vd = decode(V, St1),
-    {Vd, St1};
+    {Vd,St1};
 get_table(_,_) -> error(badarg).
 
-%% get_table1(LuaFuncPath, State) -> {LuaResult, State}.
+%% get_table1(LuaTablePath, State) -> {LuaResult, State}.
 
 get_table1(Fp, St) when is_list(Fp) ->
-    function_list(Fp, St);
+    luerl_emul:get_table_keys(Fp, St);
 get_table1(_,_) -> error(badarg).
 
-%% set_table(FuncPath, Value, State) -> {Result, State}.
+%% set_table(TablePath, Value, State) -> {Result, State}.
 %% Go down a list of keys and set final key to Value
 
 set_table(Fp, V, St0) when is_list(Fp) ->
@@ -188,17 +183,13 @@ set_table(Fp, V, St0) when is_list(Fp) ->
     {Lv, St2} = encode(V, St1),
     {Ltab, St3} = set_table1(Lfp, Lv, St2),
     Tab = decode(Ltab, St3),
-    {Tab, St3};
+    {Tab,St3};
 set_table(_,_,_) -> error(badarg).
 
-%% set_table1(LuaFuncPath, State) -> {LuaResult, State}.
+%% set_table1(LuaTablePath, Value, State) -> {LuaResult, State}.
 
-set_table1(Lfp0, Lv, St0) when is_list(Lfp0) ->
-    {Lfp1, [K]} = lists:split(length(Lfp0) - 1, Lfp0),
-    {Tab, St2} = function_list(Lfp1, St0),
-    St3 = luerl_emul:set_table_key(Tab, K, Lv, St2),
-    {Tab, St3};
-set_table1(_,_,_) -> error(badarg).
+set_table1(Lfp, Lv, St) ->
+    luerl_emul:set_table_keys(Lfp, Lv, St).
 
 %% stop(State) -> GCedState.
 stop(St) ->

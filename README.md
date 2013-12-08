@@ -85,6 +85,10 @@ Please avoid directly accessing functions in other modules which haven't been de
 **Eaxmples**
 See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
+####Note####
+
+As it is possible in Lua to create self-referencing data structures, indeed the standard libraries have many instances of this, then using the functions which decode their return values can cause an infinite loop during the decoding. An simple example is the top level table which contains a key **_G** which references the top-level table.
+
 #### luerl:eval(String|Binary|Form[, State]) -> {ok, Result} | {error, Reason}.
  Evaluate a Lua expression passed in as a string or binary, and return its result.
 
@@ -110,11 +114,11 @@ See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`
 #### luerl:call_chunk(Form, Args[, State]) -> {Result,State}
 Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.
 
-#### luerl:call_function(FuncPath, Args[, State]) -> {Result,NewState}
-Call a function already defined in the state. `FuncPath` is a list of names to the function. `FuncPath`, `Args` and `Result` are automatically encode/decoded.
+#### luerl:call_function(KeyPath, Args[, State]) -> {Result,NewState}
+Call a function already defined in the state. `KeyPath` is a list of names to the function. `KeyPath`, `Args` and `Result` are automatically encode/decoded.
 
-#### luerl:call_function1(Keys, Args, State) -> {Result,NewState}
-Call a function already defined in the state. `Keys` is a list of keys to the function. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
+#### luerl:call_function1(KeyPath, Args, State) -> {Result,NewState}
+Call a function already defined in the state. `KeyPath` is a list of keys to the function. `KeyPath`, `Args` and `Result` are **NOT** encode/decoded.
 
 #### luerl:call_method(MethPath, Args[, State]) -> {Result,NewState}.
 Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encode/decoded.
@@ -261,7 +265,7 @@ Currently implemented functions in the libraries
 - string\.byte
 - string\.char
 - string\.find
-- string\.format (very limited as yet)
+- string\.format (should handle most things now)
 - string\.gmatch
 - string\.gsub
 - string\.len
