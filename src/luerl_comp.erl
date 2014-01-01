@@ -154,7 +154,9 @@ do_passes([], St) -> {ok,St}.
 
 do_read_file(#comp{lfile=Name}=St) ->
     case file:read_file(Name) of
-	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}}; 
+	{ok,<<239,187,191,Bin/binary>>} ->	%Trim away a stupid BOM
+	    {ok,St#comp{code=binary_to_list(Bin)}};
+	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}};
 	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
