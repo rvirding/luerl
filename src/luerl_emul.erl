@@ -178,7 +178,7 @@ get_table_keys(Tab, [K|Ks], St0) ->
     get_table_keys(Val, Ks, St1);
 get_table_keys(Val, [], St) -> {Val,St}.
 
-%% set_table_keys(Keys, Val, State) -> {Value,State}.
+%% set_table_keys(Keys, Val, State) -> State.
 %% set_table_keys(Tab, Keys, Val, State) -> State.
 %%  Setter down tables.
 

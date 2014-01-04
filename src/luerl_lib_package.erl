@@ -153,9 +153,8 @@ require_ret(Mod, Val, Pt, St0) ->
 	      nil -> true;			%Assign true to loaded entry
 	      __tmp -> __tmp
 	  end,
-    {Lt,St1} = luerl_emul:get_table_key(Pt, <<"loaded">>, St0),
-    St2 = luerl_emul:set_table_key(Lt, Mod, Res, St1),
-    {[Res],St2}.
+    St1 = luerl_emul:set_table_keys(Pt, [<<"loaded">>,Mod], Res, St0),
+    {[Res],St1}.
 
 search_loaders(Mod, #tref{i=N}, #luerl{ttab=Ts}=St) ->
     #table{a=Arr} = ?GET_TABLE(N, Ts),
