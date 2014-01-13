@@ -27,6 +27,7 @@
 -export([chunk/2]).
 
 %% chunk(St0, Opts) -> {ok,St0}.
+%%  A chunk is now a list of instructions to define the function.
 
 chunk(#code{code=Is0}=Code, Opts) ->
     Is1 = instrs(Is0, nil),			%No local state

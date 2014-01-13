@@ -37,7 +37,8 @@
 
 %% Basic interface.
 -export([init/0,gc/1]).
--export([emul/2,call/2,call/3,chunk/2,chunk/3]).
+-export([call/2,call/3,emul/2]).
+-export([load_chunk/2,load_chunk/3,load_function/2,load_function/3]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
@@ -354,21 +355,30 @@ set_global_var(Var, Val, #luerl{g=G}=St) ->
 get_global_var(Var, #luerl{g=G}=St) ->
     get_table_key_key(G, Var, St).
 
-%% chunk(Chunk, State) -> {Return,State}.
-%% chunk(Chunk, Args, State) -> {Return,State}.
+%% load_chunk(FunctionDefCode, State) -> {Function,State}.
+%% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
+%%  Load a chunk from the compiler.
 
-chunk(Chunk, St) -> chunk(Chunk, [], St).
-chunk(Chunk, Args, St) -> call(Chunk, Args, St).
+load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-%% call(Chunk, State) -> {Return,State}.
-%% call(Chunk, Args, State) -> {Return,State}.
+load_chunk(#code{code=Code}, Env, St) ->
+    load_function(Code, Env, St).
 
-call(Chunk, St) -> call(Chunk, [], St).
+%% load_function(FunctionDefCode, State) -> {Function,State}.
+%% load_function(FunctionDefCode, Env, State) -> {Function,State}.
+%%  Load a compilefunction definition instructions returning a callable
+%%  function. Currently it does nothing with the state.
 
-call(#code{code=C0}, Args, St0) ->
-    {_,[R|_],_,St1} = emul(C0, St0),		%R is the top of stack
-    itrace_print("e: ~p\n", [R]),
-    functioncall(R, Args, St1);
+load_function(F, St) -> load_function(F, [], St).
+
+load_function([?FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
+    do_fdef(Lsz, Esz, Pars, Is, Env, St).
+
+%% call(Function, State) -> {Return,State}.
+%% call(Function, Args, State) -> {Return,State}.
+
+call(Func, St) -> call(Func, [], St).
+
 call(#function{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -495,9 +505,9 @@ emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
     do_op1(Is, Lvs, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
     do_op2(Is, Lvs, Stk, Env, St, Op);
-emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St) ->
-    Func = do_fdef(Lsz, Esz, Pars, Fis, Env, St),
-    emul(Is, Lvs, [Func|Stk], Env, St);
+emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
+    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
+    emul(Is, Lvs, [Func|Stk], Env, St1);
 %% Control instructions.
 emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
@@ -679,10 +689,10 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{error,E} -> lua_error(E, St)
     end.
 
-%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> Function.
+%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
 
-do_fdef(Lsz, Esz, Pars, Is, Env, _) ->
-    #function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is}.
+do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
+    {#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->

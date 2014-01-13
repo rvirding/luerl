@@ -30,9 +30,10 @@
 		  subtract/2,intersection/2,new/0]).
 
 %% chunk(St0, Opts) -> {ok,St0}.
+%%  Return a list of instructions to define the chunk function.
 
 chunk(#code{code=C0}=Code, Opts) ->
-    {Is,nul} = exp(C0, single, nul),		%No local state
+    {Is,nul} = functiondef(C0, nul),		%No local state
     luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
     {ok,Code#code{code=Is}}.
 
@@ -417,4 +418,4 @@ tc_fields([#kfield{k=K,v=V}|Fs], I0, St0) ->
     {Iv,St2} = exp(V, single, St1),
     {Ifs,Fc,I1,St3} = tc_fields(Fs, I0, St2),
     {Ik ++ Iv ++ Ifs,Fc+1,I1,St3};
-tc_fields([], I, St) -> {[?PUSH_LIT([])],0,1.0,St}.
+tc_fields([], _, St) -> {[?PUSH_LIT([])],0,1.0,St}.

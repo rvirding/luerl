@@ -211,10 +211,10 @@ lua_searcher(As, St0) ->
 	nil -> badarg_error(lua_searcher, As, St0)
     end.
 
-lua_searcher_ret({ok,Chunk}, File, St) ->
+lua_searcher_ret({ok,Chunk}, File, St0) ->
     %% Wrap chunk in function to be consistent.
-    Fun = {function,fun (As, S) -> luerl_emul:chunk(Chunk, As, S) end},
-    {[Fun,File],St};
+    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+    {[Func,File],St1};
 lua_searcher_ret({error,[{_,Mod,E}|_],_}, _, St) ->
     Msg = iolist_to_binary(Mod:format_error(E)),
     {[Msg],St}.

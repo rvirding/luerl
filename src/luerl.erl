@@ -52,34 +52,50 @@ evalfile(Path, St0) ->
     end.
 
 %% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
-do(SBC) ->
-    do(SBC, init()).
 
-do(B, St) when is_binary(B) ->
-    do(binary_to_list(B), St);
-do(S, St) when is_list(S) ->
-    {ok,C} = load(S),
-    luerl_emul:chunk(C, [], St);
-do(C, St) ->					%Pre-parsed/compiled chunk
-    luerl_emul:chunk(C, [], St).
+do(SBC) -> do(SBC, init()).
+
+do(S, St0) when is_binary(S); is_list(S) ->
+    {ok,Func,St1} = load(S, St0),
+    luerl_emul:call(Func, St1);
+do(Func, St) ->
+    luerl_emul:call(Func, St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
+
 dofile(Path) ->
     dofile(Path, init()).
 
-dofile(Path, St) ->
-    {ok,C} = loadfile(Path),
-    luerl_emul:chunk(C, [], St).
+dofile(Path, St0) ->
+    {ok,Func,St1} = loadfile(Path, St0),
+    luerl_emul:call(Func, St1).
 
-%% load(String|Binary) -> {ok,Form}.
-load(Bin) when is_binary(Bin) ->
-    load(binary_to_list(Bin));
-load(Str) when is_list(Str) ->
-    luerl_comp:string(Str).
+%% load(String|Binary) -> {ok,Function,NewState}.
 
-%% loadfile(Path) -> {ok,Form}.
-loadfile(Path) ->
-    luerl_comp:file(Path).
+load(Str) -> load(Str, init()).
+
+load(Bin, St) when is_binary(Bin) ->
+    load(binary_to_list(Bin), St);
+load(Str, St0) when is_list(Str) ->
+    case luerl_comp:string(Str) of
+	{ok,Chunk} ->
+	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+	    {ok,Func,St1};
+	{error,_,_}=E -> E
+    end.
+
+%% loadfile(Path) -> {ok,Function,NewState}.
+%% loadfile(Path, State) -> {ok,Function,NewState}.
+
+loadfile(Path) -> loadfile(Path, init()).
+
+loadfile(Path, St0) ->
+    case luerl_comp:file(Path) of
+	{ok,Chunk} ->
+	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+	    {ok,Func,St1};
+	{error,_,_}=E -> E
+    end.
 
 %% init() -> State.
 init() -> luerl_emul:init().
@@ -94,7 +110,7 @@ call_chunk(C, As) -> call_chunk(C, As, init()).
 
 call_chunk(C, As, St0) ->
     {Las,St1} = encode_list(As, St0),
-    {Lrs,St2} = luerl_emul:chunk(C, Las, St1),
+    {Lrs,St2} = luerl_emul:call(C, Las, St1),
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 

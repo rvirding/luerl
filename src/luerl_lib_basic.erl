@@ -357,8 +357,9 @@ dofile(As, St) ->
 	_ -> badarg_error(dofile, As, St)
     end.
 
-dofile_ret({ok,Chunk}, _, St) ->
-    luerl_emul:chunk(Chunk, [], St);
+dofile_ret({ok,Chunk}, _, St0) ->
+    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+    luerl_emul:call(Func, [], St1);
 dofile_ret({error,_,_}, As, St) ->
     badarg_error(dofile, As, St).
 
@@ -388,9 +389,9 @@ loadstring(As, St) ->
 	nil -> badarg_error(loadstring, As, St)
     end.
 
-load_ret({ok,Chunk}, St) ->
-    Fun = fun (As, S) -> luerl_emul:chunk(Chunk, As, S) end,
-    {[{function,Fun}],St};
+load_ret({ok,Chunk}, St0) ->
+    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+    {[Func],St1};
 load_ret({error,[{_,Mod,E}|_],_}, St) ->
     Msg = iolist_to_binary(Mod:format_error(E)),
     {[nil,Msg],St}.

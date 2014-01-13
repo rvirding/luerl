@@ -183,12 +183,12 @@ do_comp_vars(St) ->
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_comp_locf(St) ->
-    case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+%% do_comp_locf(St) ->
+%%     case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
+%% 	{ok,C1} -> {ok,St#comp{code=C1}};
+%% 	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+%% 	{error,Es} -> {error,St#comp{errors=Es}}
+%%     end.
 
 do_comp_env(St) ->
     case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
@@ -216,14 +216,6 @@ do_ok_return(#comp{code=C}) -> {ok,C}.
 do_error_return(#comp{errors=Es,warnings=Ws}) ->
     {error,Es,Ws}.
 
-%% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
-
-chunk(Code0, Opts) ->
-    Cst = #cst{},				%Initialise common state
-    {Code1,nil} = exp(Code0, nil),		%This is local!
-    debug_print(Opts, "c: ~p\n", [Code1]),
-    {ok,#code{code=Code1,cst=Cst}}.
-
 debug_print(Opts, Format, Args) ->
     case member(debug_print, Opts) of
 	true -> io:fwrite(Format, Args);
@@ -232,6 +224,14 @@ debug_print(Opts, Format, Args) ->
 
 %% The first pass (pass_1).
 %% Here we normalise the code and convert it to an internal form. 
+
+%% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
+
+chunk(Code0, Opts) ->
+    Cst = #cst{},				%Initialise common state
+    {Code1,nil} = functiondef(Code0, nil),	%This is local!
+    debug_print(Opts, "c: ~p\n", [Code1]),
+    {ok,#code{code=Code1,cst=Cst}}.
 
 %% stmts([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
 %%     %% Need to split this to handle recursive definitions.
@@ -389,11 +389,15 @@ fdef_stmt(Line, Fname, Ps, B, St0) ->
     {V,F,St1} = functiondef(Line, Fname, Ps, B, St0),
     {#assign_stmt{l=Line,vs=[V],es=[F]},St1}.
 
+%% functiondef(FunctionDef, State) -> {CFunc,State}.
 %% functiondef(Line, Pars, Block, State) -> {CFunc,State}.
 %% functiondef(Line, Name, Pars, Block, State) -> {Var,CFunc,State}.
 %%  Have to handle the case where the function is a "method". All this
 %%  really means is that the function has an extra parameter 'self'
 %%  prepended to the paramter list.
+
+functiondef({functiondef,L,Ps,B}, St) ->
+    functiondef(L, Ps, B, St).
 
 functiondef(L, Ps, Stmts, St0) ->
     {Cp,Cb,St1} = function_block(Ps, Stmts, St0),
