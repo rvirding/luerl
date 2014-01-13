@@ -22,7 +22,8 @@
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
-	 load/1,loadfile/1,call/2,call/3,call_chunk/2,call_chunk/3,
+	 load/1,load/2,loadfile/1,loadfile/2,
+	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,
 	 call_method/2,call_method/3,call_method1/3,method_list/2,
