@@ -25,7 +25,7 @@
 	 load/1,load/2,loadfile/1,loadfile/2,
 	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
-	 get_table/2,get_table1/2,set_table/3,set_table1/3,
+	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
 	 call_method/2,call_method/3,call_method1/3,method_list/2,
 	 init/0,stop/1,gc/1,
 	 encode/2,encode_list/2,decode/2,decode_list/2]).
@@ -181,9 +181,9 @@ method_list(_, _, _) -> error(badarg).
 
 get_table(Fp, St0) when is_list(Fp) ->
     {Lfp,St1} = encode_list(Fp, St0),
-    {V,St1} = luerl_emul:get_table_keys(Lfp, St0),
-    Vd = decode(V, St1),
-    {Vd,St1};
+    {V,St2} = luerl_emul:get_table_keys(Lfp, St1),
+    Vd = decode(V, St2),
+    {Vd,St2};
 get_table(_,_) -> error(badarg).
 
 %% get_table1(LuaTablePath, State) -> {LuaResult, State}.
@@ -192,21 +192,26 @@ get_table1(Fp, St) when is_list(Fp) ->
     luerl_emul:get_table_keys(Fp, St);
 get_table1(_,_) -> error(badarg).
 
-%% set_table(TablePath, Value, State) -> {Result, State}.
-%% Go down a list of keys and set final key to Value
+%% set_table(TablePath, Value, State) -> State.
+%%  Go down a list of keys and set final key to Value.
 
 set_table(Fp, V, St0) when is_list(Fp) ->
     {Lfp,St1} = encode_list(Fp, St0),
     {Lv, St2} = encode(V, St1),
-    {Ltab, St3} = set_table1(Lfp, Lv, St2),
-    Tab = decode(Ltab, St3),
-    {Tab,St3};
+    set_table1(Lfp, Lv, St2);
 set_table(_,_,_) -> error(badarg).
 
-%% set_table1(LuaTablePath, Value, State) -> {LuaResult, State}.
+%% set_table1(LuaTablePath, Value, State) -> State.
+%%  Must explicitly read table key to get
 
 set_table1(Lfp, Lv, St) ->
     luerl_emul:set_table_keys(Lfp, Lv, St).
+
+%% set_table1(Table, Key, Value, State) -> State.
+%%  Must explicitly read table key to get
+
+set_table1(Tab, Key, Lv, St) ->
+    luerl_emul:set_table_key(Tab, Key, Lv, St).
 
 %% stop(State) -> GCedState.
 stop(St) ->
