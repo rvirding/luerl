@@ -402,6 +402,8 @@ pcall([F|As], St0) ->
 	{[true|Rs],St1}
     catch
 	%% Only catch Lua errors here, signal system errors.
+	error:{lua_error,{tref, TRef},St2} ->
+	    {[false,{tref, TRef}],St2};
 	error:{lua_error,E,St2} ->
 	    %% Basic formatting for now.
 	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
