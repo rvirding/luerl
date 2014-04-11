@@ -91,6 +91,13 @@ eprint(Args, St) ->
 
 -spec error(_, _) -> no_return().
 
+error([{tref, _}=T|_], St0) ->
+    case luerl_emul:getmetamethod(T, <<"__tostring">>, St0) of
+        nil -> lua_error({error_call, T}, St0);
+        Meta ->
+            {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
+            lua_error({error_call, Ret}, St1)
+    end;
 error([M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
 error(As, St) -> badarg_error(error, As, St).
 
