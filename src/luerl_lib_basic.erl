@@ -91,7 +91,14 @@ eprint(Args, St) ->
 
 -spec error(_, _) -> no_return().
 
-error([M|_], St) -> lua_error(M, St);		%Never returns!
+error([{tref, _}=T|_], St0) ->
+    case luerl_emul:getmetamethod(T, <<"__tostring">>, St0) of
+        nil -> lua_error({error_call, T}, St0);
+        Meta ->
+            {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
+            lua_error({error_call, Ret}, St1)
+    end;
+error([M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
 error(As, St) -> badarg_error(error, As, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
@@ -402,6 +409,8 @@ pcall([F|As], St0) ->
 	{[true|Rs],St1}
     catch
 	%% Only catch Lua errors here, signal system errors.
+	error:{lua_error,{error_call, E},St2} ->
+	    {[false,E],St2};
 	error:{lua_error,E,St2} ->
 	    %% Basic formatting for now.
 	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
