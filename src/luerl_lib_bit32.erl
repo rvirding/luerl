@@ -45,9 +45,15 @@ table() ->
 
 fband(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(trunc(X) band trunc(Y))], St};
-    _ -> badarg_error('band', As, St)
+    nil -> badarg_error('band', As, St);
+    [] -> {[], St};
+    L when is_list(L) -> {[aband(L)], St}
     end.
+
+aband([X|T]) -> aband(T, trunc(X)).
+
+aband([], A) -> float(A);
+aband([X|T], A) -> aband(T, trunc(X) band A).
 
 fbnot(As, St) ->
     case luerl_lib:tointegers(As) of
@@ -59,22 +65,34 @@ fbnot(As, St) ->
 
 fbor(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(trunc(X) bor trunc(Y))], St};
-    _ -> badarg_error('bor', As, St)
+    nil -> badarg_error('bor', As, St);
+    [] -> {[], St};
+    L when is_list(L) -> {[abor(L)], St}
     end.
+
+abor([X|T]) -> abor(T, trunc(X)).
+
+abor([], A) -> float(A);
+abor([X|T], A) -> abor(T, trunc(X) bor A).
 
 fbtest(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] ->
-        {[trunc(X) band trunc(Y) /= 0], St};
-    _ -> badarg_error('btest', As, St)
+    nil -> badarg_error('btest', As, St);
+    [] -> {[true], St};
+    L when is_list(L) -> {[aband(L) /= 0], St}
     end.
 
 fbxor(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(trunc(X) bxor trunc(Y))], St};
-    _ -> badarg_error('bxor', As, St)
+    nil -> badarg_error('bxor', As, St);
+    [] -> {[], St};
+    L when is_list(L) -> {[abxor(L)], St}
     end.
+
+abxor([X|T]) -> abxor(T, trunc(X)).
+
+abxor([], A) -> float(A);
+abxor([X|T], A) -> abxor(T, trunc(X) bxor A).
 
 flshift(As, St) ->
     case luerl_lib:tointegers(As) of
