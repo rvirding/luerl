@@ -53,16 +53,16 @@ fband(As, St) ->
     end.
 
 aband([]) -> ?DEFAULT_BAND;
-aband([X|T]) -> aband(T, trunc(X)).
+aband([X|T]) -> aband(T, checkint32(X)).
 
 aband([], A) -> float(A);
-aband([X|T], A) -> aband(T, trunc(X) band A).
+aband([X|T], A) -> aband(T, checkint32(X) band A).
 
 fbnot(As, St) ->
     case luerl_lib:tointegers(As) of
     [N|_] ->
-        NotN = bnot trunc(N),
-        {[float(uint32(NotN))], St};
+        NotN = bnot checkint32(N),
+        {[float(NotN)], St};
     _ -> badarg_error('bnot', As, St)
     end.
 
@@ -73,10 +73,10 @@ fbor(As, St) ->
     end.
 
 abor([]) -> ?DEFAULT_BOR;
-abor([X|T]) -> abor(T, trunc(X)).
+abor([X|T]) -> abor(T, checkint32(X)).
 
 abor([], A) -> float(A);
-abor([X|T], A) -> abor(T, trunc(X) bor A).
+abor([X|T], A) -> abor(T, checkint32(X) bor A).
 
 fbtest(As, St) ->
     case luerl_lib:tointegers(As) of
@@ -91,20 +91,20 @@ fbxor(As, St) ->
     end.
 
 abxor([]) -> ?DEFAULT_BXOR;
-abxor([X|T]) -> abxor(T, trunc(X)).
+abxor([X|T]) -> abxor(T, checkint32(X)).
 
 abxor([], A) -> float(A);
-abxor([X|T], A) -> abxor(T, trunc(X) bxor A).
+abxor([X|T], A) -> abxor(T, checkint32(X) bxor A).
 
 flshift(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(trunc(X) bsl trunc(Y))], St};
+    [X,Y|_] -> {[float(checkint32(X) bsl trunc(Y))], St};
     _ -> badarg_error('lshift', As, St)
     end.
 
 frshift(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(trunc(X) bsr trunc(Y))], St};
+    [X,Y|_] -> {[float(checkint32(X) bsr trunc(Y))], St};
     _ -> badarg_error('rshift', As, St)
     end.
 
@@ -113,21 +113,21 @@ farshift(As, St) ->
     [X,Y|_] ->
         Disp = trunc(Y),
         case Disp > 0 of
-            true -> {[float(trunc(X) bsr trunc(Y))], St};
-            false -> {[float(trunc(X) bsl abs(trunc(Y)))], St}
+            true -> {[float(checkint32(X) bsr trunc(Y))], St};
+            false -> {[float(checkint32(X) bsl abs(trunc(Y)))], St}
         end;
     _ -> badarg_error('arshift', As, St)
     end.
 
 flrotate(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(lrotate(uint32(trunc(X)), trunc(Y)))], St};
+    [X,Y|_] -> {[float(lrotate(checkint32(X), trunc(Y)))], St};
     _ -> badarg_error('lrotate', As, St)
     end.
 
 frrotate(As, St) ->
     case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(rrotate(uint32(trunc(X)), trunc(Y)))], St};
+    [X,Y|_] -> {[float(rrotate(checkint32(X), trunc(Y)))], St};
     _ -> badarg_error('rrotate', As, St)
     end.
 
@@ -176,6 +176,9 @@ uint32(N) ->
     <<Res:32/integer-unsigned>> = <<N:32>>,
     Res.
 
+checkint32(N) ->
+    uint32(trunc(N)).
+
 ge0(N, Where, As, St) ->
     case N >= 0 of
         true -> N;
@@ -195,7 +198,7 @@ le(N, V, Where, As, St) ->
     end.
 
 extract(N1, Field1, Width1, As, St) ->
-    N2 = uint32(trunc(N1)),
+    N2 = checkint32(N1),
     Field2 = trunc(Field1),
     Width2 = trunc(Width1),
     _ = ge0(Field2, 'extract', As, St),
@@ -204,8 +207,8 @@ extract(N1, Field1, Width1, As, St) ->
     trunc(N2 / math:pow(2, Field2)) rem trunc(math:pow(2, Width2)).
 
 replace(N1, V1, Field1, Width1, As, St) ->
-    N2 = uint32(trunc(N1)),
-    V2 = uint32(trunc(V1)),
+    N2 = checkint32(N1),
+    V2 = checkint32(V1),
     Field2 = trunc(Field1),
     Width2 = trunc(Width1),
     _ = ge0(Field2, 'replace', As, St),
