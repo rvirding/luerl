@@ -24,6 +24,9 @@
 
 -define(MOST_SIGNIFICANT, 16#80000000).
 -define(LEAST_SIGNIFICANT, 16#00000001).
+-define(DEFAULT_BAND, 4294967295).
+-define(DEFAULT_BOR, 0).
+-define(DEFAULT_BXOR, 0).
 
 install(St) ->
     luerl_emul:alloc_table(table(), St).
@@ -46,10 +49,10 @@ table() ->
 fband(As, St) ->
     case luerl_lib:tointegers(As) of
     nil -> badarg_error('band', As, St);
-    [] -> {[], St};
     L when is_list(L) -> {[aband(L)], St}
     end.
 
+aband([]) -> ?DEFAULT_BAND;
 aband([X|T]) -> aband(T, trunc(X)).
 
 aband([], A) -> float(A);
@@ -66,10 +69,10 @@ fbnot(As, St) ->
 fbor(As, St) ->
     case luerl_lib:tointegers(As) of
     nil -> badarg_error('bor', As, St);
-    [] -> {[], St};
     L when is_list(L) -> {[abor(L)], St}
     end.
 
+abor([]) -> ?DEFAULT_BOR;
 abor([X|T]) -> abor(T, trunc(X)).
 
 abor([], A) -> float(A);
@@ -78,17 +81,16 @@ abor([X|T], A) -> abor(T, trunc(X) bor A).
 fbtest(As, St) ->
     case luerl_lib:tointegers(As) of
     nil -> badarg_error('btest', As, St);
-    [] -> {[true], St};
     L when is_list(L) -> {[aband(L) /= 0], St}
     end.
 
 fbxor(As, St) ->
     case luerl_lib:tointegers(As) of
     nil -> badarg_error('bxor', As, St);
-    [] -> {[], St};
     L when is_list(L) -> {[abxor(L)], St}
     end.
 
+abxor([]) -> ?DEFAULT_BXOR;
 abxor([X|T]) -> abxor(T, trunc(X)).
 
 abxor([], A) -> float(A);
