@@ -281,6 +281,18 @@ Currently implemented functions in the libraries
 - table\.remove
 - table\.sort
 - table\.unpack
+- bit32\.band
+- bit32\.bnot
+- bit32\.bor
+- bit32\.btest
+- bit32\.bxor
+- bit32\.lshift
+- bit32\.rshift
+- bit32\.arshift
+- bit32\.lrotate
+- bit32\.rrotate
+- bit32\.extract
+- bit32\.replace
 
 
 Known Bugs

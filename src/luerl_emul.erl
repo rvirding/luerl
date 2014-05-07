@@ -84,7 +84,8 @@ init() ->
 		      {<<"table">>,luerl_lib_table},
 		      {<<"math">>,luerl_lib_math},
 		      {<<"io">>,luerl_lib_io},
-		      {<<"os">>,luerl_lib_os}], St5),
+		      {<<"os">>,luerl_lib_os},
+		      {<<"bit32">>,luerl_lib_bit32}], St5),
     %% Set _G variable to point to it and add it packages.loaded.
     St7 = set_global_key(<<"_G">>, _G, St6),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
