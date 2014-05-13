@@ -205,6 +205,8 @@ set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
 	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
 	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
     end;
+set_table_key(Tab, nil=Key, _, St) ->
+    lua_error({illegal_index,Tab,Key}, St);
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
 set_table_key(Tab, Key, _, St) ->
