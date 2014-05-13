@@ -235,6 +235,8 @@ rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_number(K) ->
 		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
 	  end,
     {[Tref],St#luerl{ttab=Ts1}};
+rawset([Tref,nil=K,_|_], St) ->
+    lua_error({illegal_index,Tref,K}, St);
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
     Tab1 = raw_set_key(Tab0, K, V),
