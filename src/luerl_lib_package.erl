@@ -82,7 +82,7 @@ config() ->
 path() ->
     case os:getenv("LUA_PATH") of
 	false -> <<"./?.lua;./?/init.lua">>;	%Default path
-	Path -> Path
+	Path -> list_to_binary(Path)
     end.
 
 %% meta_values([_,<<"bert">>], St) ->
