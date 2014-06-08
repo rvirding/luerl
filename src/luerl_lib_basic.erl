@@ -383,7 +383,7 @@ load(As, St) ->
     end.
 
 loadfile(As, St) ->
-    case luerl_lib:conv_list(As, [string,lua_strinf,lua_any]) of
+    case luerl_lib:conv_list(As, [string,lua_string,lua_any]) of
 	[F|_] ->
 	    Ret = luerl_comp:file(F),		%Compile the file
 	    load_ret(Ret, St);

@@ -479,10 +479,14 @@ char_set(Cs0, Sd, Sn, P, Tag) ->
 char_set([$]|Cs]) -> char_set(Cs, [$]]);	%Must special case this
 char_set(Cs) -> char_set(Cs, []).
 
-char_set([$%,C|Cs], Set) -> char_set(Cs, [char_class(C)|Set]);
-char_set([C1,$-,C2|Cs], Set) when C2 =/= $] -> char_set(Cs, [{C1,C2}|Set]);
-char_set([C|Cs], Set) when C =/= $] -> char_set(Cs, [C|Set]);
-char_set(Cs, Set) -> {Set,Cs}.
+char_set([$]|_]=Cs, Set) -> {Set,Cs};		%We are at the end
+char_set([$%,C|Cs], Set) ->
+    char_set(Cs, [char_class(C)|Set]);
+char_set([C1,$-,C2|Cs], Set) when C2 =/= $] ->
+    char_set(Cs, [{C1,C2}|Set]);
+char_set([C|Cs], Set) ->
+    char_set(Cs, [C|Set]);
+char_set([], Set) -> {Set,[]}.			%We are at the end
 
 %% char_class([$f,$[|Cs], Sd, Sn, P) ->
 %%     char_set(Cs, Sd, Sn, [frontier|P]);
