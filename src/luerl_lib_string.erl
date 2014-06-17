@@ -149,7 +149,7 @@ do_find(S, L, Pat0, I, false) ->		%Pattern search string
 	    case match_loop(S1, L1, Pat1, 1) of
 		[{_,P,Len}|Cas] ->		%Matches
 		    P1 = P + I - 1,		%Position in original string
-		    [float(P1),float(P1+Len-1)|match_cas(Cas, S, I)];
+		    [float(P1),float(P1+Len-1)|match_caps(Cas, S, I)];
 		[] -> [nil]			%No match
 	    end;
 	{error,E} -> throw({error,E})
@@ -245,15 +245,15 @@ gsub_repl_loop([], S, I, L, _, St) ->
 
 gsub_repl(Cas, S, #tref{}=T, St0) ->
     case Cas of					%Export both Ca and Key
-	[Ca] -> Key = match_ca(Ca, S);
-	[Ca,Ca1|_] -> Key = match_ca(Ca1, S)
+	[Ca] -> Key = match_cap(Ca, S);
+	[Ca,Ca1|_] -> Key = match_cap(Ca1, S)
     end,
     {R,St1} = luerl_emul:get_table_key(T, Key, St0),
     {[gsub_repl_val(S, R, Ca)],St1};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     case Cas0 of				%Export both Ca and Args
-	[Ca] -> Args = [match_ca(Ca, S)];
-	[Ca|Cas] -> Args = match_cas(Cas, S)
+	[Ca] -> Args = [match_cap(Ca, S)];
+	[Ca|Cas] -> Args = match_caps(Cas, S)
     end,
     {Rs,St1} = luerl_emul:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
@@ -266,12 +266,12 @@ gsub_repl(Cas, S, Repl, St) ->			%Replace string
 gsub_repl_str(Cas, S, [$%,$%|R]) ->
     [$%|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,$0|R]) ->
-    Cstr = luerl_lib:tostring(match_ca(hd(Cas), S)), %Force to string
+    Cstr = luerl_lib:tostring(match_cap(hd(Cas), S)), %Force to string
     [Cstr|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
     case lists:keysearch(C-$0, 1, Cas) of
 	{value,Ca} ->
-	    Cstr = luerl_lib:tostring(match_ca(Ca, S)),	%Force to string!
+	    Cstr = luerl_lib:tostring(match_cap(Ca, S)), %Force to string!
 	    [Cstr|gsub_repl_str(Cas, S, R)];
 	false -> throw({error,{illegal_index,capture,C-$0}})
     end;
@@ -283,7 +283,7 @@ gsub_repl_str(_, _, []) -> [].
 
 gsub_repl_val(S, Val, Ca) ->
     case luerl_lib:tostring(Val) of
-	nil -> match_ca(Ca, S);			%Use original match
+	nil -> match_cap(Ca, S);		%Use original match
 	Str -> Str
     end.
 
@@ -336,7 +336,7 @@ do_match(S, L, Pat0, I) ->
 		    P1 = P + I - 1,		%Position in original string
 		    [binary_part(S, P1-1, Len)];
 		[_|Cas] ->			%Have sub matches
-		    match_cas(Cas, S, I);
+		    match_caps(Cas, S1);
 		[] -> [nil]			%No match
 	    end;
 	{error,E} -> throw({error,E})
@@ -358,16 +358,21 @@ match_loop(S0, L, Pat, I) ->
 	    match_loop(S1, L, Pat, I+1)
     end.
 
-match_ca(Ca, S) -> match_ca(Ca, S, 1).
+%% match_cap(Capture, String [, Init]) -> Capture.
+%% match_caps(Captures, String [, Init]) -> Captures.
+%%  Get the captures. The string is the whole string not just from
+%%  Init.
 
-match_ca({_,P,Len}, _, I) when Len < 0 ->	%Capture position
+match_cap(Ca, S) -> match_cap(Ca, S, 1).
+
+match_cap({_,P,Len}, _, I) when Len < 0 ->	%Capture position
     float(P+I-1);
-match_ca({_,P,Len}, S, I) ->			%Capture
-    binary_part(S, P+I-1, Len).
+match_cap({_,P,Len}, S, I) ->			%Capture
+    binary_part(S, P+I-2, Len).			%Binaries count from 0
 
-match_cas(Cas, S) -> match_cas(Cas, S, 1).
+match_caps(Cas, S) -> match_caps(Cas, S, 1).
 
-match_cas(Cas, S, I) -> [ match_ca(Ca, S, I) || Ca <- Cas ].
+match_caps(Cas, S, I) -> [ match_cap(Ca, S, I) || Ca <- Cas ].
 
 %% rep(String, N [, Separator]) -> [String].
 
