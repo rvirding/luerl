@@ -29,7 +29,7 @@
 -export([install/1]).
 
 %% Export some functions which can be called from elsewhere.
--export([concat/4,concat/5,rawlength/2,length/2,unpack/2]).
+-export([concat/4,concat/5,raw_length/2,length/2,unpack/2]).
 
 %% Export some test functions.
 -export([test_concat/1,test_insert/2,test_insert/4,test_remove/1]).
@@ -139,9 +139,7 @@ concat_join([], _) -> <<>>.
 insert([#tref{i=N},V], St) ->
     Ts0 = St#luerl.ttab,
     #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
-    %% io:fwrite("ins: ~p\n", [{Arr0,V}]),
     Arr1 = do_insert_last(Arr0, V),
-    %% io:fwrite("ins> ~p\n", [Arr1]),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
     {[],St#luerl{ttab=Ts1}};
 insert([#tref{i=N},P0,V]=As, St) ->
@@ -175,23 +173,12 @@ test_insert(T, V) -> do_insert_last(T, V).
 test_insert(A, T, N, V) -> do_insert(A, T, N, V).
 
 %% do_insert_last(Array, V) -> Array.
-%%  Step downwards from size over 'nil' slots and trim size when done.
+%%  Get the "length" of the first bit and put value in fir slot after
+%%  that.
 
 do_insert_last(Arr, V) ->
-    case array:size(Arr) of
-	0 -> array:set(1, V, Arr);
-	S -> do_insert_last(Arr, S+1, V)
-    end.
-
-do_insert_last(Arr, 0, _) -> Arr;
-do_insert_last(Arr0, N, V) ->
-    case array:get(N-1, Arr0) of
-	nil ->
-	    do_insert_last(Arr0, N-1, V);
-	_ ->
-	    Arr1 = array:set(N, V, Arr0),	%Set the value
-	    array:resize(N+1, Arr1)		%Trim down size
-    end.
+    Len = length_loop(Arr),			%Get "length"
+    array:set(Len+1, V, Arr).			%Set the value
 
 %% do_insert(Array, Table, N, V) -> {Array,Table}.
 %%  Don't ask, it tries to emulate the "real" Lua, where we can insert
@@ -355,6 +342,38 @@ unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
     [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
+%% raw_length(Table, State) -> Length.
+%% length(Table, State) -> {Length,State}.
+%%  The length of a table is the number of numeric keys in sequence
+%%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
+
+length(#tref{}=T, St0) ->
+    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St0),
+    if ?IS_TRUE(Meta) ->
+	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
+	    {luerl_lib:first_value(Ret),St1};
+       true ->
+	    {raw_length(T, St0),St0}
+    end.
+
+raw_length(#tref{i=N}, St) ->
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
+    float(length_loop(Arr)).
+
+length_loop(Arr) ->
+    case {array:get(1, Arr),array:get(2, Arr)} of
+	{nil,nil} -> 0;
+	{nil,_} -> length_loop(3, Arr);
+	{_,nil} -> 1;
+	{_,_} -> length_loop(3, Arr)
+    end.
+
+length_loop(I, Arr) ->
+    case array:get(I, Arr) of
+	nil -> I-1;
+	_ -> length_loop(I+1, Arr)
+    end.
+
 %% sort(Table [,SortFun])
 %%  Sort the elements of the list after their values.
 
@@ -395,40 +414,6 @@ lt_comp(O1, O2, St0) ->
 	Meta ->
 	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),
 	    {[luerl_lib:boolean_value(Ret)],St1}
-    end.
-
-%% rawlength(Table, State) -> {Length,State}.
-
-rawlength(#tref{i=N}, St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-    {float(array:size(Arr)),St}.
-
-%% length(Table, State) -> {Length,State}.
-%%  The length of a table is the number of numeric keys in sequence
-%%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
-
-length(#tref{i=N}=T, St0) ->
-    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St0),
-    if ?IS_TRUE(Meta) ->
-	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
-	    {luerl_lib:first_value(Ret),St1};
-       true ->
-	    #table{a=Arr} = ?GET_TABLE(N, St0#luerl.ttab),
-	    {float(length_loop(Arr)),St0}
-    end.
-
-length_loop(Arr) ->
-    case {array:get(1, Arr),array:get(2, Arr)} of
-	{nil,nil} -> 0;
-	{nil,_} -> length_loop(3, Arr);
-	{_,nil} -> 1;
-	{_,_} -> length_loop(3, Arr)
-    end.
-
-length_loop(I, Arr) ->
-    case array:get(I, Arr) of
-	nil -> I-1;
-	_ -> length_loop(I+1, Arr)
     end.
 
 %% sort(A,B,C) -> sort_up(A,B,C).
