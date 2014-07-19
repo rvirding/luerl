@@ -113,7 +113,7 @@ from_list(List) ->
 -spec size(Dict) -> non_neg_integer() when
       Dict :: ttdict().
 
-size(empty) -> 0; 
+size(empty) -> 0;
 size({L,_,_,R}) ->
     size(L) + size(R) + 1;
 size({L,_,_,M,_,_,R}) ->
@@ -259,30 +259,24 @@ append_aux(Key, Val, {L,_,Xv,M,Yk,Yv,R}) ->
       Dict1 :: ttdict(),
       Dict2 :: ttdict().
 
-update_val(Key, Val, T) ->
-    case update_val_aux(Key, Val, T) of
-	{up,Lu,Ku,Vu,Ru} -> {Lu,Ku,Vu,Ru};
-	Node -> Node
-    end.
-
-update_val_aux(Key, Val, {L,Xk,Xv,R}) ->
+update_val(Key, Val, {L,Xk,Xv,R}) ->
     if Key < Xk ->
-	    store_up2_l(update_val_aux(Key, Val, L), Xk, Xv, R);
+	    {update_val(Key, Val, L),Xk,Xv,R};
        Key > Xk ->
-	    store_up2_r(L, Xk, Xv, update_val_aux(Key, Val, R));
+	    {L,Xk,Xv,update_val(Key, Val, R)};
        true -> {L,Xk,Val,R}
     end;
-update_val_aux(Key, Val, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk -> 
-    store_up3_l(update_val_aux(Key, Val, L), Xk, Xv, M, Yk, Yv, R);
-update_val_aux(Key, Val, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk -> 
+update_val(Key, Val, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk ->
+    {update_val(Key, Val, L),Xk,Xv,M,Yk,Yv,R};
+update_val(Key, Val, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk ->
     if Key < Yk ->
-	    store_up3_m(L, Xk, Xv, update_val_aux(Key, Val, M), Yk, Yv, R);
+	    {L,Xk,Xv,update_val(Key, Val, M),Yk,Yv,R};
        Key > Yk ->
-	    store_up3_r(L, Xk, Xv, M, Yk, Yv, update_val_aux(Key, Val, R));
+	    {L,Xk,Xv,M,Yk,Yv,update_val(Key, Val, R)};
        true ->
-	    {L,Xk,Xv,M,Key,Val,R}
+	    {L,Xk,Xv,M,Yk,Val,R}
     end;
-update_val_aux(_, Val, {L,Xk,_,M,Yk,Yv,R}) ->	%Key == Xk
+update_val(_, Val, {L,Xk,_,M,Yk,Yv,R}) ->	%Key == Xk
     {L,Xk,Val,M,Yk,Yv,R}.
 
 -spec update(Key, Fun, Dict1) -> Dict2 when
@@ -298,9 +292,9 @@ update(Key, Fun, {L,Xk,Xv,R}) ->
 	    {L,Xk,Xv,update(Key, Fun, R)};
        true -> {L,Xk,Fun(Xv),R}			%Key == Xk
     end;
-update(Key, Fun, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk -> 
+update(Key, Fun, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk ->
     {update(Key, Fun, L),Xk,Xv,M,Yk,Yv,R};
-update(Key, Fun, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk -> 
+update(Key, Fun, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk ->
     if Key < Yk ->
 	    {L,Xk,Xv,update(Key, Fun, M),Yk,Yv,R};
        Key > Yk ->
@@ -332,9 +326,9 @@ update_aux(Key, Fun, I, {L,Xk,Xv,R}) ->
 	    store_up2_r(L, Xk, Xv, update_aux(Key, Fun, I, R));
        true -> {L,Xk,Fun(Xv),R}
     end;
-update_aux(Key, Fun, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk -> 
+update_aux(Key, Fun, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk ->
     store_up3_l(update_aux(Key, Fun, I, L), Xk, Xv, M, Yk, Yv, R);
-update_aux(Key, Fun, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk -> 
+update_aux(Key, Fun, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk ->
     if Key < Yk ->
 	    store_up3_m(L, Xk, Xv, update_aux(Key, Fun, I, M), Yk, Yv, R);
        Key > Yk ->
@@ -365,9 +359,9 @@ update_counter_aux(Key, I, {L,Xk,Xv,R}) ->
 	    store_up2_r(L, Xk, Xv, update_counter_aux(Key, I, R));
        true -> {L,Xk,Xv+I,R}
     end;
-update_counter_aux(Key, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk -> 
+update_counter_aux(Key, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key < Xk ->
     store_up3_l(update_counter_aux(Key, I, L), Xk, Xv, M, Yk, Yv, R);
-update_counter_aux(Key, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk -> 
+update_counter_aux(Key, I, {L,Xk,Xv,M,Yk,Yv,R}) when Key > Xk ->
     if Key < Yk ->
 	    store_up3_m(L, Xk, Xv, update_counter_aux(Key, I, M), Yk, Yv, R);
        Key > Yk ->
@@ -599,7 +593,7 @@ merge(F, D1, D2) ->
 
 -spec foreach(Fun, Dict) -> ok when
       Fun :: fun((Key :: term(), Value :: term()) -> term()),
-      Dict :: ttdict().      
+      Dict :: ttdict().
 %%  Apply Fun to each element in Dict. Do it left to right, even if
 %%  this is not specified.
 
