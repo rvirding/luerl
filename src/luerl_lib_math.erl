@@ -92,6 +92,7 @@ atan2(As, St) ->
 
 ceil(As, St) ->
     case luerl_lib:tonumbers(As) of
+	[N|_] when round(N) == N -> {[N],St};
 	[N|_] -> {[float(round(N + 0.5))],St};
 	_ -> badarg_error(ceil, As, St)
     end.
@@ -122,6 +123,7 @@ exp(As, St) ->
 
 floor(As, St) ->
     case luerl_lib:tonumbers(As) of
+	[N|_] when round(N) == N -> {[N],St};
 	[N|_] -> {[float(round(N - 0.5))],St};
 	_ -> badarg_error(floor, As, St)
     end.
