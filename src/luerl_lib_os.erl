@@ -53,7 +53,7 @@ clock(As, St) ->
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
-    Str = io_lib:fwrite("~w-~.2.Ow-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
+    Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
 			[Ye,Mo,Da,Ho,Mi,Sec]),
     {[iolist_to_binary(Str)],St}.
 
