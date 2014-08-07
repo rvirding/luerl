@@ -163,7 +163,7 @@ next_index(I0, Arr, Tab, St) ->
 	{I1,V} -> {[float(I1),V],St};
 	none ->
 	    %% Nothing in the array, take table instead.
-	    {first_key(Tab),St}
+	    first_key(Tab, St)
     end.
 
 next_index_loop(I, Arr, S) when I < S ->
@@ -173,10 +173,11 @@ next_index_loop(I, Arr, S) when I < S ->
     end;
 next_index_loop(_, _, _) -> none.
 
-first_key(Tab) ->
+first_key(Tab, St) ->
     case ttdict:first(Tab) of
-	{ok,{K,V}} -> [K,V];
-	error -> [nil]
+	{ok,{K,nil}} -> next_key(K, Tab, St);	%Skip nil values
+	{ok,{K,V}} -> {[K,V],St};
+	error -> {[nil],St}
     end.
 
 next_key(K, Tab, St) ->
