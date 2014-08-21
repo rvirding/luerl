@@ -175,14 +175,12 @@ next_index_loop(_, _, _) -> none.
 
 first_key(Tab, St) ->
     case ttdict:first(Tab) of
-	{ok,{K,nil}} -> next_key(K, Tab, St);	%Skip nil values
 	{ok,{K,V}} -> {[K,V],St};
 	error -> {[nil],St}
     end.
 
 next_key(K, Tab, St) ->
     case ttdict:next(K, Tab) of
-	{ok,{N,nil}} -> next_key(N, Tab, St);	%Skip nil values
 	{ok,{N,V}} -> {[N,V],St};
 	error -> {[nil],St}
     end.

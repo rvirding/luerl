@@ -215,9 +215,10 @@ set_table_key(Tab, Key, _, St) ->
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case ttdict:find(Key, Tab0) of
-	{ok,_} ->			    %Key exists
-	    %% Don't delete key for nil here!
-	    Tab1 = ttdict:store(Key, Val, Tab0),
+	{ok,_} ->				%Key exists
+	    Tab1 = if Val =:= nil -> ttdict:erase(Key, Tab0);
+		      true -> ttdict:store(Key, Val, Tab0)
+		   end,
 	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{ttab=Ts1};
 	error ->				%Key does not exist
