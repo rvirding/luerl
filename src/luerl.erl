@@ -38,7 +38,7 @@ eval(Chunk, St0) ->
     try do(Chunk, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+         _E:R -> {error, R, erlang:get_stacktrace()} % {error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:evalfile(Path[, State]) -> {ok, Result} | {error,Reason}.
@@ -49,7 +49,7 @@ evalfile(Path, St0) ->
     try dofile(Path, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+         _E:R -> {error, R, erlang:get_stacktrace()} % {error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
@@ -227,10 +227,11 @@ encode_list(Ts, St) ->
     lists:mapfoldl(fun encode/2, St, Ts).
 
 encode(nil, St) -> {nil,St};
+encode(undefined, St) -> {nil,St};
 encode(false, St) -> {false,St};
 encode(true, St) -> {true,St};
 encode(B, St) when is_binary(B) -> {B,St};
-encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
+encode(A, St) when is_atom(A) -> {atom_to_binary(A,latin1),St};
 encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
 encode(L, St0) when is_list(L) ->
@@ -244,7 +245,7 @@ encode(L, St0) when is_list(L) ->
 			      end, {1.0,St0}, L),
     {T,St2} = luerl_emul:alloc_table(Es, St1),
     {T,St2};					%No more to do for now
-encode(_, _) -> error(badarg).			%Can't encode anything else
+encode(Val, _) -> error({badarg,Val}).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
