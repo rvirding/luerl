@@ -16,11 +16,11 @@ run() ->
 
 run(File) ->
   Lua0 = luerl:init(),
-  {ok, Form} = luerl:loadfile(File),
-  {_Resp, Lua1} = luerl:do(Form, Lua0),
+  {ok, Form, Lua1} = luerl:loadfile(File, Lua0),
+  {_Resp, Lua2} = luerl:do(Form, Lua1),
   report_file(File),
-  [do_benchmark(Benchmark, Lua1) || Benchmark <- benchmarks(Lua1)],
-  {ok, Lua1}.
+  [do_benchmark(Benchmark, Lua2) || Benchmark <- benchmarks(Lua2)],
+  {ok, Lua2}.
 
 do_benchmark(Benchmark, Lua) ->
   Iter = num_iterations(Lua),
@@ -41,9 +41,9 @@ num_iterations(Lua) ->
     _any -> ?DEFAULT_ITER
   end.
 
-benchmarks(Lua) ->
-  {ok, Chunk} = luerl:loadfile("util/extract_bench_keys.lua"),
-  {ok, [Benchmarks]}  = luerl:eval(Chunk, Lua),
+benchmarks(Lua0) ->
+  {ok, Chunk, Lua1} = luerl:loadfile("util/extract_bench_keys.lua", Lua0),
+  {ok, [Benchmarks]}  = luerl:eval(Chunk, Lua1),
   [Key || {_Index, Key} <- Benchmarks].
 
 report_file(File) ->

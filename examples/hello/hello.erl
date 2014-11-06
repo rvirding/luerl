@@ -15,8 +15,8 @@ run() ->
     luerl:dofile("./hello.lua"),
 
     % separately parse, then execute
-    {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
-    State = luerl:init(),
-    {_Ret, _NewState} = luerl:do(Chunk, State),
+    State0 = luerl:init(),
+    {ok, Chunk, State1} = luerl:load("print(\"Hello, Chunk!\")", State0),
+    {_Ret, _NewState} = luerl:do(Chunk, State1),
 
     done.

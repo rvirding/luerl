@@ -61,23 +61,12 @@ Rules.
 	    _ -> {error,"illegal number"}
 	end.
 
-%% Strings.
-\"(\\.|\\\n|[^"\n])*\" :
-	%% Strip quotes.
-	Cs = string:substr(TokenChars, 2, TokenLen - 2),
-	case string_chars(Cs) of
-	    {ok,S} ->
-		{token,{'STRING',TokenLine,list_to_binary(S)}};
-	    error -> {error,"illegal string"}
-	end.
-\'(\\.|\\\n|[^'\n])*\' :
-	%% Strip quotes.
-	Cs = string:substr(TokenChars, 2, TokenLen - 2),
-	case string_chars(Cs) of
-	    {ok,S} ->
-		{token,{'STRING',TokenLine,list_to_binary(S)}};
-	    error -> {error,"illegal string"}
-	end.
+%% Strings. 
+%% Handle the illegal newlines in string_token.
+\"(\\.|\\\n|[^"\\])*\" :
+	string_token(TokenChars, TokenLen, TokenLine).
+\'(\\.|\\\n|[^'\\])*\' :
+	string_token(TokenChars, TokenLen, TokenLine).
 \[\[([^]]|\][^]])*\]+\] :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 3, TokenLen - 4),
@@ -165,11 +154,18 @@ base1([C|Cs], Base, SoFar) when C >= $A, C =< $F, C < Base + $A - 10 ->
 base1([C|Cs], _Base, SoFar) -> {SoFar,[C|Cs]};
 base1([], _Base, N) -> {N,[]}.
 
-%% string_chars(InputChars) -> {ok,Chars} | error.
+%% string_token(InputChars, Length, Line) ->
+%%      {token,{'STRING',Line,Cs}} | {error,E}.
 %% Convert an input string into the corresponding string
 %% characters. We know that the input string is correct.
 
-string_chars(Cs) -> catch {ok,chars(Cs)}.
+string_token(Cs0, Len, L) ->
+    Cs = string:substr(Cs0, 2, Len - 2),	%Strip quotes
+    case catch {ok,chars(Cs)} of
+	{ok,S} ->
+	    {token,{'STRING',L,list_to_binary(S)}};
+	error -> {error,"illegal string"}
+    end.
 
 chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits
     I1 = C1 - $0,
@@ -188,9 +184,14 @@ chars([$\\,$x,C1,C2|Cs]) ->			%2 hex digits
 	true -> [hex_val(C1)*16+hex_val(C2)|chars(Cs)];
 	false -> throw(error)
     end;
+chars([$\\,$z|Cs]) -> chars(skip_space(Cs));	%Skip blanks
 chars([$\\,C|Cs]) -> [escape_char(C)|chars(Cs)];
+chars([$\n|_]) -> throw(error);
 chars([C|Cs]) -> [C|chars(Cs)];
 chars([]) -> [].
+
+skip_space([C|Cs]) when C >= 0, C =< $\s -> skip_space(Cs);
+skip_space(Cs) -> Cs.
 
 hex_char(C) when C >= $0, C =< $9 -> true;
 hex_char(C) when C >= $a, C =< $f -> true;
@@ -214,10 +215,10 @@ escape_char(C) -> C.
 
 long_bracket(Line, [$\n|Cs]) ->
     S = list_to_binary(Cs),
-     {token,{'STRING',Line,S}};
+    {token,{'STRING',Line,S}};
 long_bracket(Line, Cs) ->
     S = list_to_binary(Cs),
-     {token,{'STRING',Line,S}}.
+    {token,{'STRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
 %% Test if the name is a keyword.

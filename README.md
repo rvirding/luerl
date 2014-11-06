@@ -85,6 +85,10 @@ Please avoid directly accessing functions in other modules which haven't been de
 **Eaxmples**
 See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
+####Note####
+
+As it is possible in Lua to create self-referencing data structures, indeed the standard libraries have many instances of this, then using the functions which decode their return values can cause an infinite loop during the decoding. An simple example is the top level table which contains a key **_G** which references the top-level table.
+
 #### luerl:eval(String|Binary|Form[, State]) -> {ok, Result} | {error, Reason}.
  Evaluate a Lua expression passed in as a string or binary, and return its result.
 
@@ -95,12 +99,12 @@ See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`
  Evaluate a Lua expression and return its result, and the new Lua State.
 
 #### luerl:dofile(Path[, State]) -> {Result, NewState}.
- Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:eval("dofile('FileName')").
+ Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:do("return dofile('FileName')").
 
-#### luerl:load(String|Binary) -> {ok, Form} | {error, Reason} .
+#### luerl:load(String|Binary[, State]) -> {ok,Function,NewState} | {error, Reason} .
  Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
 
-#### luerl:loadfile(Path) -> {ok,Form}.
+#### luerl:loadfile(Path[, State]) -> {ok,Function,NewState}.
  Parse a Lua file, and return a compiled chunk ('form').
 
 #### luerl:init() -> State.
@@ -110,11 +114,11 @@ See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`
 #### luerl:call_chunk(Form, Args[, State]) -> {Result,State}
 Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.
 
-#### luerl:call_function(FuncPath, Args[, State]) -> {Result,NewState}
-Call a function already defined in the state. `FuncPath` is a list of names to the function. `FuncPath`, `Args` and `Result` are automatically encode/decoded.
+#### luerl:call_function(KeyPath, Args[, State]) -> {Result,NewState}
+Call a function already defined in the state. `KeyPath` is a list of names to the function. `KeyPath`, `Args` and `Result` are automatically encode/decoded.
 
-#### luerl:call_function1(Keys, Args, State) -> {Result,NewState}
-Call a function already defined in the state. `Keys` is a list of keys to the function. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
+#### luerl:call_function1(KeyPath, Args, State) -> {Result,NewState}
+Call a function already defined in the state. `KeyPath` is a list of keys to the function. `KeyPath`, `Args` and `Result` are **NOT** encode/decoded.
 
 #### luerl:call_method(MethPath, Args[, State]) -> {Result,NewState}.
 Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encode/decoded.
@@ -208,6 +212,7 @@ Currently implemented functions in the libraries
 - rawget
 - rawlen
 - rawset
+- require
 - select
 - setmetatable
 - tonumber
@@ -251,10 +256,16 @@ Currently implemented functions in the libraries
 - os\.difftime
 - os\.getenv
 - os\.time
+- package\.config
+- package\.loaded
+- package\.preload
+- package\.path
+- package\.searchers
+- package\.searchpath
 - string\.byte
 - string\.char
 - string\.find
-- string\.format (very limited as yet)
+- string\.format (should handle most things now)
 - string\.gmatch
 - string\.gsub
 - string\.len
@@ -270,6 +281,18 @@ Currently implemented functions in the libraries
 - table\.remove
 - table\.sort
 - table\.unpack
+- bit32\.band
+- bit32\.bnot
+- bit32\.bor
+- bit32\.btest
+- bit32\.bxor
+- bit32\.lshift
+- bit32\.rshift
+- bit32\.arshift
+- bit32\.lrotate
+- bit32\.rrotate
+- bit32\.extract
+- bit32\.replace
 
 
 Known Bugs

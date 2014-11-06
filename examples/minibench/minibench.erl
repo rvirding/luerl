@@ -30,7 +30,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Init state, and execute pre-parsed '1 + 1'~n"),
     I2 = 100000,
-    {ok, Chunk2} = luerl:load("return 1 + 1"),
+    {ok, Chunk2, _St} = luerl:load("return 1 + 1"),
     
     {T2,_State21} = timer:tc(fun() -> do_loop(I2, Chunk2) end),
 
@@ -42,10 +42,10 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parse execute '1 + 1', re-using same state~n"),
     I3 = 100000,
-    {ok, Chunk3} = luerl:load("return 1 + 1"),
     State3 = luerl:init(),
+    {ok, Chunk3, State31} = luerl:load("return 1 + 1", State3),
     
-    {T3,_State31} = timer:tc(fun() -> do_loop_state(I3, Chunk3, State3) end),
+    {T3,_State31} = timer:tc(fun() -> do_loop_state(I3, Chunk3, State31) end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of 1 + 1.~n", [T3,I3]),
     io:format("Per call: ~p microseconds.~n", [T3/I3]),
@@ -66,10 +66,10 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parsed '1 + 1', re-using state from last result~n"),
     I5 = 100000,
-    {ok, Chunk5} = luerl:load("return 1 + 1"),
     State5 = luerl:init(),
+    {ok, Chunk5, State51} = luerl:load("return 1 + 1", State5),
     
-    {T5,_State51} = timer:tc(fun() -> do_loop_chain(I5, Chunk5, State5) end),
+    {T5,_State51} = timer:tc(fun() -> do_loop_chain(I5, Chunk5, State51) end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of 1 + 1.~n", [T5,I5]),
     io:format("Per call: ~p microseconds.~n", [T5/I5]),
@@ -99,9 +99,9 @@ run() ->
     done.
 
 % helper
-selffeed(State, Chunk, 0) -> State;
+selffeed(State, _Chunk, 0) -> State;
 selffeed(State, Chunk, I) -> 
-    {[2.0],State1} = luerl:do(Chunk, State),
+    {ok,[2.0],State1} = luerl:do(Chunk, State),
     selffeed(State1, Chunk, I-1).
 
 do_loop(N, Chunk) when N > 0 ->

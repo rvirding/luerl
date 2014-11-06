@@ -44,37 +44,42 @@ run() ->
     io:format("(10) ~p?~n", [Result1]),
 
     % separately parse, then execute (doubles (11) and Chunk1 as assertion)
-    {ok,Chunk1} = luerl:load("print(\"(11) Hello, Chunk 1!\")"),
-    {ok,Chunk1} = luerl:load(<<"print(\"(11) Hello, Chunk 1!\")">>),
-    luerl:eval(Chunk1),
-    luerl:do(Chunk1),
+    St1A = luerl:init(),
+    {ok,Chunk1,St1B} = luerl:load("print(\"(11) Hello, Chunk 1!\")", St1A),
+    {ok,Chunk1,_} = luerl:load(<<"print(\"(11) Hello, Chunk 1!\")">>, St1A),
+    luerl:eval(Chunk1, St1B),
+    luerl:do(Chunk1, St1B),
 
     % separately parse, then execute (doubles (12) and Chunk2 as assertion)
-    {ok,Chunk2} = luerl:load("function chunk2() print(\"(12) Hello, Chunk 2!\") end"),
-    {ok,Chunk2} = luerl:load(<<"function chunk2() print(\"(12) Hello, Chunk 2!\") end">>),
-    {ok,Result2} = luerl:eval(Chunk2),
-    {Result2,State2} = luerl:do(Chunk2),
-    {Result2,State2A} = luerl:do(<<"function chunk2() print(\"(12) Hello, Chunk 2!\") end">>),
-    luerl:call_function([chunk2], [], State2),
-    luerl:call_function([chunk2], [], State2A),
+    St2A = luerl:init(),
+    {ok,Chunk2,St2B} = luerl:load("function chunk2() print(\"(12) Hello, Chunk 2!\") end", St2A),
+    {ok,Chunk2,_} = luerl:load(<<"function chunk2() print(\"(12) Hello, Chunk 2!\") end">>, St2A),
+    {ok,Result2} = luerl:eval(Chunk2, St2B),
+    {Result2,St2C} = luerl:do(Chunk2, St2B),
+    {Result2,St2D} = luerl:do(<<"function chunk2() print(\"(12) Hello, Chunk 2!\") end">>, St2A),
+    luerl:call_function([chunk2], [], St2C),
+    luerl:call_function([chunk2], [], St2D),
 
     % separately parse, then execute a file. The file defines a function no()
-    {ok,Chunk3} = luerl:loadfile("./hello2-3.lua"),
-    {ok,Result3} = luerl:eval(Chunk3),
-    {Result3,State3} = luerl:do(Chunk3),
-    {[],_} = luerl:call_function([no], [], State3),
+    St3A = luerl:init(),
+    {ok,Chunk3,St3B} = luerl:loadfile("./hello2-3.lua", St3A),
+    {ok,Result3} = luerl:eval(Chunk3, St3B),
+    {Result3,St3C} = luerl:do(Chunk3, St3B),
+    {[],_} = luerl:call_function([no], [], St3C),
 
     % separately parse, then execute, get a result
-    {ok,Chunk4} = luerl:load("return '(17b) Marvelous wheater today, isn°t it!'"),
-    {ok,Chunk4} = luerl:load(<<"return '(17b) Marvelous wheater today, isn°t it!'">>),
-    {ok,Result4} = luerl:eval(Chunk4),
-    {Result4,_} = luerl:do(Chunk4),
+    St4A = luerl:init(),
+    {ok,Chunk4,St4B} = luerl:load("return '(17b) Marvelous wheater today, isn°t it!'", St4A),
+    {ok,Chunk4,_} = luerl:load(<<"return '(17b) Marvelous wheater today, isn°t it!'">>, St4A),
+    {ok,Result4} = luerl:eval(Chunk4, St4B),
+    {Result4,_} = luerl:do(Chunk4, St4B),
     io:format("(17) And I say: ~p~n", [Result4]),
 
     % separately parse, then execute a file, get a result
-    {ok,Chunk5} = luerl:loadfile("./hello2-4.lua"),
-    {ok,Result5} = luerl:eval(Chunk5),
-    {Result5,_} = luerl:do(Chunk5),
+    St5A = luerl:init(),
+    {ok,Chunk5,St5B} = luerl:loadfile("./hello2-4.lua", St5A),
+    {ok,Result5} = luerl:eval(Chunk5, St5B),
+    {Result5,_} = luerl:do(Chunk5, St5B),
     io:format("(18) And he says: ~p~n", [Result5]),
 
 
@@ -82,10 +87,10 @@ run() ->
 
     % create state
     New = luerl:init(),
-    {_,_New2} = luerl:do("print '(19) hello generix'"),
+    {_,_New2} = luerl:do("print '(19) hello generix'", New),
     
     % change state
-    {_,State0} = luerl:do("a = 1000"),
+    {_,State0} = luerl:do("a = 1000", New),
     {_,State01} = luerl:do("a = 1000", New),
 
     % execute a string, using passed in State0
@@ -125,28 +130,28 @@ run() ->
     luerl:do("print('(30) F: ' .. a)", State06),
 
     % separately parse, then execute
-    {ok,Chunk11} = luerl:load("print(\"(31) Hello, \" .. a .. \"!\")"),
-    {ok,Chunk11} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>),
+    {ok,Chunk11,_} = luerl:load("print(\"(31) Hello, \" .. a .. \"!\")", State06),
+    {ok,Chunk11,_} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>, State06),
     luerl:eval(Chunk11,State06),
     luerl:do(Chunk11,State06),
 
     % separately parse, then execute a file. The file defines a function old()
-    {ok,Chunk12} = luerl:loadfile("./hello2-8.lua"),
-    {ok,Result12} = luerl:eval(Chunk12,State06),
-    {Result12,State06A} = luerl:do(Chunk12,State06),
+    {ok,Chunk12,St6} = luerl:loadfile("./hello2-8.lua", State06),
+    {ok,Result12} = luerl:eval(Chunk12, St6),
+    {Result12,State06A} = luerl:do(Chunk12,St6),
     luerl:call_function([old],[],State06A),
 
     % separately parse, then execute, get a result
-    {ok,Chunk13} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a"),
-    {ok,Chunk13} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>),
-    {ok,Result07} = luerl:eval(Chunk13, State06),
-    {Result07,State07} = luerl:do(Chunk13, State06),
+    {ok,Chunk13,St7} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a", State06),
+    {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State06),
+    {ok,Result07} = luerl:eval(Chunk13, St7),
+    {Result07,State07} = luerl:do(Chunk13, St7),
     io:format("(34) And again I said: ~s~n", [Result07]),
 
     % separately parse, then execute a file, get a result. The file defines confirm(p)
-    {ok,Chunk14} = luerl:loadfile("./hello2-9.lua"),
-    {ok,Result14} = luerl:eval(Chunk14, State07),
-    {Result14,State14} = luerl:do(Chunk14, State07),
+    {ok,Chunk14,St8} = luerl:loadfile("./hello2-9.lua", State07),
+    {ok,Result14} = luerl:eval(Chunk14, St8),
+    {Result14,State14} = luerl:do(Chunk14, St8),
     io:format("(35) And twice: ~s~n", [Result14]),
     {Result14A,_} = luerl:call_function([confirm], [<<"Is it?">>], State14),
     io:format("(36) Well: ~s~n", [Result14A]),

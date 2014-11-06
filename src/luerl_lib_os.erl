@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_os.erl
+%% File    : luerl_lib_os.erl
 %% Author  : Robert Virding
 %% Purpose : The os library for Luerl.
 
--module(luerl_os).
+-module(luerl_lib_os).
 
 -export([install/1]).
 
@@ -43,13 +43,17 @@ getenv(As, St) -> badarg_error(getenv, As, St).
 
 %% Time functions.
 
-clock(_, St) ->					%This is wrong!
-    {Mega,Sec,Micro} = now(),
-    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
+clock(As, St) ->
+    Type = case As of				%Choose which we want
+	       [<<"runtime">>|_] -> runtime;
+	       _ -> wall_clock
+	   end,
+    {Tot,_} = erlang:statistics(Type),		%Milliseconds
+    {[Tot*1.0e-3],St}.
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
-    Str = io_lib:fwrite("~w-~.2.Ow-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
+    Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
 			[Ye,Mo,Da,Ho,Mi,Sec]),
     {[iolist_to_binary(Str)],St}.
 
@@ -57,5 +61,5 @@ difftime([A1,A2|_], St) ->
     {[A2-A1],St}.
 
 time(_, St) ->					%Time since 1 Jan 1970
-    {M,S,_} = now(),
-    {[1.0e6*M+S],St}.
+    {Mega,Sec,Micro} = os:timestamp(),
+    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.

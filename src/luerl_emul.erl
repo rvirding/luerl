@@ -37,11 +37,16 @@
 
 %% Basic interface.
 -export([init/0,gc/1]).
--export([emul/2,call/2,call/3,chunk/2,chunk/3]).
+-export([call/2,call/3,emul/2]).
+-export([load_chunk/2,load_chunk/3,load_function/2,load_function/3]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
-	 functioncall/3,get_table_key/3,set_table_key/4,
+	 functioncall/3,methodcall/4,
+	 get_table_keys/2,get_table_keys/3,
+	 set_table_keys/3,set_table_keys/4,
+	 get_table_key/3,set_table_key/4,
+	 getmetatable/2,
 	 getmetamethod/3,getmetamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
@@ -49,14 +54,15 @@
 	 get_global_name/2,get_global_key/2]).
 
 %% For testing.
--export([pop_vals/3,push_vals/3]).
+-export([pop_vals/2,push_vals/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).
 
 %% -compile(inline).				%For when we are optimising
-%% -compile({inline,[is_true_value/1,first_value/1]}).
+%% -compile({inline,[boolean_value/1,first_value/1]}).
 
--define(ITRACE_DO(B), (get(itrace) /= undefined) andalso B).
+%% -define(ITRACE_DO(Expr), ok).
+-define(ITRACE_DO(Expr), (get(itrace) /= undefined) andalso Expr).
 
 %% init() -> State.
 %% Initialise the basic state.
@@ -69,24 +75,32 @@ init() ->
     %% Initialise the frame handling.
     St2 = St1#luerl{ftab=array:new(),ffree=[],fnext=0},
     %% Allocate the _G table and initialise the environment
-    {_G,St3} = luerl_basic:install(St2),	%Global environment
+    {_G,St3} = luerl_lib_basic:install(St2),	%Global environment
     St4 = St3#luerl{g=_G},
-    %% Set _G variable to point to it.
-    St5 = set_global_name('_G', _G, St4),
+    %% Now we can start adding libraries. Package MUST be first!
+    St5 = load_lib(<<"package">>, luerl_lib_package, St4),
     %% Add the other standard libraries.
-    St6 = alloc_libs([{<<"math">>,luerl_math},
-		      {<<"io">>,luerl_io},
-		      {<<"os">>,luerl_os},
-		      {<<"string">>,luerl_string},
-		      {<<"table">>,luerl_table}], St5),
-    St6.
+    St6 = alloc_libs([{<<"string">>,luerl_lib_string},
+		      {<<"table">>,luerl_lib_table},
+		      {<<"math">>,luerl_lib_math},
+		      {<<"io">>,luerl_lib_io},
+		      {<<"os">>,luerl_lib_os},
+		      {<<"bit32">>,luerl_lib_bit32}], St5),
+    %% Set _G variable to point to it and add it packages.loaded.
+    St7 = set_global_key(<<"_G">>, _G, St6),
+    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
 
 alloc_libs(Libs, St) ->
-    Fun = fun ({Key,Mod}, St0) ->
-		  {T,St1} = Mod:install(St0),
-		  set_global_key(Key, T, St1)
-	  end,
+    Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
     lists:foldl(Fun, St, Libs).
+
+%% load_lib(Key, Module, State) -> State.
+
+load_lib(Key, Mod, St0) ->
+    {Tab,St1} = Mod:install(St0),
+    %% Add key to global and to package.loaded.
+    St2 = set_global_key(Key, Tab, St1),
+    set_table_keys([<<"package">>,<<"loaded">>,Key], Tab, St2).
 
 %% set_global_name(Name, Value, State) -> State.
 %% set_global_key(Key, Value, State) -> State.
@@ -154,6 +168,31 @@ free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
     Ts1 = ?DEL_TABLE(N, Ts0),
     St#luerl{ttab=Ts1,tfree=[N|Ns]}.
 
+%% get_table_keys(Keys, State) -> {Value,State}.
+%% get_table_keys(Tab, Keys, State) -> {Value,State}.
+%%  Search down tables which stops when no more tables.
+
+get_table_keys(Keys, St) ->
+    get_table_keys(St#luerl.g, Keys, St).
+
+get_table_keys(Tab, [K|Ks], St0) ->
+    {Val,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    get_table_keys(Val, Ks, St1);
+get_table_keys(Val, [], St) -> {Val,St}.
+
+%% set_table_keys(Keys, Val, State) -> State.
+%% set_table_keys(Tab, Keys, Val, State) -> State.
+%%  Setter down tables.
+
+set_table_keys(Keys, Val, St) ->
+    set_table_keys(St#luerl.g, Keys, Val, St).
+
+set_table_keys(Tab, [K], Val, St) ->
+    luerl_emul:set_table_key(Tab, K, Val, St);
+set_table_keys(Tab0, [K|Ks], Val, St0) ->
+    {Tab1,St1} = luerl_emul:get_table_key(Tab0, K, St0),
+    set_table_keys(Tab1, Ks, Val, St1).
+
 %% set_table_key(Tref, Key, Value, State) -> State.
 %% get_table_key(Tref, Key, State) -> {Val,State}.
 %%  Access tables, as opposed to the environment (which are also
@@ -166,6 +205,8 @@ set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
 	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
 	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
     end;
+set_table_key(Tab, nil=Key, _, St) ->
+    lua_error({illegal_index,Tab,Key}, St);
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
 set_table_key(Tab, Key, _, St) ->
@@ -174,9 +215,10 @@ set_table_key(Tab, Key, _, St) ->
 set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case ttdict:find(Key, Tab0) of
-	{ok,_} ->			    %Key exists
-	    %% Don't delete key for nil here!
-	    Tab1 = ttdict:store(Key, Val, Tab0),
+	{ok,_} ->				%Key exists
+	    Tab1 = if Val =:= nil -> ttdict:erase(Key, Tab0);
+		      true -> ttdict:store(Key, Val, Tab0)
+		   end,
 	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 	    St#luerl{ttab=Ts1};
 	error ->				%Key does not exist
@@ -317,21 +359,30 @@ set_global_var(Var, Val, #luerl{g=G}=St) ->
 get_global_var(Var, #luerl{g=G}=St) ->
     get_table_key_key(G, Var, St).
 
-%% chunk(Chunk, State) -> {Return,State}.
-%% chunk(Chunk, Args, State) -> {Return,State}.
+%% load_chunk(FunctionDefCode, State) -> {Function,State}.
+%% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
+%%  Load a chunk from the compiler.
 
-chunk(Chunk, St) -> chunk(Chunk, [], St).
-chunk(Chunk, Args, St) -> call(Chunk, Args, St).
+load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-%% call(Chunk, State) -> {Return,State}.
-%% call(Chunk, Args, State) -> {Return,State}.
+load_chunk(#code{code=Code}, Env, St) ->
+    load_function(Code, Env, St).
 
-call(Chunk, St) -> call(Chunk, [], St).
+%% load_function(FunctionDefCode, State) -> {Function,State}.
+%% load_function(FunctionDefCode, Env, State) -> {Function,State}.
+%%  Load a compilefunction definition instructions returning a callable
+%%  function. Currently it does nothing with the state.
 
-call(#code{code=C0}, Args, St0) ->
-    {R,_,_,_,St1} = emul(C0, St0),		%R is the accumulator
-    itrace_print("e: ~p\n", [R]),
-    functioncall(R, Args, St1);
+load_function(F, St) -> load_function(F, [], St).
+
+load_function([?FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
+    do_fdef(Lsz, Esz, Pars, Is, Env, St).
+
+%% call(Function, State) -> {Return,State}.
+%% call(Function, Args, State) -> {Return,State}.
+
+call(Func, St) -> call(Func, [], St).
+
 call(#function{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -341,33 +392,34 @@ call({function,_}=Func, Args, St0) ->		%Internal erlang function
     %% Should do GC here.
     {Ret,St1}.
 
-itrace_do(Fun) ->
-    ?ITRACE_DO(Fun()).
-
 itrace_print(Format, Args) ->
     ?ITRACE_DO(io:fwrite(Format, Args)).
 
 %% exp(_, _) ->
 %%     error(boom).
 
--record(call_frame, {acc,lvs,env}).		%Save these for the GC
+-record(call_frame, {lvs,env}).			%Save these for the GC
 
 %% emul(Instrs, State).
-%% emul(Instrs, Accumulator, LocalVariables, Stack, Env, State).
+%% emul(Instrs, LocalVariables, Stack, Env, State).
 
 emul(Is, St) ->
-    emul(Is, nil, {}, [], [], St).
+    emul(Is, {}, [], [], St).
 
-emul([I|_]=Is, Acc, Lvs, Stk, Env, St) ->
+emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
-		   io:fwrite("ei: ~p\n", [{I,Acc,Lvs,Env}]),
-		   io:fwrite("--> ", []),
-		   stack_print(Stk)
+		   io:fwrite("~p\n", [{Lvs,Env}]),
+		   stack_print(Stk),
+		   io:fwrite("-> ~p\n", [I])
 	       end),
-    emul_1(Is, Acc, Lvs, Stk, Env, St);
-emul([], Acc, Lvs, Stk, Env, St) ->
-    itrace_print("el: ~p\n", [{Acc,Lvs,Env}]),
-    emul_1([], Acc, Lvs, Stk, Env, St).
+    emul_1(Is, Lvs, Stk, Env, St);
+emul([], Lvs, Stk, Env, St) ->
+    ?ITRACE_DO(begin
+		   io:fwrite("~p\n", [{Lvs,Env}]),
+		   stack_print(Stk),
+		   io:fwrite("-> []\n")
+	       end),
+    emul_1([], Lvs, Stk, Env, St).
 
 stack_print([#call_frame{}|_]) -> io:fwrite(" ...\n");
 stack_print([E|St]) ->
@@ -376,236 +428,295 @@ stack_print([E|St]) ->
 stack_print([]) -> io:nl().
 
 %% Expression instructions.
-emul_1([?LOAD_LIT(L)|Is], _, Var, Stk, Env, St) ->
-    emul(Is, L, Var, Stk, Env, St);
-emul_1([?LOAD_LVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
-    Acc = get_local_var(D, I, Lvs),
-    emul(Is, Acc, Lvs, Stk, Env, St);
-emul_1([?LOAD_EVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
-    Acc = get_env_var(D, I, Env, St),
-    emul(Is, Acc, Lvs, Stk, Env, St);
-emul_1([?LOAD_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
-    {Acc,St1} = get_global_var(K, St0),
-    emul(Is, Acc, Var, Stk, Env, St1);
-
-emul_1([?STORE_LVAR(D, I)|Is], Acc, Lvs0, Stk, Env, St) ->
-    Lvs1 = set_local_var(D, I, Acc, Lvs0),
-    emul(Is, Acc, Lvs1, Stk, Env, St);
-emul_1([?STORE_EVAR(D, I)|Is], Acc, Lvs, Stk, Env, St0) ->
-    St1 = set_env_var(D, I, Acc, Env, St0),
-    emul(Is, Acc, Lvs, Stk, Env, St1);
-emul_1([?STORE_GVAR(K)|Is], Acc, Lvs, Stk, Env, St0) ->
-    St1 = set_global_var(K, Acc, St0),
-    emul(Is, Acc, Lvs, Stk, Env, St1);
-
-emul_1([?GET_KEY|Is], Acc, Var, [Tab|Stk], Env, St0) ->
-    {Val,St1} = get_table_key(Tab, Acc, St0),
-    emul(Is, Val, Var, Stk, Env, St1);
-emul_1([?GET_LIT_KEY(S)|Is], Acc, Var, Stk, Env, St0) ->
-    %% [?PUSH,?LOAD_LIT(S),?GET_KEY]
-    {Val,St1} = get_table_key(Acc, S, St0),
-    emul(Is, Val, Var, Stk, Env, St1);
-emul_1([?SET_KEY|Is], Acc, Var, [Tab,Val|Stk], Env, St0) ->
-    St1 = set_table_key(Tab, Acc, Val, St0),
-    emul_1(Is, Acc, Var, Stk, Env, St1);
-emul_1([?SET_LIT_KEY(K)|Is], Acc, Var, [Val|Stk], Env, St0) ->
-    %% [?PUSH,?LOAD_LIT(K),?SET_KEY]
-    St1 = set_table_key(Acc, K, Val, St0),
-    emul_1(Is, Acc, Var, Stk, Env, St1);
-
-emul_1([?SINGLE|Is], Acc, Var, Stk, Env, St) ->
-    emul(Is, first_value(Acc), Var, Stk, Env, St);
-emul_1([?MULTIPLE|Is], Acc, Var, Stk, Env, St) ->
-    emul(Is, multiple_value(Acc), Var, Stk, Env, St);
-
-emul_1([?BUILD_TAB(Fc, I)|Is], Acc, Var, Stk0, Env, St0) ->
-    {Tab,Stk1,St1} = build_tab(Fc, I, Acc, Stk0, St0),
-    emul(Is, Tab, Var, Stk1, Env, St1);
-emul_1([?CALL(0)|Is], Acc, Var, Stk, Env, St) ->
-    do_call0(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(1)|Is], Acc, Var, Stk, Env, St) ->
-    do_call1(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(2)|Is], Acc, Var, Stk, Env, St) ->
-    do_call2(Is, Acc, Var, Stk, Env, St);
-emul_1([?CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_call(Is, Acc, Var, Stk, Env, St, Ac);
-emul_1([?TAIL_CALL(Ac)|Is], Acc, Var, Stk, Env, St) ->
-    do_tail_call(Is, Acc, Var, Stk, Env, St, Ac);
-emul_1([?OP(Op,1)|Is], Acc, Var, Stk, Env, St) ->
-    do_op1(Is, Acc, Var, Stk, Env, St, Op);
-emul_1([?OP(Op,2)|Is], Acc, Var, Stk, Env, St) ->
-    do_op2(Is, Acc, Var, Stk, Env, St, Op);
-emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], _, Var, Stk, Env, St) ->
-    Func = do_fdef(Lsz, Esz, Pars, Fis, Env, St),
-    emul(Is, Func, Var, Stk, Env, St);
-%% Control instructions.
-emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Acc, Var, Stk, Env, St) ->
-    do_block(Is, Acc, Var, Stk, Env, St, Lsz, Esz, Bis);
-emul_1([?WHILE(Eis, Wis)|Is], Acc, Var, Stk, Env, St) ->
-    do_while(Is, Acc, Var, Stk, Env, St, Eis, Wis);
-emul_1([?REPEAT(Ris)|Is], Acc, Var, Stk, Env, St) ->
-    do_repeat(Is, Acc, Var, Stk, Env, St, Ris);
-emul_1([?IF_TRUE(T)|Is], Acc, Var, Stk, Env, St0) ->
-    case is_true_value(Acc) of
-	true ->
-	    {Acc1,Var1,Stk1,Env1,St1} =
-		emul(T, Acc, Var, Stk, Env, St0),
-	    emul(Is, Acc1, Var1, Stk1, Env1, St1);
-	false ->
-	    emul(Is, Acc, Var, Stk, Env, St0)
-    end;
-emul_1([?IF_FALSE(T)|Is], Acc, Var, Stk, Env, St0) ->
-    case is_true_value(Acc) of
-	true ->
-	    emul(Is, Acc, Var, Stk, Env, St0);
-	false ->
-	    {Acc1,Var1,Stk1,Env1,St1} =
-		emul(T, Acc, Var, Stk, Env, St0),
-	    emul(Is, Acc1, Var1, Stk1, Env1, St1)
-    end;
-emul_1([?IF(True, False)|Is], Acc, Var, Stk, Env, St) ->
-    do_if(Is, Acc, Var, Stk, Env, St, True, False);
-emul_1([?NFOR(V, Fis)|Is], Acc, Var, Stk, Env, St) ->
-    do_numfor(Is, Acc, Var, Stk, Env, St, V, Fis);
-emul_1([?GFOR(Vs, Fis)|Is], Acc, Var, Stk, Env, St) ->
-    do_genfor(Is, Acc, Var, Stk, Env, St, Vs, Fis);
-emul_1([?BREAK|_], _, Lvs, Stk, Env, St) ->
-    throw({break,St#luerl.tag,Lvs,Stk,Env,St});
-emul_1([?RETURN(0)|_], _, _, _, _, St) ->
-    throw({return,St#luerl.tag,[],St});
-emul_1([?RETURN(Ac)|_], Acc, _, Stk, _, St) ->
-    {Ret,_} = pop_vals(Ac-1, Stk, Acc),
-    throw({return,St#luerl.tag,Ret,St});
-%% Stack instructions, mainly to/from accumulator.
-emul_1([?PUSH|Is], Acc, Var, Stk, Env, St) ->
-    emul(Is, Acc, Var, [Acc|Stk], Env, St);
-emul_1([?POP|Is], _, Var, [Acc|Stk], Env, St) ->
-    emul(Is, Acc, Var, Stk, Env, St);
-emul_1([?DROP|Is], Acc, [_|Stk], Var, Env, St) ->
-    emul(Is, Acc, Var, Stk, Env, St);
-emul_1([?SWAP|Is], Acc, Var, [S|Stk], Env, St) -> %Swap acc and top of stack
-    emul(Is, S, Var, [Acc|Stk], Env, St);
-emul_1([?PUSH_VALS(Vc)|Is], Acc, Var, Stk0, Env, St) ->
-    {Rest,Stk1} = push_vals(Vc, Stk0, Acc),
-    emul(Is, Rest, Var, Stk1, Env, St);
-emul_1([?POP_VALS(Vc)|Is], Acc, Var, Stk0, Env, St) ->
-    {Vals,Stk1} = pop_vals(Vc, Stk0, Acc),
-    emul(Is, Vals, Var, Stk1, Env, St);
-%% Combined load/push instructions.
-%% These also put the value into acc the same as ?LOAD,?PUSH.
-emul_1([?PUSH_LIT(L)|Is], _, Var, Stk, Env, St) ->
-    emul(Is, L, Var, [L|Stk], Env, St);
-emul_1([?PUSH_LVAR(D, I)|Is], _, Var, Stk, Env, St) ->
-    Acc = get_local_var(D, I, Var),
-    emul(Is, Acc, Var, [Acc|Stk], Env, St);
-emul_1([?PUSH_EVAR(D, I)|Is], _, Lvs, Stk, Env, St) ->
+emul_1([?PUSH_LIT(L)|Is], Lvs, Stk, Env, St) ->
+    emul(Is, Lvs, [L|Stk], Env, St);
+emul_1([?PUSH_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+    Val = get_local_var(D, I, Lvs),
+    emul(Is, Lvs, [Val|Stk], Env, St);
+emul_1([?PUSH_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
     %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
-    Acc = get_env_var(D, I, Env, St),
-    emul(Is, Acc, Lvs, [Acc|Stk], Env, St);
-emul_1([?PUSH_GVAR(K)|Is], _, Var, Stk, Env, St0) ->
-    {Acc,St1} = get_global_var(K, St0),
-    emul(Is, Acc, Var, [Acc|Stk], Env, St1);
-emul_1([], Acc, Var, Stk, Env, St) ->
-    {Acc,Var,Stk,Env,St}.
+    Val = get_env_var(D, I, Env, St),
+    emul(Is, Lvs, [Val|Stk], Env, St);
+emul_1([?PUSH_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
+    {Val,St1} = get_global_var(K, St0),
+    emul(Is, Lvs, [Val|Stk], Env, St1);
 
-%% pop_vals(Count, Stack, ValTail) -> {ValList,Stack}.
-%%  Pop Count values off the stack and push onto the argument list.
-%%  First argument is deepest. Always generates list.
+emul_1([?PUSH_LAST_LIT(L)|Is], Lvs, Stk, Env, St) ->
+    emul(Is, Lvs, [[L]|Stk], Env, St);
+emul_1([?PUSH_LAST_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+    Val = get_local_var(D, I, Lvs),
+    emul(Is, Lvs, [[Val]|Stk], Env, St);
+emul_1([?PUSH_LAST_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+    %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
+    Val = get_env_var(D, I, Env, St),
+    emul(Is, Lvs, [[Val]|Stk], Env, St);
+emul_1([?PUSH_LAST_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
+    {Val,St1} = get_global_var(K, St0),
+    emul(Is, Lvs, [[Val]|Stk], Env, St1);
 
-pop_vals(C, Stk, Vt) when is_list(Vt) ->	%List tail
-    pop_vals_1(C, Stk, Vt);
-pop_vals(_, _, Vt) -> error({boom,pop_vals,Vt}).
+emul_1([?STORE_LVAR(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
+    Lvs1 = set_local_var(D, I, V, Lvs0),
+    emul(Is, Lvs1, Stk, Env, St);
+emul_1([?STORE_EVAR(D, I)|Is], Lvs, [V|Stk], Env, St0) ->
+    St1 = set_env_var(D, I, V, Env, St0),
+    emul(Is, Lvs, Stk, Env, St1);
+emul_1([?STORE_GVAR(K)|Is], Lvs, [V|Stk], Env, St0) ->
+    St1 = set_global_var(K, V, St0),
+    emul(Is, Lvs, Stk, Env, St1);
 
-pop_vals_1(0, Stk, Vs) -> {Vs,Stk};
-pop_vals_1(1, [A|Stk], Vs) -> {[A|Vs],Stk};
-pop_vals_1(2, [A2,A1|Stk], Vs) -> {[A1,A2|Vs],Stk};
-pop_vals_1(Ac, [A2,A1|Stk], Vs) ->
-    pop_vals_1(Ac-2, Stk, [A1,A2|Vs]).
+emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
+    {Val,St1} = get_table_key(Tab, Key, St0),
+    emul(Is, Lvs, [Val|Stk], Env, St1);
+emul_1([?GET_LIT_KEY(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
+    %% [?PUSH_LIT(K),?GET_KEY]
+    {Val,St1} = get_table_key(Tab, K, St0),
+    emul(Is, Lvs, [Val|Stk], Env, St1);
+emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
+    St1 = set_table_key(Tab, Key, Val, St0),
+    emul_1(Is, Lvs, Stk, Env, St1);
+emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
+    %% [?PUSH_LIT(K),?SET_KEY]
+    St1 = set_table_key(Tab, Key, Val, St0),
+    emul_1(Is, Lvs, Stk, Env, St1);
 
-%% push_vals(Count, Stack, ValList) -> {LastVal,Stack}.
-%%  Push Count values from value list onto the stack. Fill with 'nil'
-%%  if not enough values. Return last value (for acc) and drop extra
-%%  values.
+emul_1([?SINGLE|Is], Lvs, [Val|Stk], Env, St) ->
+    emul(Is, Lvs, [first_value(Val)|Stk], Env, St);
+emul_1([?MULTIPLE|Is], Lvs, [Val|Stk], Env, St) ->
+    emul(Is, Lvs, [multiple_value(Val)|Stk], Env, St);
 
-push_vals(0, Stk, []) -> {nil,Stk};
-push_vals(0, Stk, [V|_]) -> {V,Stk};
-push_vals(C, Stk, [V|Vs]) ->
-    push_vals(C-1, [V|Stk], Vs);
-push_vals(C, Stk, []) ->
-    push_vals(C-1, [nil|Stk], []);
-push_vals(_, _, V) -> error({boom,push_vals,V}).	%Non-list value
+emul_1([?BUILD_TAB(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
+    {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, St0),
+    emul(Is, Lvs, [Tab|Stk1], Env, St1);
+emul_1([?FCALL(0)|Is], Lvs, Stk, Env, St) ->
+    do_fcall_0(Is, Lvs, Stk, Env, St);
+emul_1([?FCALL(1)|Is], Lvs, Stk, Env, St) ->
+    do_fcall_1(Is, Lvs, Stk, Env, St);
+emul_1([?FCALL(2)|Is], Lvs, Stk, Env, St) ->
+    do_fcall_2(Is, Lvs, Stk, Env, St);
+emul_1([?FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
+    do_fcall(Is, Lvs, Stk, Env, St, Ac);
+emul_1([?TAIL_FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
+    do_tail_fcall(Is, Lvs, Stk, Env, St, Ac);
+emul_1([?MCALL(K, 0)|Is], Lvs, Stk, Env, St) ->
+    do_mcall_0(Is, Lvs, Stk, Env, St, K);
+emul_1([?MCALL(K, 1)|Is], Lvs, Stk, Env, St) ->
+    do_mcall_1(Is, Lvs, Stk, Env, St, K);
+emul_1([?MCALL(K, 2)|Is], Lvs, Stk, Env, St) ->
+    do_mcall_2(Is, Lvs, Stk, Env, St, K);
+emul_1([?MCALL(K, Ac)|Is], Lvs, Stk, Env, St) ->
+    do_mcall(Is, Lvs, Stk, Env, St, K, Ac);
+emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
+    do_op1(Is, Lvs, Stk, Env, St, Op);
+emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
+    do_op2(Is, Lvs, Stk, Env, St, Op);
+emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
+    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
+    emul(Is, Lvs, [Func|Stk], Env, St1);
+%% Control instructions.
+emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
+    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
+    emul(Is, Lvs1, Stk1, Env1, St1);
+emul_1([?WHILE(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
+    do_while(Is, Lvs, Stk, Env, St, Eis, Wis);
+emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
+    do_repeat(Is, Lvs, Stk, Env, St, Ris);
+emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    %% This is an expression and must always leave a value on stack.
+    case boolean_value(Val) of
+	true ->
+	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
+	    emul(Is, Lvs1, Stk2, Env1, St1);
+	false ->
+	    emul(Is, Lvs, Stk0, Env, St0)
+    end;
+emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    %% This is an expression and must always leave a value on stack.
+    case boolean_value(Val) of
+	true ->
+	    emul(Is, Lvs, Stk0, Env, St0);
+	false ->
+	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
+	    emul(Is, Lvs1, Stk2, Env1, St1)
+    end;
+emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+    %% This is a statement and pops the boolean value.
+    case boolean_value(Val) of
+	true ->
+	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
+	    emul(Is, Lvs1, Stk1, Env1, St1);
+	false ->
+	    emul(Is, Lvs, Stk0, Env, St0)
+    end;
+emul_1([?IF_FALSE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+    %% This is a statement and pops the boolean value.
+    case boolean_value(Val) of
+	true ->
+	    emul(Is, Lvs, Stk0, Env, St0);
+	false ->
+	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
+	    emul(Is, Lvs1, Stk1, Env1, St1)
+    end;
+emul_1([?IF(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
+    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, St0, True, False),
+    emul(Is, Lvs1, Stk1, Env1, St1);
+emul_1([?NFOR(V, Fis)|Is], Lvs, Stk, Env, St) ->
+    do_numfor(Is, Lvs, Stk, Env, St, V, Fis);
+emul_1([?GFOR(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
+    do_genfor(Is, Lvs, Stk, Env, St, Vs, Fis);
+emul_1([?BREAK|_], Lvs, Stk, Env, St) ->
+    throw({break,St#luerl.tag,Lvs,Stk,Env,St});
+emul_1([?RETURN(0)|_], _, _, _, St) ->
+    throw({return,St#luerl.tag,[],St});
+emul_1([?RETURN(Ac)|_], _, Stk, _, St) ->
+    {Ret,_} = pop_vals(Ac, Stk),
+    throw({return,St#luerl.tag,Ret,St});
+%% Stack instructions
+emul_1([?POP|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
+    emul(Is, Lvs, Stk, Env, St);
+emul_1([?POP2|Is], Lvs, [_,_|Stk], Env, St) ->	%Just pop top 2 off stack
+    emul(Is, Lvs, Stk, Env, St);
+emul_1([?SWAP|Is], Lvs, [S1,S2|Stk], Env, St) ->
+    emul(Is, Lvs, [S2,S1|Stk], Env, St);
+emul_1([?DUP|Is], Lvs, [V|_]=Stk, Env, St) ->
+    emul_1(Is, Lvs, [V|Stk], Env, St);
+emul_1([?PUSH_VALS(Vc)|Is], Lvs, [Vals|Stk0], Env, St) ->
+    %% Pop list off the stack and push Vc vals from it.
+    Stk1 = push_vals(Vc, Vals, Stk0),
+    emul(Is, Lvs, Stk1, Env, St);
+emul_1([?POP_VALS(Vc)|Is], Lvs, Stk0, Env, St) ->
+    %% Pop Vc vals off the stack, put in a list and push.
+    {Vals,Stk1} = pop_vals(Vc, Stk0),
+    emul(Is, Lvs, [Vals|Stk1], Env, St);
+emul_1([], Lvs, Stk, Env, St) ->
+    {Lvs,Stk,Env,St}.
 
-pop_args(0, Stk, _) -> {[],Stk};
-pop_args(Ac, Stk, Tail) -> pop_vals(Ac, Stk, Tail).
+%% pop_vals(Count, Stack) -> {ValList,Stack}.
+%% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.
+%%  Pop Count values off the stack and push onto the value list.
+%%  First value is deepest. Always generates list.
 
-%% do_block(Instrs, Acc, Vars, Stack, Env, State,
+pop_vals(0, Stk) -> {[],Stk};
+pop_vals(C, [Vtail|Stk]) ->			%This a list tail
+    pop_vals(C-1, Stk, Vtail).
+
+pop_vals(0, Stk, Vs) -> {Vs,Stk};
+pop_vals(1, [V|Stk], Vs) -> {[V|Vs],Stk};
+pop_vals(2, [V2,V1|Stk], Vs) -> {[V1,V2|Vs],Stk};
+pop_vals(C, [V2,V1|Stk], Vs) ->
+    pop_vals(C-2, Stk, [V1,V2|Vs]).
+
+%% push_vals(Count, ValList, Stack) -> {LastVal,Stack}.
+%%  Push Count values from value list onto the stack. First value is
+%%  deepest. Fill with 'nil' if not enough values.
+
+push_vals(0, _, Stk) -> Stk;
+push_vals(C, [V|Vs], Stk) ->
+    push_vals(C-1, Vs, [V|Stk]);
+push_vals(C, [], Stk) ->
+    push_vals(C-1, [], [nil|Stk]).
+
+%% do_block(Instrs, LocalVars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> ReturnFromEmul.
 %%  Local vars may have been updated so must continue with returned
-%%  version. There should be no changes in the stack and env.
+%%  version. We also continue with returned stack. There should be no
+%%  changes in the env.
 
-do_block(Is, Acc0, Lvs0, Stk, Env, St0, 0, 0, Bis) ->
+%% do_block(Is, Lvs0, Stk0, Env, St0, 0, 0, Bis) ->
+%%     %% No variables at all.
+%%     {Lvs1,Stk1,_,St1} = emul(Bis, Lvs0, Stk0, Env, St0),
+%%     emul(Is, Lvs1, Stk1, Env, St1);
+%% do_block(Is, Lvs0, Stk0, Env, St0, 0, Esz, Bis) ->
+%%     %% No local variables, only env variables.
+%%     E = erlang:make_tuple(Esz, nil),
+%%     {Fref,St1} = alloc_frame(E, St0),
+%%     {Lvs1,Stk1,_,St2} = emul(Bis, Lvs0, Stk0, [Fref|Env], St1),
+%%     emul(Is, Lvs1, Stk1, Env, St2);
+%% do_block(Is, Lvs0, Stk0, Env, St0, Lsz, 0, Bis) ->
+%%     %% No env variables, only local variables.
+%%     L = erlang:make_tuple(Lsz, nil),
+%%     {[_|Lvs1],Stk1,_,St1} = emul(Bis, [L|Lvs0], Stk0, Env, St0),
+%%     emul(Is, Lvs1, Stk1, Env, St1);
+%% do_block(Is, Lvs0, Stk0, Env, St0, Lsz, Esz, Bis) ->
+%%     %% Both local and env variables.
+%%     L = erlang:make_tuple(Lsz, nil),
+%%     E = erlang:make_tuple(Esz, nil),
+%%     {Fref,St1} = alloc_frame(E, St0),
+%%     {[_|Lvs1],Stk1,_,St2} = emul(Bis, [L|Lvs0], Stk0, [Fref|Env], St1),
+%%     emul(Is, Lvs1, Stk1, Env, St2).
+
+%% do_block(BlockInstrs, LocalVars, Stack, Env, State,
+%%          LocalSize, EnvSize) -> {LocalVars,Stack,Env,State}.
+%%  Local vars may have been updated so must continue with returned
+%%  version. We also continue with returned stack. There should be no
+%%  changes in the env.
+
+do_block(Bis, Lvs, Stk, Env, St, 0, 0) ->
     %% No variables at all.
-    {Acc1,Lvs1,_,_,St1} = emul(Bis, Acc0, Lvs0, Stk, Env, St0),
-    emul(Is, Acc1, Lvs1, Stk, Env, St1);
-do_block(Is, Acc0, Lvs0, Stk, Env, St0, 0, Esz, Bis) ->
+    emul(Bis, Lvs, Stk, Env, St);
+do_block(Bis, Lvs0, Stk0, Env0, St0, 0, Esz) ->
     %% No local variables, only env variables.
     E = erlang:make_tuple(Esz, nil),
     {Fref,St1} = alloc_frame(E, St0),
-    {Acc1,Lvs1,_,_,St2} = emul(Bis, Acc0, Lvs0, Stk, [Fref|Env], St1),
-    emul(Is, Acc1, Lvs1, Stk, Env, St2);
-do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, 0, Bis) ->
+    {Lvs1,Stk1,[_|Env1],St2} = emul(Bis, Lvs0, Stk0, [Fref|Env0], St1),
+    {Lvs1,Stk1,Env1,St2};
+do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, 0) ->
     %% No env variables, only local variables.
     L = erlang:make_tuple(Lsz, nil),
-    {Acc1,[_|Lvs1],_,_,St1} = emul(Bis, Acc0, [L|Lvs0], Stk, Env, St0),
-    emul(Is, Acc1, Lvs1, Stk, Env, St1);
-do_block(Is, Acc0, Lvs0, Stk, Env, St0, Lsz, Esz, Bis) ->
+    {[_|Lvs1],Stk1,Env1,St1} = emul(Bis, [L|Lvs0], Stk0, Env0, St0),
+    {Lvs1,Stk1,Env1,St1};
+do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz) ->
     %% Both local and env variables.
     L = erlang:make_tuple(Lsz, nil),
     E = erlang:make_tuple(Esz, nil),
     {Fref,St1} = alloc_frame(E, St0),
-    {Acc1,[_|Lvs1],_,_,St2} = emul(Bis, Acc0, [L|Lvs0], Stk, [Fref|Env], St1),
-    emul(Is, Acc1, Lvs1, Stk, Env, St2).
+    {[_|Lvs1],Stk1,[_|Env1],St2} = emul(Bis, [L|Lvs0], Stk0, [Fref|Env0], St1),
+    {Lvs1,Stk1,Env1,St2}.
 
-%% do_op1(Instrs, Acc, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
-%% do_op2(Instrs, Acc, Vars, Stack, Env, State, Op) -> ReturnFromEmul.
+%% do_op1(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
+%% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
-do_op1(Is, Acc, Lvs, Stk, Env, #luerl{stk=OldStk}=St0, Op) ->
-    %% The argument is in the acc, already single.
-    {Res,St1} = op(Op, Acc, St0),
-    emul(Is, Res, Lvs, Stk, Env, St1#luerl{stk=OldStk}).
+do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
+    case op(Op, A) of
+	{ok,Res} ->
+	    emul(Is, Lvs, [Res|Stk], Env, St);
+	{meta,Meta} ->
+	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	{error,E} -> lua_error(E, St)
+    end.
 
-do_op2(Is, Acc, Lvs, [A1|Stk], Env, #luerl{stk=OldStk}=St0, Op) ->
-    %% The 1st argument is on the stack, the 2nd in the acc.
-    {Res,St1} = op(Op, A1, Acc, St0),
-    emul(Is, Res, Lvs, Stk, Env, St1#luerl{stk=OldStk}).
+do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
+    case op(Op, A1, A2) of
+	{ok,Res} ->
+	    emul(Is, Lvs, [Res|Stk], Env, St);
+	{meta,Meta} ->
+	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	{error,E} -> lua_error(E, St)
+    end.
 
-%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> Function.
+%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
 
-do_fdef(Lsz, Esz, Pars, Is, Env, _) ->
-    #function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is}.
+do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
+    {#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
 
-%% do_call0(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call1(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call2(Instrs, Acc, LocalVars, Stack, Env, State) ->
-%% do_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
+%% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
+%% do_fcall_2(Instrs, LocalVars, Stack, Env, State) ->
+%% do_fcall(Instrs, LocalVars, Stack, Env, State, ArgCount) ->
 %%     ReturnFromEmul.
 
-do_call0(Is, Acc, Lvs, Stk, Env, St) ->
-    %% The function is in the acc.
-    functioncall(Is, Acc, Lvs, Stk, Env, St, Acc, []).
+do_fcall_0(Is, Lvs, [Func|Stk], Env, St) ->
+    functioncall(Is, Lvs, Stk, Env, St, Func, []).
 
-do_call1(Is, Acc, Lvs, [Func|Stk], Env, St) ->
-    %% The function is on the stack and the argument is in the acc.
-    functioncall(Is, Acc, Lvs, Stk, Env, St, Func, Acc).
+do_fcall_1(Is, Lvs, [Alast,Func|Stk], Env, St) ->
+    functioncall(Is, Lvs, Stk, Env, St, Func, Alast).
 
-do_call2(Is, Acc, Lvs, [A1,Func|Stk], Env, St) ->
-    %% The function and 1st argument is on the stack, the 2nd is in the acc.
-    functioncall(Is, Acc, Lvs, Stk, Env, St, Func, [A1|Acc]).
+do_fcall_2(Is, Lvs, [Alast,A1,Func|Stk], Env, St) ->
+    functioncall(Is, Lvs, Stk, Env, St, Func, [A1|Alast]).
 
-do_call(Is, Acc, Lvs, Stk0, Env, St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
+do_fcall(Is, Lvs, Stk0, Env, St, Ac) ->
+    {Args,Stk1} = pop_vals(Ac, Stk0),		%Pop arguments
     [Func|Stk2] = Stk1,				%Get function
-    functioncall(Is, Acc, Lvs, Stk2, Env, St, Func, Args).
+    functioncall(Is, Lvs, Stk2, Env, St, Func, Args).
 
 %% functioncall(Function, Args, State) -> {Return,State}.
 %%  This is called from "within" things, for example metamethods, and
@@ -615,15 +726,81 @@ functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
     {Ret,St1} = functioncall(Func, Args, Stk, St0),
     {Ret,St1}.
 
-%% functioncall(Instrs, Acc, Var, Stk, Env, State, Func, Args) -> <emul>
+%% functioncall(Instrs, LocalVars, Stk, Env, State, Func, Args) -> <emul>
 %%  This is called from within code and continues with Instrs after
 %%  call. It must move everything into State.
 
-functioncall(Is, Acc, Lvs, Stk0, Env, St0, Func, Args) ->
-    Fr = #call_frame{acc=Acc,lvs=Lvs,env=Env},
+functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
+    Fr = #call_frame{lvs=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    emul(Is, Ret, Lvs, Stk0, Env, St1).
+    emul(Is, Lvs, [Ret|Stk0], Env, St1).
+
+%% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%%     ReturnFromEmul.
+
+do_tail_fcall(_Is, _Var, Stk, _Env, _St, 0) ->
+    error({boom,[],Stk});
+do_tail_fcall(_Is, _Var, Stk0, _Env, _St, Ac) ->
+    {Args,Stk1} = pop_vals(Ac, Stk0),		%Pop arguments
+    [Func|Stk2] = Stk1,				%Get function
+    error({boom,Func,Args,Stk2}).
+
+%% do_mcall_0(Instrs, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall_1(Instrs, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall_2(Instrs, LocalVars, Stack, Env, State, Method) ->
+%% do_mcall(Instrs, LocalVars, Stack, Env, State, Method, ArgCount) ->
+%%     ReturnFromEmul.
+
+do_mcall_0(Is, Lvs, [Obj|Stk], Env, St, M) ->
+    %% The object is in the acc.
+    methodcall(Is, Lvs, Stk, Env, St, Obj, M, []).
+
+do_mcall_1(Is, Lvs, [Alast,Obj|Stk], Env, St, M) ->
+    %% The object is on the stack and the argument is in the acc.
+    methodcall(Is, Lvs, Stk, Env, St, Obj, M, Alast).
+
+do_mcall_2(Is, Lvs, [Alast,A1,Obj|Stk], Env, St, M) ->
+    %% The object and 1st argument are on the stack, the 2nd is in the acc.
+    methodcall(Is, Lvs, Stk, Env, St, Obj, M, [A1|Alast]).
+
+do_mcall(Is, Lvs, Stk0, Env, St, M, Ac) ->
+    {Args,Stk1} = pop_vals(Ac, Stk0),		%Pop arguments
+    [Obj|Stk2] = Stk1,				%Get function
+    methodcall(Is, Lvs, Stk2, Env, St, Obj, M, Args).
+
+%% methodcall(Object, Method, Args, State) -> {Return,State}.
+%%  This is called from "within" things, for example metamethods, and
+%%  expects everything necessary to be in the state.
+
+methodcall(Obj, M, Args, St0) ->
+    %% Get the function to call from object and method.
+    case get_table_key(Obj, M, St0) of
+	{nil,St1} ->				%No method
+	    lua_error({undef_method,Obj,M}, St1);
+	{Val,St1} ->
+	    {Ret,St2} = functioncall(Val, [Obj|Args], St1#luerl.stk, St1),
+	    {Ret,St2}
+    end.
+
+%% methodcall(Instrs, Var, Stk, Env, State, Object, Method, Args) -> <emul>
+%%  This is called from within code and continues with Instrs after
+%%  call. It must move everything into State.
+
+methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
+    %% Get the function to call from object and method.
+    case get_table_key(Obj, M, St0) of
+	{nil,St1} ->				%No method
+	    lua_error({undef_method,Obj,M}, St1);
+	{Val,St1} ->
+	    Fr = #call_frame{lvs=Lvs,env=Env},
+	    Stk1 = [Fr|Stk0],
+	    {Ret,St2} = functioncall(Val, [Obj|Args], Stk1, St1),
+	    emul(Is, Lvs, [Ret|Stk0], Env, St2)
+    end.
+
+%% functioncall(Function, Args, Stack, State) -> {Return,State}.
+%%  Setup environment for function and do the actual call.
 
 functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
@@ -657,17 +834,16 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
-	nil -> badarg_error(Func, Args, St);
+	nil -> lua_error({undef_function,Func}, St);
 	Meta -> functioncall(Meta, Args, Stk, St)
     end.
-
 
 functioncall(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
     %% Must use different St names else they become 'unsafe'.
     %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     try
-	{_,_,_,_,Sta} = emul(Fis, nil, Lvs, Stk, Env, St0),
+	{_,_,_,Sta} = emul(Fis, Lvs, Stk, Env, St0),
 	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
 	{[],Sta}				%No return, no arguments
     catch
@@ -706,49 +882,39 @@ assign_pars(V, As, L, E) when V > 0 ->		%This is a vararg!
 assign_pars(V, As, L, E) ->			%This is a vararg!
     {L,setelement(-V, E, As)}.
 
-%% do_tail_call(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
-%%     ReturnFromEmul.
+%% do_repeat(Instrs, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
 
-do_tail_call(_Is, Acc, _Var, Stk, _Env, _St, 0) ->
-    error({boom,Acc,[],Stk});
-do_tail_call(_Is, Acc, _Var, Stk0, _Env, _St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac-1, Stk0, Acc),	%Pop arguments, last is in acc
-    [Func|Stk2] = Stk1,				%Get function
-    error({boom,Func,Args,Stk2}).
-
-%% do_repeat(Instrs, Acc, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
-
-do_repeat(Is, Acc, Lvs, Stk, Env, St, Ris) ->
+do_repeat(Is, Lvs, Stk, Env, St, Ris) ->
     Do = fun (S) ->
-		 repeat_loop(Ris, Acc, Lvs, Stk, Env, S)
+		 repeat_loop(Ris, Lvs, Stk, Env, S)
 	 end,
     loop_block(Is, Lvs, Stk, Env, St, Do).
 
-repeat_loop(Ris, Acc0, Lvs0, Stk0, Env0, St0) ->
-    {Acc1,Lvs1,Stk1,Env1,St1} =
-	emul(Ris, Acc0, Lvs0, Stk0, Env0, St0),
-    case is_true_value(Acc1) of
+repeat_loop(Ris, Lvs0, Stk0, Env0, St0) ->
+    {Lvs1,[Val|Stk1],Env1,St1} =
+	emul(Ris, Lvs0, Stk0, Env0, St0),
+    case boolean_value(Val) of
 	true -> {Lvs1,St1};
-	false -> repeat_loop(Ris, Acc1, Lvs1, Stk1, Env1, St1)
+	false -> repeat_loop(Ris, Lvs1, Stk1, Env1, St1)
     end.
 
-%% do_while(Instrs, Acc, LocalVars, Stack, Env, State, WhileEis, WhileBis) ->
+%% do_while(Instrs, LocalVars, Stack, Env, State, WhileEis, WhileBis) ->
 %%     <emul>
 
-do_while(Is, Acc, Lvs, Stk, Env, St, Eis, Wis) ->
+do_while(Is, Lvs, Stk, Env, St, Eis, Wis) ->
     Do = fun (S) ->
-		 while_loop(Eis, Acc, Lvs, Stk, Env, S, Wis)
+		 while_loop(Eis, Lvs, Stk, Env, S, Wis)
 	 end,
     loop_block(Is, Lvs, Stk, Env, St, Do).
 
-while_loop(Eis, Acc0, Lvs0, Stk0, Env0, St0, Wis) ->
-    {Acc1,Lvs1,Stk1,Env1,St1} =
-	emul(Eis, Acc0, Lvs0, Stk0, Env0, St0),
-    case is_true_value(Acc1) of
+while_loop(Eis, Lvs0, Stk0, Env0, St0, Wis) ->
+    {Lvs1,[Val|Stk1],Env1,St1} =
+	emul(Eis, Lvs0, Stk0, Env0, St0),
+    case boolean_value(Val) of
 	true ->
-	    {Acc2,Lvs2,Stk2,Env2,St2} =
-		emul(Wis, Acc1, Lvs1, Stk1, Env1, St1),
-	    while_loop(Eis, Acc2, Lvs2, Stk2, Env2, St2, Wis);
+	    {Lvs2,Stk2,Env2,St2} =
+		emul(Wis, Lvs1, Stk1, Env1, St1),
+	    while_loop(Eis, Lvs2, Stk2, Env2, St2, Wis);
 	false -> {Lvs1,St1}
     end.
 
@@ -761,24 +927,40 @@ loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
 		 end,
     %% Trim local variable stack.
     Lvs3 = lists:nthtail(length(Lvs2)-length(Lvs0), Lvs2),
-    emul(Is, nil, Lvs3, Stk, Env, St1).
+    emul(Is, Lvs3, Stk, Env, St1).
 
-do_if(Is, Acc, Lvs, Stk, Env, St, True, False) ->
-    case is_true_value(Acc) of
-	true -> do_if_block(True, Acc, Lvs, Stk, Env, St, Is);
-	false -> do_if_block(False, Acc, Lvs, Stk, Env, St, Is)
+%% do_if(Blocks, Else, Lvs, Stk, Env, Sy) ->
+%%     do_if_blocks(Blocks, Else, Lvs, Stk, Env, St).
+
+%% do_if_blocks([{T,B}|Ts], Else, Lvs0, Stk0, Env0, St0) ->
+%%     {Lvs1,[Val|Stk1],Env1,St1} = emul(T, Lvs0, Stk0, Env0, St0),
+%%     case boolean_value(Val) of
+%% 	true -> emul(B, Lvs1, Stk1, Env1, St1);
+%% 	false -> do_if_blocks(Ts, Lvs1, Stk1, Env1, St1)
+%%     end;
+%% do_if_blocks([], Else, Lvs, Stk, Env, St) ->
+%%     emul(Else, Lvs, Stk, Env, St).
+
+%% do_if(LocalVars, Stack, Env, State, TrueInstrs, FalseInstrs) ->
+%%     {LocalVars,Stack,Env,State}.
+
+do_if(Lvs, [Val|Stk], Env, St, True, False) ->
+    case boolean_value(Val) of
+	true -> emul(True, Lvs, Stk, Env, St);
+	false -> emul(False, Lvs, Stk, Env, St)
     end.
 
-do_if_block([?BLOCK(Bis, Loc, Sz)], Acc, Lvs, Stk, Env, St, Is) ->
-    do_block(Is, Acc, Lvs, Stk, Env, St, Bis, Loc, Sz);
-do_if_block(Bis, Acc0, Lvs, Stk, Env, St0, Is) ->
-    {Acc1,Lvs1,Stk1,Env1,St1} =
-	emul(Bis, Acc0, Lvs, Stk, Env, St0),
-    emul(Is, Acc1, Lvs1, Stk1, Env1, St1).
+%% do_if_block([?BLOCK(Lsz, Esz, Bis)], Lvs0, Stk0, Env0, St0, Is) ->
+%%     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
+%%     emul(Is, Lvs1, Stk1, Env1, St1);
+%% do_if_block(Bis, Lvs0, Stk0, Env0, St0, Is) ->
+%%     {Lvs1,Stk1,Env1,St1} = emul(Bis, Lvs0, Stk0, Env0, St0),
+%%     emul(Is, Lvs1, Stk1, Env1, St1).
 
-%% do_numfor(Instrs, Acc, Var, Stack, Env, State, Varname, FromInstrs) -> <emul>
+%% do_numfor(Instrs, LocalVars, Stack, Env, State, Varname, FromInstrs) ->
+%%     <emul>
 
-do_numfor(Is, Step, Lvs, [Limit,Init|Stk], Env, St, _, Fis) ->
+do_numfor(Is, Lvs, [Step,Limit,Init|Stk], Env, St, _, Fis) ->
     %% First check if we have numbers.
     case luerl_lib:tonumbers([Init,Limit,Step]) of
 	[I,L,S] ->
@@ -790,38 +972,39 @@ do_numfor(Is, Step, Lvs, [Limit,Init|Stk], Env, St, _, Fis) ->
     end.
 
 numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
-    %% Leave the counter in the Acc for code to get.
+    %% Leave the counter at the top of the stack for code to get.
+    itrace_print("nl: ~p\n", [{N,Stk0}]),
     if Step > 0.0, N =< Limit ->		%Keep going
-	    {_,Lvs1,Stk1,Env1,St1} =
-		emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    {Lvs1,Stk1,Env1,St1} =
+		emul(Fis, Lvs0, [N|Stk0], Env0, St0),
 	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
        Step < 0.0, N >= Limit ->		%Keep going
-	    {_,Lvs1,Stk1,Env1,St1} =
-		emul(Fis, N, Lvs0, Stk0, Env0, St0),
+	    {Lvs1,Stk1,Env1,St1} =
+		emul(Fis, Lvs0, [N|Stk0], Env0, St0),
 	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
        true -> {Lvs0,St0}				%Done!
     end.
 
-%% do_genfor(Instrs, Acc, Var, Stack, Env, State, Vars, FromInstrs) -> <emul>
+%% do_genfor(Instrs, LocalVars, Stack, Env, State, Vars, FromInstrs) -> <emul>
 
-do_genfor(Is, Acc, Var, Stk, Env, St, _, Fis) ->
-    case Acc of					%Export F, T, V
+do_genfor(Is, Lvs, [Val|Stk], Env, St, _, Fis) ->
+    case Val of					%Export F, T, V
 	[F] -> T = nil, V = nil;
 	[F,T] -> V = nil;
 	[F,T,V|_] -> ok;
 	F -> T = nil, V = nil
     end,
     Do = fun (St) ->
-		 genfor_loop(F, T, V, Fis, Var, Stk, Env, St)
+		 genfor_loop(F, T, V, Fis, Lvs, Stk, Env, St)
 	 end,
-    loop_block(Is, Var, Stk, Env, St, Do).
+    loop_block(Is, Lvs, Stk, Env, St, Do).
 
 genfor_loop(Func, Tab, Val, Fis, Lvs0, Stk, Env, St0) ->
     {Vals,St1} = functioncall(Func, [Tab,Val], Stk, St0),
-    case is_true_value(Vals) of
+    case boolean_value(Vals) of
 	true ->
-	    {_,Lvs1,_,_,St2} =
-		emul(Fis, Vals, Lvs0, Stk, Env, St1),
+	    {Lvs1,_,_,St2} =
+		emul(Fis, Lvs0, [Vals|Stk], Env, St1),
 	    genfor_loop(Func, Tab, hd(Vals), Fis, Lvs1, Stk, Env, St2);
 	false -> {Lvs0,St1}
     end.
@@ -860,96 +1043,92 @@ getmetamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-%% build_table(FieldCount, Index, Acc, Stack, State) -> {TableRef,Stack,State}.
+%% build_tab(FieldCount, Index, Stack, State) -> {TableRef,Stack,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is
 %%  the index of the next value in the acc.
 
-build_tab(Fc, I, Acc, Stk0, St0) ->
-    Fs0 = build_tab_acc(I, Acc),
+build_tab(Fc, I, [Last|Stk0], St0) ->
+    Fs0 = build_tab_last(I, Last),
     {Fs1,Stk1} = build_tab_loop(Fc, Stk0, Fs0),
     %% io:fwrite("bt: ~p\n", [{Fc,I,Acc,Fs0,Fs1}]),
     {Tref,St1} = alloc_table(Fs1, St0),
     {Tref,Stk1,St1}.
 
-build_tab_acc(I, [V|Vs]) ->
-    [{I,V}|build_tab_acc(I+1.0, Vs)];
-build_tab_acc(_, []) -> [];
-build_tab_acc(_, Acc) -> error({boom,build_tab_acc,Acc}).
+build_tab_last(I, [V|Vs]) ->
+    [{I,V}|build_tab_last(I+1.0, Vs)];
+build_tab_last(_, []) -> [];
+build_tab_last(_, Last) -> error({boom,build_tab_acc,Last}).
 
 build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
     build_tab_loop(C-1, Stk, [{K,V}|Fs]).
 
-%% op(Op, Arg, State) -> {Ret,State}.
-%% op(Op, Arg1, Arg2, State) -> {Ret,State}.
-%% The built-in operators. Always return a single value!
+%% op(Op, Arg) -> {ok,Ret} | {meta,Func} | {error,Error}.
+%% op(Op, Arg1, Arg2) -> {ok,Ret} | {meta,Func} | {error,Error}.
+%%  The built-in operators. Always return a single value!
 
-op('-', A, St) ->
-    numeric_op('-', A, <<"__unm">>, fun (N) -> -N end, St);
-op('not', A, St) -> {not ?IS_TRUE(A),St};
-%% op('not', false, St) -> {[true],St};
-%% op('not', nil, St) -> {[true],St};
-%% op('not', _, St) -> {[false],St};		%Everything else is false
-op('#', B, St) when is_binary(B) -> {float(byte_size(B)),St};
-op('#', #tref{}=T, St) ->
-    luerl_table:length(T, St);
-op(Op, A, St) -> badarg_error(Op, [A], St).
+op('-', A) ->
+    numeric_op('-', A, <<"__unm">>, fun (N) -> -N end);
+op('not', A) -> {ok,not ?IS_TRUE(A)};
+%% op('not', false) -> {[true]};
+%% op('not', nil) -> {[true]};
+%% op('not', _) -> {[false]};			%Everything else is false
+op('#', B) when is_binary(B) -> {ok,float(byte_size(B))};
+op('#', #tref{}=T) ->
+    {meta,fun (_, St) -> luerl_lib_table:length(T, St) end};
+op(Op, A) -> {error,{badarg,Op,[A]}}.
 
 %% Numeric operators.
-op('+', A1, A2, St) ->
-    numeric_op('+', A1, A2, <<"__add">>, fun (N1,N2) -> N1+N2 end, St);
-op('-', A1, A2, St) ->
-    numeric_op('-', A1, A2, <<"__sub">>, fun (N1,N2) -> N1-N2 end, St);
-op('*', A1, A2, St) ->
-    numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end, St);
-op('/', A1, A2, St) ->
-    numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end, St);
-op('%', A1, A2, St) ->
+op('+', A1, A2) ->
+    numeric_op('+', A1, A2, <<"__add">>, fun (N1,N2) -> N1+N2 end);
+op('-', A1, A2) ->
+    numeric_op('-', A1, A2, <<"__sub">>, fun (N1,N2) -> N1-N2 end);
+op('*', A1, A2) ->
+    numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
+op('/', A1, A2) ->
+    numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
+op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end, St);
-op('^', A1, A2, St) ->
+	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end);
+op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
-	       fun (N1,N2) -> math:pow(N1, N2) end, St);
+	       fun (N1,N2) -> math:pow(N1, N2) end);
 %% Relational operators, getting close.
-op('==', A1, A2, St) -> eq_op('==', A1, A2, St);
-op('~=', A1, A2, St) -> neq_op('~=', A1, A2, St);
-op('<=', A1, A2, St) -> le_op('<=', A1, A2, St);
-op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
-op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
-op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
+op('==', A1, A2) -> eq_op('==', A1, A2);
+op('~=', A1, A2) -> neq_op('~=', A1, A2);
+op('<=', A1, A2) -> le_op('<=', A1, A2);
+op('>=', A1, A2) -> le_op('>=', A2, A1);
+op('<', A1, A2) -> lt_op('<', A1, A2);
+op('>', A1, A2) -> lt_op('>', A2, A1);
 %% String operator.
-op('..', A1, A2, St) ->
-    B1 = luerl_lib:tostring(A1),
-    B2 = luerl_lib:tostring(A2),
-    if B1 =/= nil, B2 =/= nil -> {<< B1/binary,B2/binary >>,St};
-       true ->
-	    Meta = getmetamethod(A1, A2, <<"__concat">>, St),
-	    functioncall(Meta, [A1,A2], St)
-    end;
+op('..', A1, A2) -> concat_op(A1, A2);
 %% Bad args here.
-op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
+op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
 
-%% numeric_op(Op, Arg, Event, Raw, State) -> {[Ret],State}.
-%% numeric_op(Op, Arg, Arg, Event, Raw, State) -> {[Ret],State}.
-%% eq_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% neq_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% lt_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%% le_op(Op, Arg, Arg, State) -> {[Ret],State}.
-%%  Straigt out of the reference manual.
+%% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
+%% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
+%% eq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% neq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% lt_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% le_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% concat_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%%  Together with their metas straight out of the reference manual.
 
-numeric_op(Op, A, E, Raw, St) ->
+numeric_op(Op, A, E, Raw) ->
     case luerl_lib:tonumber(A) of
-	nil -> numeric_meta(Op, A, E, St);	%Neither number nor string
-	N -> {Raw(N),St}
+	nil ->					%Neither number nor string
+	    {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end}; 
+	N -> {ok,Raw(N)}
     end.
 
-numeric_op(Op, A1, A2, E, Raw, St) ->
+numeric_op(Op, A1, A2, E, Raw) ->
     case luerl_lib:tonumber(A1) of
-	nil -> numeric_meta(Op, A1, A2, E, St);
+	nil -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 	N1 ->
 	    case luerl_lib:tonumber(A2) of
-		nil -> numeric_meta(Op, A1, A2, E, St);
-		N2 -> {Raw(N1, N2),St}
+		nil ->
+		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+		N2 -> {ok,Raw(N1, N2)}
 	    end
     end.
 
@@ -969,63 +1148,95 @@ numeric_meta(Op, A1, A2, E, St0) ->
 	    {first_value(Ret),St1}
     end.
 
-eq_op(_Op, A1, A2, St) when A1 =:= A2 -> {true,St};
-eq_op(_Op, A1, A2, St) ->
-    eq_meta(A1, A2, St).
+eq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,true};
+eq_op(_Op, A1, A2) ->
+    {meta,fun (_, St) -> eq_meta(A1, A2, St) end}.
 
-neq_op(_Op, A1, A2, St) when A1 =:= A2 -> {false,St};
-neq_op(_Op, A1, A2, St0) ->
-    {Ret,St1} = eq_meta(A1, A2, St0),
-    {not Ret,St1}.
+neq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,false};
+neq_op(_Op, A1, A2) ->
+    {meta,fun (_, St0) ->
+		  {Ret,St1} = eq_meta(A1, A2, St0),
+		  {not Ret,St1}
+	  end}.
 
 eq_meta(A1, A2, St0) ->
+    %% Must have "same" metamethod here. How do we test?
     case getmetamethod(A1, <<"__eq">>, St0) of
 	nil -> {false,St0};			%Tweren't no method
 	Meta ->
 	    case getmetamethod(A2, <<"__eq">>, St0) of
 		Meta ->				%Must be the same method
 		    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-		    {is_true_value(Ret),St1};
+		    {boolean_value(Ret),St1};
 		_ -> {false,St0}
 	    end
     end.
 
-lt_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 < A2,St};
-lt_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 < A2,St};
-lt_op(Op, A1, A2, St0) ->
+lt_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 < A2};
+lt_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 < A2};
+lt_op(Op, A1, A2) ->
+    {meta,fun (_, St) -> lt_meta(Op, A1, A2, St) end}.
+
+lt_meta(Op, A1, A2, St0) ->
     case getmetamethod(A1, A2, <<"__lt">>, St0) of
 	nil -> badarg_error(Op, [A1,A2], St0);
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {is_true_value(Ret),St1}
+	    {boolean_value(Ret),St1}
     end.
 
-le_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {A1 =< A2,St};
-le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {A1 =< A2,St};
-le_op(Op, A1, A2, St0) ->
+le_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 =< A2};
+le_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 =< A2};
+le_op(Op, A1, A2) ->
+    {meta,fun (_, St) -> le_meta(Op, A1, A2, St) end}.
+
+le_meta(Op, A1, A2, St0) ->
+    %% Must check for first __le then __lt metamethods.
     case getmetamethod(A1, A2, <<"__le">>, St0) of
-	Meta when Meta =/= nil ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {is_true_value(Ret),St1};
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
 	    case getmetamethod(A1, A2, <<"__lt">>, St0) of
 		nil -> badarg_error(Op, [A1,A2], St0);
 		Meta ->
 		    {Ret,St1} = functioncall(Meta, [A2,A1], St0),
-		    {not is_true_value(Ret),St1}
+		    {not boolean_value(Ret),St1}
+	    end;
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
+	    {boolean_value(Ret),St1}
+    end.
+
+concat_op(A1, A2) ->
+    case luerl_lib:tostring(A1) of
+	nil ->
+	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+	S1 ->
+	    case luerl_lib:tostring(A2) of
+		nil ->
+		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+		S2 ->
+		    {ok,<<S1/binary,S2/binary>>}
 	    end
     end.
 
-%% is_true_value(Rets) -> boolean().
+concat_meta(A1, A2, St0) ->
+    case getmetamethod(A1, A2, <<"__concat">>, St0) of
+	nil -> badarg_error('..', [A1,A2], St0);
+	Meta ->
+	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
+	    {first_value(Ret),St1}
+    end.
 
-is_true_value([nil|_]) -> false;
-is_true_value([false|_]) -> false;
-is_true_value([_|_]) -> true;
-is_true_value([]) -> false;
-is_true_value(nil) -> false;
-is_true_value(false) -> false;
-is_true_value(_) -> true.
+%% boolean_value(Rets) -> boolean().
+%%  Return the "boolean" value of a value/function return list.
+
+boolean_value([nil|_]) -> false;
+boolean_value([false|_]) -> false;
+boolean_value([_|_]) -> true;
+boolean_value([]) -> false;
+boolean_value(nil) -> false;
+boolean_value(false) -> false;
+boolean_value(_) -> true.
 
 %% first_value(Rets) -> Value.
 
@@ -1042,13 +1253,13 @@ multiple_value(V) -> [V].
 %%  tables and frames are then freed and their indexes added to the
 %%  free lists.
 
-gc(#luerl{ttab=Tt0,tfree=Tf0,g=G,env=Env,ftab=Ft0,ffree=Ff0,meta=Meta}=St) ->
-    %% The root set consisting of global table and environment.
+gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,g=G,stk=Stk,meta=Meta}=St) ->
+    %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
-	    G|Env],
+	    G|Stk],
     %% Mark all seen tables and frames, i.e. return them.
     {SeenT,SeenF} = mark(Root, [], [], [], Tt0, Ft0),
-    io:format("gc: ~p\n", [{SeenT,SeenF}]),
+    %% io:format("gc: ~p\n", [{SeenT,SeenF}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
     {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
@@ -1095,6 +1306,9 @@ mark([#thread{}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, More, St, Sf, Tt, Ft);
 mark([#userdata{m=Meta}|Todo], More, St, Sf, Tt, Ft) ->
     mark([Meta|Todo], More, St, Sf, Tt, Ft);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, St, Sf, Tt, Ft) ->
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
+    mark(Todo, More1, St, Sf, Tt, Ft);
 mark([{K,V}|Todo], More, St, Sf, Tt, Ft) ->	%Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, St, Sf, Tt, Ft);

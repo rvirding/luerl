@@ -42,13 +42,15 @@ thread		- #thread{}
 
 See luerl.hrl for the field names of the records.
 
-All tables are combinations of orddicts and arrays. In each table an
-array is used for integer keys >= 1 while an orddict is used for all
-other keys. We use this information when building/ processing
+All tables are combinations of ttdicts and arrays. In each table an
+array is used for integer keys >= 1 while an ttdict is used for all
+other keys. We use this information when building/processing
 tables. Seems like Lua internaly stores elements as a (unordered)
-sequence of key-value elements, except maybe for the table part.
+sequence of key-value elements, except maybe for the table part. Some
+tests show that using ttdicts for all elements results the system
+being 10-20% slower and using more memory.
 
-Using the array module for positive integer keys seems a reasonable
+So using the array module for positive integer keys seems a reasonable
 choice. Direct read/write access is fast, but "shifting" access for
 example in table.insert/remove is not that efficient. Most table
 functions work after a fashion even in the "undefined" case all the
@@ -57,11 +59,11 @@ which elements were added affects the outcome. We don't have any such
 information available. We do try to do something reasonable that sort
 of mirrors the Lua functions. Should we or should we be strict?
 
-The table table can be either an ordict, an array or use the process
-dictionary; these are accessed through macros. To use ETS would need a
-bigger change as copying the whole table for each access would be very
-inefficient. Either use bags and have one per table or use sets and
-have the ETS key as {Tab,Key}.
+The table table can be either an ordict, an array, use the process
+dictionary, or an ETS table; these are accessed through macros. To use
+ETS would need a bigger change as copying the whole table for each
+access would be very inefficient. Either use bags and have one per
+table or use sets and have the ETS key as {Tab,Key}.
 
 Machine
 -------
@@ -98,8 +100,7 @@ implemented in Erlang. This is so that event of a Lua/Luerl GC the
 collector uses the stack to determine which data in the global heap is
 to be saved.
 
-The VM is an accumulator machine using the accumulator in the normal
-way. This may be changed to a pure stack machine in the future.
+The VM is a pure stack machine.
 
 To handle multiple return values we always return a list of values.
 The only place this is not done is in luerl_eval.erl when getting

@@ -12,11 +12,11 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_string.erl
+%% File    : luerl_lib_string.erl
 %% Author  : Robert Virding
 %% Purpose : The string library for Luerl.
 
--module(luerl_string).
+-module(luerl_lib_string).
 
 -include("luerl.hrl").
 
@@ -24,8 +24,8 @@
 -export([install/1]).
 
 %% Export some test functions.
--export([test_gsub/3,test_do_match/3,test_pat/1,
-	 test_byte/3,test_find/4,test_sub/2,test_sub/3]).
+-export([test_gsub/3,test_match_pat/3,test_pat/1,
+	 test_byte/3,test_do_find/4,test_sub/2,test_sub/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
@@ -119,35 +119,37 @@ find(As, St0) ->
 	throw:{error,E} -> lua_error(E, St0)
     end.
 
-do_find([A1,A2], St) -> find([A1,A2,1.0], St);
-do_find([A1,A2,A3], St) -> find([A1,A2,A3,nil], St);
+do_find([A1,A2], St) -> do_find([A1,A2,1.0], St);
+do_find([A1,A2,A3], St) -> do_find([A1,A2,A3,nil], St);
 do_find(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer,lua_bool]) of
-	[S,P,I,Pl] -> {find(S, byte_size(S), P, I, Pl),St};
-	_ -> throw({error,{find,As},St})	%nil, [_] or []
+	[S,P,I,Pl] -> {do_find(S, byte_size(S), P, I, Pl),St};
+	_ -> throw({error,{badarg,find,As},St})	%nil, [_] or []
     end.
 
-test_find(S, P, I, Pl) -> find(S, byte_size(S), P, I, Pl).
+test_do_find(S, Pat, I, Pl) -> do_find(S, byte_size(S), Pat, I, Pl).
 
-%% find(String, Length, Pattern, Start, Plain) -> [Return].
+%% do_find(String, Length, Pattern, Start, Plain) -> [Return].
 %% Adjust the starting index and find the string.
 
-find(_, L, _, I, _) when I > L+1 -> [nil];
-find(S, L, P, I, Pl) when I < -L -> find(S, L, P, 1, Pl);
-find(S, L, P, I, Pl) when I < 0 -> find(S, L, P, L+I+1, Pl);
-find(S, L, P, 0, Pl) ->  find(S, L, P, 1, Pl);
-find(S, L, P, I, true) ->			%Plain text search string
-    case binary:match(S, P, [{scope,{I-1,L-I+1}}]) of
+do_find(_, L, _, I, _) when I > L+1 -> [nil];
+do_find(S, L, Pat, I, Pl) when I < -L -> do_find(S, L, Pat, 1, Pl);
+do_find(S, L, Pat, I, Pl) when I < 0 -> do_find(S, L, Pat, L+I+1, Pl);
+do_find(S, L, Pat, 0, Pl) ->  do_find(S, L, Pat, 1, Pl);
+do_find(S, L, Pat, I, true) ->			%Plain text search string
+    case binary:match(S, Pat, [{scope,{I-1,L-I+1}}]) of
 	{Fs,Fl} -> [float(Fs+1),float(Fs+Fl)];
 	nomatch -> [nil]
     end;
-find(S, L, P, I, false) ->			%Pattern search string
-    case pat(binary_to_list(P)) of
-	{ok,{Pat,_},_} ->
-	    S1 = binary_part(S, I-1, L-I+1),	%Start searching from I
-	    case match_loop(S1, L, Pat, I) of
-		[{_,F,Len}|Cas] ->		%Matches
-		    [float(F),float(F+Len-1)|match_cas(Cas, S)];
+do_find(S, L, Pat0, I, false) ->		%Pattern search string
+    case pat(binary_to_list(Pat0)) of
+	{ok,{Pat1,_},_} ->
+	    L1 = L - I + 1,			%Length of substring
+	    S1 = binary_part(S, I-1, L1),	%Start searching from I
+	    case match_loop(S1, L1, Pat1, 1) of
+		[{_,P,Len}|Cas] ->		%Matches
+		    P1 = P + I - 1,		%Position in original string
+		    [float(P1),float(P1+Len-1)|match_caps(Cas, S, I)];
 		[] -> [nil]			%No match
 	    end;
 	{error,E} -> throw({error,E})
@@ -159,7 +161,7 @@ find(S, L, P, I, false) ->			%Pattern search string
 
 format([F|As], St0) ->
     try
-	luerl_string_format:format(F, As, St0)
+	luerl_lib_string_format:format(F, As, St0)
     catch
 	%% If we have a specific error, default is badarg.
 	throw:{error,E,St1} -> lua_error(E, St1);
@@ -187,9 +189,9 @@ gsub(As, St0) ->
 do_gsub(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,integer]) of
 	[S,P,R,N] when N > 0 ->
-	    gsub(S, byte_size(S), P, R, N, St);
+	    do_gsub(S, byte_size(S), P, R, N, St);
 	[S,P,R] ->				%'all' bigger than any number
-	    gsub(S, byte_size(S), P, R, all, St);
+	    do_gsub(S, byte_size(S), P, R, all, St);
 	_ -> throw({error,{badarg,gsub,As},St})
     end.
 
@@ -197,12 +199,10 @@ test_gsub(S, P, N) ->
     {ok,{Pat,_},_} = pat(binary_to_list(P)),
     gsub_match_loop(S, byte_size(S), Pat, 1, 1, N).
 
-gsub(S, L, P, R, N, St0) ->
-    case pat(binary_to_list(P)) of
-	{ok,{Pat,_},_} ->
-	    %% io:fwrite("g: ~p\n", [{S,L,Pat,R,N}]),
-	    Fs = gsub_match_loop(S, L, Pat, 1, 1, N),
-	    %% io:fwrite("g->~p\n", [Fs]),
+do_gsub(S, L, Pat0, R, N, St0) ->
+    case pat(binary_to_list(Pat0)) of
+	{ok,{Pat1,_},_} ->
+	    Fs = gsub_match_loop(S, L, Pat1, 1, 1, N),
 	    {Ps,St1} = gsub_repl_loop(Fs, S, 1, L, R, St0),
 	    {[iolist_to_binary(Ps),float(length(Fs))],St1};
 	{error,E} -> throw({error,E})
@@ -213,12 +213,12 @@ gsub(S, L, P, R, N, St0) ->
 
 gsub_match_loop(_, _, _, _, C, N) when C > N -> [];
 gsub_match_loop(<<>>, _, Pat, I, _, _) ->	%It can still match at end!
-    case do_match(<<>>, Pat, I) of
+    case match_pat(<<>>, Pat, I) of
 	{match,Cas,_,_} -> [Cas];
 	nomatch -> []
     end;
 gsub_match_loop(S0, L, Pat, I0, C, N) ->
-    case do_match(S0, Pat, I0) of
+    case match_pat(S0, Pat, I0) of
 	{match,Cas,_,I0} ->			%Zero length match
 	    S1 = binary_part(S0, 1, L-I0),
 	    [Cas|gsub_match_loop(S1, L, Pat, I0+1, C+1, N)];
@@ -245,15 +245,15 @@ gsub_repl_loop([], S, I, L, _, St) ->
 
 gsub_repl(Cas, S, #tref{}=T, St0) ->
     case Cas of					%Export both Ca and Key
-	[Ca] -> Key = match_ca(Ca, S);
-	[Ca,Ca1|_] -> Key = match_ca(Ca1, S)
+	[Ca] -> Key = match_cap(Ca, S);
+	[Ca,Ca1|_] -> Key = match_cap(Ca1, S)
     end,
     {R,St1} = luerl_emul:get_table_key(T, Key, St0),
     {[gsub_repl_val(S, R, Ca)],St1};
 gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
     case Cas0 of				%Export both Ca and Args
-	[Ca] -> Args = [match_ca(Ca, S)];
-	[Ca|Cas] -> Args = match_cas(Cas, S)
+	[Ca] -> Args = [match_cap(Ca, S)];
+	[Ca|Cas] -> Args = match_caps(Cas, S)
     end,
     {Rs,St1} = luerl_emul:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
@@ -266,12 +266,12 @@ gsub_repl(Cas, S, Repl, St) ->			%Replace string
 gsub_repl_str(Cas, S, [$%,$%|R]) ->
     [$%|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,$0|R]) ->
-    Cstr = luerl_lib:tostring(match_ca(hd(Cas), S)), %Force to string
+    Cstr = luerl_lib:tostring(match_cap(hd(Cas), S)), %Force to string
     [Cstr|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
     case lists:keysearch(C-$0, 1, Cas) of
 	{value,Ca} ->
-	    Cstr = luerl_lib:tostring(match_ca(Ca, S)),	%Force to string!
+	    Cstr = luerl_lib:tostring(match_cap(Ca, S)), %Force to string!
 	    [Cstr|gsub_repl_str(Cas, S, R)];
 	false -> throw({error,{illegal_index,capture,C-$0}})
     end;
@@ -283,22 +283,26 @@ gsub_repl_str(_, _, []) -> [].
 
 gsub_repl_val(S, Val, Ca) ->
     case luerl_lib:tostring(Val) of
-	nil -> match_ca(Ca, S);			%Use original match
+	nil -> match_cap(Ca, S);		%Use original match
 	Str -> Str
     end.
+
+%% len(String) -> Length.
 
 len([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
 len(As, St) -> badarg_error(len, As, St).
 
+%% lower(String) -> String.
+
 lower(As, St) ->
     case luerl_lib:conv_list(As, [list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
-	nil -> badarg_error(lower, As, St)
+	_ -> badarg_error(lower, As, St)	%nil or []
     end.
 
-%% match(Args, State) -> {[Match],State}.
+%% match(String, Pattern [, Init]) -> [Match].
 
 match(As, St0) ->
     try
@@ -308,29 +312,31 @@ match(As, St0) ->
 	throw:{error,E} -> lua_error(E, St0)
     end.
 
-do_match([A1,A2], St) -> match([A1,A2,1.0], St);
+do_match([A1,A2], St) -> do_match([A1,A2,1.0], St);
 do_match(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_string,integer]) of
-	[S,P,I] -> {match(S, byte_size(S), P, I),St};
+	[S,P,I] -> {do_match(S, byte_size(S), P, I),St};
 	_ -> throw({error,{badarg,match,As},St})
     end.
 
-%% match(String, Length, Pattern, Start) -> [Return].
+%% do_match(String, Length, Pattern, Start) -> [Return].
 %% Adjust the starting index and find the match.
 
-match(_, L, _, I) when I > L -> [nil];		%Shuffle values
-match(S, L, P, I) when I < -L -> match(S, L, P, 1);
-match(S, L, P, I) when I < 0 -> match(S, L, P, L+I+1);
-match(S, L, P, 0) -> match(S, L, P, 1);
-match(S, L, P, I) ->
-    case pat(binary_to_list(P)) of		%"Compile" the pattern
-	{ok,{Pat,_},_} ->
-	    S1 = binary_part(S, I-1, L-I+1),	%Start searching from I
-	    case match_loop(S1, L, Pat, I) of
-		[{_,F,Len}] ->			%Only top level match
-		    [binary_part(S, F-1, Len)];
+do_match(_, L, _, I) when I > L -> [nil];		%Shuffle values
+do_match(S, L, Pat, I) when I < -L -> do_match(S, L, Pat, 1);
+do_match(S, L, Pat, I) when I < 0 -> do_match(S, L, Pat, L+I+1);
+do_match(S, L, Pat, 0) -> do_match(S, L, Pat, 1);
+do_match(S, L, Pat0, I) ->
+    case pat(binary_to_list(Pat0)) of		%"Compile" the pattern
+	{ok,{Pat1,_},_} ->
+	    L1 = L - I + 1,			%Length of substring
+	    S1 = binary_part(S, I-1, L1),	%Start searching from I
+	    case match_loop(S1, L1, Pat1, 1) of
+		[{_,P,Len}] ->			%Only top level match
+		    P1 = P + I - 1,		%Position in original string
+		    [binary_part(S, P1-1, Len)];
 		[_|Cas] ->			%Have sub matches
-		    match_cas(Cas, S);
+		    match_caps(Cas, S1);
 		[] -> [nil]			%No match
 	    end;
 	{error,E} -> throw({error,E})
@@ -340,24 +346,35 @@ match(S, L, P, I) ->
 %% Step down the string trying to find a match.
 
 match_loop(S, L, Pat, I) when I > L ->		%It can still match at end!
-    case do_match(S, Pat, I) of
+    case match_pat(S, Pat, I) of
 	{match,Cas,_,_} -> Cas;
 	nomatch -> []				%Now we haven't found it
     end;
 match_loop(S0, L, Pat, I) ->
-    case do_match(S0, Pat, I) of
+    case match_pat(S0, Pat, I) of
 	{match,Cas,_,_} -> Cas;
 	nomatch ->
 	    S1 = binary_part(S0, 1, L-I),
 	    match_loop(S1, L, Pat, I+1)
     end.
 
-match_ca({_,F,Len}, _) when Len < 0 ->		%Capture position
-    float(F);
-match_ca({_,F,Len}, S) ->			%Capture
-    binary_part(S, F-1, Len).
+%% match_cap(Capture, String [, Init]) -> Capture.
+%% match_caps(Captures, String [, Init]) -> Captures.
+%%  Get the captures. The string is the whole string not just from
+%%  Init.
 
-match_cas(Cas, S) -> [ match_ca(Ca, S) || Ca <- Cas ].
+match_cap(Ca, S) -> match_cap(Ca, S, 1).
+
+match_cap({_,P,Len}, _, I) when Len < 0 ->	%Capture position
+    float(P+I-1);
+match_cap({_,P,Len}, S, I) ->			%Capture
+    binary_part(S, P+I-2, Len).			%Binaries count from 0
+
+match_caps(Cas, S) -> match_caps(Cas, S, 1).
+
+match_caps(Cas, S, I) -> [ match_cap(Ca, S, I) || Ca <- Cas ].
+
+%% rep(String, N [, Separator]) -> [String].
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
@@ -372,14 +389,14 @@ rep([_,_,_|_]=As, St) ->
     end;
 rep(As, St) -> badarg_error(rep, As, St).
 
-%% reverse(Args, State) -> {[Res],St}.
+%% reverse([String], State) -> {[Res],St}.
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
 reverse(As, St) -> badarg_error(reverse, As, St).
 
-%% sub(Args, State) -> {[Res],State}.
+%% sub([String, I [, J]], State) -> {[Res],State}.
 
 sub(As, St) ->
     case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
@@ -479,10 +496,14 @@ char_set(Cs0, Sd, Sn, P, Tag) ->
 char_set([$]|Cs]) -> char_set(Cs, [$]]);	%Must special case this
 char_set(Cs) -> char_set(Cs, []).
 
-char_set([$%,C|Cs], Set) -> char_set(Cs, [char_class(C)|Set]);
-char_set([C1,$-,C2|Cs], Set) when C2 =/= $] -> char_set(Cs, [{C1,C2}|Set]);
-char_set([C|Cs], Set) when C =/= $] -> char_set(Cs, [C|Set]);
-char_set(Cs, Set) -> {Set,Cs}.
+char_set([$]|_]=Cs, Set) -> {Set,Cs};		%We are at the end
+char_set([$%,C|Cs], Set) ->
+    char_set(Cs, [char_class(C)|Set]);
+char_set([C1,$-,C2|Cs], Set) when C2 =/= $] ->
+    char_set(Cs, [{C1,C2}|Set]);
+char_set([C|Cs], Set) ->
+    char_set(Cs, [C|Set]);
+char_set([], Set) -> {Set,[]}.			%We are at the end
 
 %% char_class([$f,$[|Cs], Sd, Sn, P) ->
 %%     char_set(Cs, Sd, Sn, [frontier|P]);
@@ -519,89 +540,92 @@ char_class(C) ->				%Only non-alphanum allowed
 	false -> C
     end.
 
-test_do_match(S, P, I) ->
+test_match_pat(S, P, I) ->
     {ok,{Pat,_},_} = pat(P),
     io:fwrite("tdm: ~p\n", [{Pat}]),
-    do_match(S, Pat, I).
+    match_pat(S, Pat, I).
 
-%% do_match(String, Pattern, Index) -> {match,[Capture],Rest,Index} | nomatch.
+%% match_pat(String, Pattern, Index) -> {match,[Capture],Rest,Index} | nomatch.
 %%  Try and match the pattern with the string *at the current
 %%  position*. No searching.
 
-do_match(S0, P0, I0) ->
-    case do_match(P0, S0, I0, [{0,I0}], []) of
+match_pat(S0, P0, I0) ->
+    case match_pat(P0, S0, I0, [{0,I0}], []) of
 	{match,S1,I1,_,Cas} ->{match,Cas,S1,I1};
 	{nomatch,_,_,_,_,_} -> nomatch
     end.
 
-do_match(['\$']=Ps, Cs, I, Ca, Cas) ->		%Match only end of string
+match_pat(['\$']=Ps, Cs, I, Ca, Cas) ->		%Match only end of string
     case Cs of
-	<<>> -> do_match([], <<>>, I, Ca, Cas);
+	<<>> -> match_pat([], <<>>, I, Ca, Cas);
 	_ -> {nomatch,Ps,Cs,I,Ca,Cas}
     end;
-do_match(['^'|Ps]=Ps0, Cs, I, Ca, Cas) ->	%Match beginning of string
-    if I =:= 1 -> do_match(Ps, Cs, 1, Ca, Cas);
+match_pat(['^'|Ps]=Ps0, Cs, I, Ca, Cas) ->	%Match beginning of string
+    if I =:= 1 -> match_pat(Ps, Cs, 1, Ca, Cas);
        true -> {nomatch,Ps0,Cs,I,Cs,Cas}
     end;
-do_match([{'(',Sn},')'|P], Cs, I, Ca, Cas) ->
-    do_match(P, Cs, I, Ca, save_cap(Sn, I, -1, Cas));
-do_match([{'(',Sn}|P], Cs, I, Ca, Cas) ->
-    do_match(P, Cs, I, [{Sn,I}|Ca], Cas);
-do_match([')'|P], Cs, I, [{Sn,S}|Ca], Cas) ->
-    do_match(P, Cs, I, Ca, save_cap(Sn, S, I-S, Cas));
-do_match([{kclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
+match_pat([{'(',Sn},')'|P], Cs, I, Ca, Cas) ->
+    match_pat(P, Cs, I, Ca, save_cap(Sn, I, -1, Cas));
+match_pat([{'(',Sn}|P], Cs, I, Ca, Cas) ->
+    match_pat(P, Cs, I, [{Sn,I}|Ca], Cas);
+match_pat([')'|P], Cs, I, [{Sn,S}|Ca], Cas) ->
+    match_pat(P, Cs, I, Ca, save_cap(Sn, S, I-S, Cas));
+match_pat([{kclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
     %%io:fwrite("dm: ~p\n", [{[P,K|Ps],Cs,I,Ca,Cas}]),
-    case do_match([P,K|Ps], Cs, I, Ca, Cas) of	%First try with it
+    case match_pat([P,K|Ps], Cs, I, Ca, Cas) of	%First try with it
 	{match,_,_,_,_}=M -> M;
 	{nomatch,_,_,_,_,_} ->			%Else try without it
-	    do_match(Ps, Cs, I, Ca, Cas)
+	    match_pat(Ps, Cs, I, Ca, Cas)
     end;
-do_match([{pclosure,P}|Ps], Cs, I, Ca, Cas) ->	%The easy way
-    do_match([P,{kclosure,P}|Ps], Cs, I, Ca, Cas);
-do_match([{mclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
-    case do_match(Ps, Cs, I, Ca, Cas) of	%First try without it
+match_pat([{pclosure,P}|Ps], Cs, I, Ca, Cas) ->	%The easy way
+    match_pat([P,{kclosure,P}|Ps], Cs, I, Ca, Cas);
+match_pat([{mclosure,P}=K|Ps], Cs, I, Ca, Cas) ->
+    case match_pat(Ps, Cs, I, Ca, Cas) of	%First try without it
 	{match,_,_,_,_}=M -> M;
 	{nomatch,_,_,_,_,_} ->			%Else try with it
-	    do_match([P,K|Ps], Cs, I, Ca, Cas)
+	    match_pat([P,K|Ps], Cs, I, Ca, Cas)
     end;
-do_match([{optional,P}|Ps], Cs, I, Ca, Cas) ->
-    case do_match([P|Ps], Cs, I, Ca, Cas) of	%First try with it
+match_pat([{optional,P}|Ps], Cs, I, Ca, Cas) ->
+    case match_pat([P|Ps], Cs, I, Ca, Cas) of	%First try with it
 	{match,_,_,_,_}=M -> M;
 	{nomatch,_,_,_,_,_} ->			%Else try without it
-	    do_match(Ps, Cs, I, Ca, Cas)
+	    match_pat(Ps, Cs, I, Ca, Cas)
     end;
-do_match([{char_set,Set}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
+match_pat([{char_set,Set}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
     case match_char_set(Set, C) of
-	true -> do_match(Ps, Cs, I+1, Ca, Cas);
+	true -> match_pat(Ps, Cs, I+1, Ca, Cas);
 	false -> {nomatch,Ps0,Cs0,I,Ca,Cas}
     end;
-do_match([{comp_set,Set}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
+match_pat([{comp_set,Set}|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) ->
     case match_char_set(Set, C) of
 	true -> {nomatch,Ps0,Cs0,I,Ca,Cas};
-	false -> do_match(Ps, Cs, I+1, Ca, Cas)
+	false -> match_pat(Ps, Cs, I+1, Ca, Cas)
     end;
-do_match([{balance,L,R}|Ps]=Ps0, <<L,Cs1/binary>>=Cs0, I0, Ca, Cas) ->
+match_pat([{balance,L,R}|Ps]=Ps0, <<L,Cs1/binary>>=Cs0, I0, Ca, Cas) ->
     case balance(Cs1, I0+1, L, R, 1) of
-	{ok,Cs2,I1} -> do_match(Ps, Cs2, I1, Ca, Cas);
+	{ok,Cs2,I1} -> match_pat(Ps, Cs2, I1, Ca, Cas);
 	error -> {nomatch,Ps0,Cs0,I0,Ca,Cas}
     end;
-do_match(['.'|Ps], <<_,Cs/binary>>, I, Ca, Cas) ->	%Matches anything
-    do_match(Ps, Cs, I+1, Ca, Cas);
-do_match([A|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) when is_atom(A) ->
+match_pat(['.'|Ps], <<_,Cs/binary>>, I, Ca, Cas) ->	%Matches anything
+    match_pat(Ps, Cs, I+1, Ca, Cas);
+match_pat([A|Ps]=Ps0, <<C,Cs/binary>>=Cs0, I, Ca, Cas) when is_atom(A) ->
     case match_class(A, C) of
-	true -> do_match(Ps, Cs, I+1, Ca, Cas);
+	true -> match_pat(Ps, Cs, I+1, Ca, Cas);
 	false -> {nomatch,Ps0,Cs0,I,Ca,Cas}
     end;
-do_match([C|Ps], <<C,Cs/binary>>, I, Ca, Cas) ->
-    do_match(Ps, Cs, I+1, Ca, Cas);
-do_match([], Cs, I, [{Sn,S}|Ca], Cas) ->
+match_pat([C|Ps], <<C,Cs/binary>>, I, Ca, Cas) ->
+    match_pat(Ps, Cs, I+1, Ca, Cas);
+match_pat([], Cs, I, [{Sn,S}|Ca], Cas) ->
     {match,Cs,I,Ca,[{Sn,S,I-S}|Cas]};
-do_match(Ps, Cs, I, Ca, Cas) ->
+match_pat(Ps, Cs, I, Ca, Cas) ->
     {nomatch,Ps,Cs,I,Ca,Cas}.
 
-save_cap(N, F, L, [{N1,_,_}=Ca|Cas]) when N > N1 ->
-    [Ca|save_cap(N, F, L, Cas)];
-save_cap(N, F, L, Cas) -> [{N,F,L}|Cas].
+%% save_cap(N, Position, Length, Captures) -> Captures.
+%%  Add a new capture to the list in the right place, ordered.
+
+save_cap(N, P, L, [{N1,_,_}=Ca|Cas]) when N > N1 ->
+    [Ca|save_cap(N, P, L, Cas)];
+save_cap(N, P, L, Cas) -> [{N,P,L}|Cas].
 
 %% MUST first check for right char, this in case of L == R!
 balance(<<R,Cs/binary>>, I, L, R, D) ->

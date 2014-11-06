@@ -39,7 +39,7 @@
 %% chunk(St0) -> {ok,St0};
 chunk(#code{code=C0}=Code, Opts) ->
     St0 = #st{},				%Local state
-    {C1,_} = exp(C0, St0),
+    {C1,_} = functiondef(C0, St0),
     luerl_comp:debug_print(Opts, "ce: ~p\n", [C1]),
     {ok,Code#code{code=C1}}.
 

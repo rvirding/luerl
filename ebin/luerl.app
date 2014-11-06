@@ -16,11 +16,35 @@
  [
   {description, "Luerl - an implementation of Lua on Erlang"},
   {vsn, "1"},
+  {modules,[luerl.erl,
+	    luerl_app.erl,
+	    luerl_comp.erl,
+	    luerl_comp_cg.erl,
+	    luerl_comp_env.erl,
+	    luerl_comp_locf.erl,
+	    luerl_comp_peep.erl,
+	    luerl_comp_vars.erl,
+	    luerl_emul.erl,
+	    luerl_lib.erl,
+	    luerl_lib_basic.erl,
+	    luerl_lib_io.erl,
+	    luerl_lib_math.erl,
+	    luerl_lib_os.erl,
+	    luerl_lib_package.erl,
+	    luerl_lib_string.erl,
+	    luerl_lib_string_format.erl,
+	    luerl_parse.yrl,
+	    luerl_scan.xrl,
+	    luerl_sup.erl,
+	    ttdict.erl
+	    ]},
   {registered, []},
   {applications, [
                   kernel,
-                  stdlib
+                  stdlib,
+		  compiler,
+		  parsetools
                  ]},
-  {mod, { luerl_app, []}},
+  {mod, {luerl_app, []}},
   {env, []}
  ]}.

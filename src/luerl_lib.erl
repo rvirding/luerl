@@ -24,10 +24,14 @@
 
 -include("luerl.hrl").
 
--export([lua_error/2,badarg_error/3,format_error/1,
-	 is_true_value/1,first_value/1,number_to_list/1,
-	 to_list/1,to_lists/1,to_lists/2,to_int/1,to_ints/1,to_ints/2,
-	 tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
+-export([lua_error/2,badarg_error/3,format_error/1]).
+
+-export([boolean_value/1,first_value/1]).
+
+-export([number_to_list/1,to_list/1,to_lists/1,to_lists/2,
+	 to_int/1,to_ints/1,to_ints/2]).
+
+-export([tonumber/1,tonumber/2,tonumbers/1,tonumbers/2,tointeger/1,
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
 
@@ -112,6 +116,8 @@ format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
 format_error({undef_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
+format_error({undef_method,Obj,Name}) ->
+    io_lib:format("undefined method in ~w: ~w", [Obj,Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);
@@ -125,15 +131,17 @@ format_error(invalid_char_set) ->		%Keep text!
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);
 format_error({undefined_op,Op}) ->
-    io_lib:format("undefined op: ~w", [Op]).
+    io_lib:format("undefined op: ~w", [Op]);
+format_error({no_module,Mod}) ->
+    io_lib:format("module '~s' not found", [Mod]).
 
-%% is_true_value(Rets) -> boolean()>
+%% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
 
-is_true_value([nil|_]) -> false;
-is_true_value([false|_]) -> false;
-is_true_value([_|_]) -> true;
-is_true_value([]) -> false.
+boolean_value([nil|_]) -> false;
+boolean_value([false|_]) -> false;
+boolean_value([_|_]) -> true;
+boolean_value([]) -> false.
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
@@ -172,6 +180,13 @@ str_to_float(S) ->
 	{ok,[{'+',_},{'NUMBER',_,N}],_} -> {ok,N};
 	{ok,[{'-',_},{'NUMBER',_,N}],_} -> {ok,-N};
 	_ -> error
+    end.
+
+number_to_list(N) ->
+    I = round(N),
+    case I == N of				%Is it an "integer"?
+	true -> integer_to_list(I);
+	false -> io_lib:write(N)
     end.
 
 %% tonumber(Arg) -> Number | nil.
@@ -218,13 +233,6 @@ tointegers(As) -> tointegers(As, []).
 
 tointegers(As, Acc) ->
     to_loop(As, fun tointeger/1, Acc).
-
-number_to_list(N) ->
-    I = round(N),
-    case I == N of				%Is it an "integer"?
-	true -> integer_to_list(I);
-	false -> io_lib:write(N)
-    end.
 
 tostring(N) when is_number(N) -> list_to_binary(number_to_list(N));
 tostring(B) when is_binary(B) -> B;

@@ -22,9 +22,10 @@
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
-	 load/1,loadfile/1,call/2,call/3,call_chunk/2,call_chunk/3,
+	 load/1,load/2,loadfile/1,loadfile/2,
+	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
-	 get_table/2,get_table1/2,set_table/3,set_table1/3,
+	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
 	 call_method/2,call_method/3,call_method1/3,method_list/2,
 	 init/0,stop/1,gc/1,
 	 encode/2,encode_list/2,decode/2,decode_list/2]).
@@ -52,34 +53,50 @@ evalfile(Path, St0) ->
     end.
 
 %% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
-do(SBC) ->
-    do(SBC, init()).
 
-do(B, St) when is_binary(B) ->
-    do(binary_to_list(B), St);
-do(S, St) when is_list(S) ->
-    {ok,C} = load(S),
-    luerl_emul:chunk(C, [], St);
-do(C, St) ->					%Pre-parsed/compiled chunk
-    luerl_emul:chunk(C, [], St).
+do(SBC) -> do(SBC, init()).
+
+do(S, St0) when is_binary(S); is_list(S) ->
+    {ok,Func,St1} = load(S, St0),
+    luerl_emul:call(Func, St1);
+do(Func, St) ->
+    luerl_emul:call(Func, St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
+
 dofile(Path) ->
     dofile(Path, init()).
 
-dofile(Path, St) ->
-    {ok,C} = loadfile(Path),
-    luerl_emul:chunk(C, [], St).
+dofile(Path, St0) ->
+    {ok,Func,St1} = loadfile(Path, St0),
+    luerl_emul:call(Func, St1).
 
-%% load(String|Binary) -> {ok,Form}.
-load(Bin) when is_binary(Bin) ->
-    load(binary_to_list(Bin));
-load(Str) when is_list(Str) ->
-    luerl_comp:string(Str).
+%% load(String|Binary) -> {ok,Function,NewState}.
 
-%% loadfile(Path) -> {ok,Form}.
-loadfile(Path) ->
-    luerl_comp:file(Path).
+load(Str) -> load(Str, init()).
+
+load(Bin, St) when is_binary(Bin) ->
+    load(binary_to_list(Bin), St);
+load(Str, St0) when is_list(Str) ->
+    case luerl_comp:string(Str) of
+	{ok,Chunk} ->
+	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+	    {ok,Func,St1};
+	{error,_,_}=E -> E
+    end.
+
+%% loadfile(Path) -> {ok,Function,NewState}.
+%% loadfile(Path, State) -> {ok,Function,NewState}.
+
+loadfile(Path) -> loadfile(Path, init()).
+
+loadfile(Path, St0) ->
+    case luerl_comp:file(Path) of
+	{ok,Chunk} ->
+	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+	    {ok,Func,St1};
+	{error,_,_}=E -> E
+    end.
 
 %% init() -> State.
 init() -> luerl_emul:init().
@@ -94,13 +111,13 @@ call_chunk(C, As) -> call_chunk(C, As, init()).
 
 call_chunk(C, As, St0) ->
     {Las,St1} = encode_list(As, St0),
-    {Lrs,St2} = luerl_emul:chunk(C, Las, St1),
+    {Lrs,St2} = luerl_emul:call(C, Las, St1),
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 
-%% call_function(FuncPath, Args) -> {Result,State}.
-%% call_function(FuncPath, Args, State) -> {Result,State}.
-%% call_function1(FuncPath | Func, LuaArgs, State) -> {LuaResult,State}.
+%% call_function(Table, Args) -> {Result,State}.
+%% call_function(TablePath, Args, State) -> {Result,State}.
+%% call_function1(LuaTablePath | Func, LuaArgs, State) -> {LuaResult,State}.
 
 call_function(Fp, As) ->
     call_function(Fp, As, init()).
@@ -110,13 +127,12 @@ call_function(Fp, As, St0) ->
     {Lfp,St1} = encode_list(Fp, St0),
     {Las,St2} = encode_list(As, St1),
     %% Find the function definition and call function.
-    {F,St3} = function_list(Lfp, St2),
-    {Lrs,St4} = luerl_emul:functioncall(F, Las, St3),
-    Rs = decode_list(Lrs, St4),
-    {Rs,St4}.
+    {Lrs,St3} = call_function1(Lfp, Las, St2),
+    Rs = decode_list(Lrs, St3),
+    {Rs,St3}.
 
-call_function1(Fp, Las, St0) when is_list(Fp) ->
-    {F,St1} = function_list(Fp, St0),
+call_function1(Lfp, Las, St0) when is_list(Lfp) ->
+    {F,St1} = luerl_emul:get_table_keys(Lfp, St0),
     luerl_emul:functioncall(F, Las, St1);
 call_function1(F, Las, St) ->
     luerl_emul:functioncall(F, Las, St).
@@ -124,11 +140,7 @@ call_function1(F, Las, St) ->
 %% function_list(Keys, State) -> {V,State}.
 %%  Go down a list of keys and return final value.
 
-function_list([G|Kl], St0) ->
-    {First,St1} = luerl_emul:get_global_key(G, St0),	%Start at global env
-    Fun = fun (K, {T,St}) -> luerl_emul:get_table_key(T, K, St) end,
-    lists:foldl(Fun, {First,St1}, Kl);
-function_list(_, _) -> error(badarg).
+function_list(Ks, St) -> luerl_emul:get_table_keys(Ks, St).
 
 %% call_method(FuncPath, Args) -> {Result,State}.
 %% call_method(FuncPath, Args, State) -> {Result,State}.
@@ -154,51 +166,52 @@ call_method1(Fp, Las, St0) ->
 
 method_list([G|Ks], St0) ->
     {First,St1} = luerl_emul:get_global_key(G, St0),
-    method_list(Ks, First, St1).
+    method_list(First, Ks, St1).
 
-method_list([K], SoFar, St0) ->
-    {Func,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    {SoFar,Func,St1};
-method_list([K|Ks], SoFar, St0) ->
-    {Next,St1} = luerl_emul:get_table_key(SoFar, K, St0),
-    method_list(Ks, Next, St1);
+method_list(Tab, [K], St0) ->
+    {Func,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    {Tab,Func,St1};
+method_list(Tab, [K|Ks], St0) ->
+    {Next,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    method_list(Next, Ks, St1);
 method_list(_, _, _) -> error(badarg).
 
-%% get_table(FuncPath, State) -> {Result, State}.
+%% get_table(TablePath, State) -> {Result, State}.
 %% Go down a list of keys and return decoded final value.
 
 get_table(Fp, St0) when is_list(Fp) ->
     {Lfp,St1} = encode_list(Fp, St0),
-    {V,St1} = function_list(Lfp, St0),
-    Vd = decode(V, St1),
-    {Vd, St1};
+    {V,St2} = luerl_emul:get_table_keys(Lfp, St1),
+    Vd = decode(V, St2),
+    {Vd,St2};
 get_table(_,_) -> error(badarg).
 
-%% get_table1(LuaFuncPath, State) -> {LuaResult, State}.
+%% get_table1(LuaTablePath, State) -> {LuaResult, State}.
 
 get_table1(Fp, St) when is_list(Fp) ->
-    function_list(Fp, St);
+    luerl_emul:get_table_keys(Fp, St);
 get_table1(_,_) -> error(badarg).
 
-%% set_table(FuncPath, Value, State) -> {Result, State}.
-%% Go down a list of keys and set final key to Value
+%% set_table(TablePath, Value, State) -> State.
+%%  Go down a list of keys and set final key to Value.
 
 set_table(Fp, V, St0) when is_list(Fp) ->
     {Lfp,St1} = encode_list(Fp, St0),
     {Lv, St2} = encode(V, St1),
-    {Ltab, St3} = set_table1(Lfp, Lv, St2),
-    Tab = decode(Ltab, St3),
-    {Tab, St3};
+    set_table1(Lfp, Lv, St2);
 set_table(_,_,_) -> error(badarg).
 
-%% set_table1(LuaFuncPath, State) -> {LuaResult, State}.
+%% set_table1(LuaTablePath, Value, State) -> State.
+%%  Must explicitly read table key to get
 
-set_table1(Lfp0, Lv, St0) when is_list(Lfp0) ->
-    {Lfp1, [K]} = lists:split(length(Lfp0) - 1, Lfp0),
-    {Tab, St2} = function_list(Lfp1, St0),
-    St3 = luerl_emul:set_table_key(Tab, K, Lv, St2),
-    {Tab, St3};
-set_table1(_,_,_) -> error(badarg).
+set_table1(Lfp, Lv, St) ->
+    luerl_emul:set_table_keys(Lfp, Lv, St).
+
+%% set_table1(Table, Key, Value, State) -> State.
+%%  Must explicitly read table key to get
+
+set_table1(Tab, Key, Lv, St) ->
+    luerl_emul:set_table_key(Tab, Key, Lv, St).
 
 %% stop(State) -> GCedState.
 stop(St) ->

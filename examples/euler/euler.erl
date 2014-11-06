@@ -20,14 +20,14 @@ run() ->
   ok.
 
 run(File, Solution) ->
-  Lua = luerl:init(),
-  {ok, Form} = luerl:loadfile(File),
-  case timer:tc(luerl, eval, [Form, Lua]) of
-    {T, {ok, [Return]}} when Return == Solution -> 
-      io:format("~s (returned ~p in ~p)~n", [File, Return, T]);
-    {T, {ok, [Return]}} -> 
-      io:format("~s (expected ~p but got ~p in ~p)~n", 
-                [File, Solution, Return, T]);
-    {_, {error, Error}} ->
-      io:format("luerl error: ~p~n", [Error])
-  end.
+    Lua0 = luerl:init(),
+    {ok, Form, Lua1} = luerl:loadfile(File, Lua0),
+    case timer:tc(luerl, eval, [Form, Lua1]) of
+	{T, {ok, [Return]}} when Return == Solution -> 
+	    io:format("~s (returned ~p in ~p)~n", [File, Return, T]);
+	{T, {ok, [Return]}} -> 
+	    io:format("~s (expected ~p but got ~p in ~p)~n", 
+		      [File, Solution, Return, T]);
+	{_, {error, Error}} ->
+	    io:format("luerl error: ~p~n", [Error])
+    end.
