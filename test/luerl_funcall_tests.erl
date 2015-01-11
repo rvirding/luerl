@@ -22,6 +22,19 @@ external_fun_test() ->
     ?assertEqual(BoolVal2, true),
     ?assertEqual(BoolVal3, true).
     
+external_nostate_fun_test() ->
+    State = luerl:init(),
+    F = fun([A]) ->
+		[A + 2, [A + 3, A + 4]]
+	end,
+    State1 = luerl:set_table([<<"testFun">>], F, State),
+    {_, State2} = luerl:do(<<"function test(i)\n  local a, b = testFun(i)\n return (a == i + 2), (b[1] == i + 3), (b[2] == i + 4) end">>, State1),
+    {Res, _State3} = luerl:call_function([test], [2], State2),
+    [BoolVal, BoolVal2, BoolVal3] = Res,
+    ?assertEqual(BoolVal, true),
+    ?assertEqual(BoolVal2, true),
+    ?assertEqual(BoolVal3, true).
+    
 return_lib_function_test() ->
     State = luerl:init(),
     {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
