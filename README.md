@@ -131,6 +131,14 @@ Call a method already defined in the state. `Keys` is a list of keys to the meth
 
 #### luerl:gc(State) -> State.
  Runs the (experimental) garbage collector on a state and returns the new state.
+
+#### luerl:set_table(Path, Value, State) -> State.
+ Sets a value inside the Lua state. Value is automatically encoded.
+ 
+ You can use this function to expose an function to the Lua code by
+ using this interface:
+   fun(Args, State) -> {Results, State}
+ Args and Results must be a list of Luerl compatible erlang values.
  
 N.B. This interface is subject to change!
 
@@ -163,6 +171,13 @@ executes the call `table.pack("a", "b", 42)` in `State0`. E.g.:
     {Res,State1} = luerl:call_method([g,h,i], [<<"a">>,<<"b">>,42], State0)
 
 executes the call `g.h:i("a", "b", 42)` in `State0`.
+
+#### define a method in the state
+    State1 = luerl:set_table([inc], fun([Val], State) -> {[Val+1], State} end)
+
+the method can be called like this:
+
+    luerl:do(<<print(inc(4))>>", State1)
 
 For more examples see `examples/hello/hello2.erl`.
 

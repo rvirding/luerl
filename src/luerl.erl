@@ -244,6 +244,20 @@ encode(L, St0) when is_list(L) ->
 			      end, {1.0,St0}, L),
     {T,St2} = luerl_emul:alloc_table(Es, St1),
     {T,St2};					%No more to do for now
+encode(F, St) when is_function(F, 2) ->
+    F1 = fun(Args, State) ->
+		 Args1 = decode_list(Args, State),
+		 {Res, State1} = F(Args1, State),
+		 encode_list(Res, State1)
+	 end,
+    {{function, F1}, St};
+encode(F, St) when is_function(F, 1) ->
+    F1 = fun(Args, State) ->
+		 Args1 = decode_list(Args, State),
+		 Res = F(Args1),
+		 encode_list(Res, State)
+	 end,
+    {{function, F1}, St};
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
@@ -266,4 +280,11 @@ decode(#tref{i=N}, St) ->
 	_Undefined -> error(badarg)
     end;
 decode({function,Fun}, _) -> {function,Fun};
+decode(#function{}=Fun, State) ->
+    F = fun(Args) ->
+		{Args1, State1} = encode_list(Args, State),
+		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
+		decode_list(Ret, State2)
+	end,
+    {function, F};
 decode(_, _) -> error(badarg).			%Shouldn't have anything else
