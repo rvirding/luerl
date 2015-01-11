@@ -276,8 +276,8 @@ decode({function,Fun}, _) -> {function,Fun};
 decode(#function{}=Fun, State) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
-		{Ret, _State2} = luerl_emul:functioncall(Fun, Args1, State1),
-		Ret
+		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
+		decode_list(Ret, State2)
 	end,
     {function, F};
 decode(_, _) -> error(badarg).			%Shouldn't have anything else
