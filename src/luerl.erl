@@ -273,4 +273,11 @@ decode(#tref{i=N}, St) ->
 	_Undefined -> error(badarg)
     end;
 decode({function,Fun}, _) -> {function,Fun};
+decode(#function{}=Fun, State) ->
+    F = fun(Args) ->
+		{Args1, State1} = encode_list(Args, State),
+		{Ret, _State2} = luerl_emul:functioncall(Fun, Args1, State1),
+		Ret
+	end,
+    {function, F};
 decode(_, _) -> error(badarg).			%Shouldn't have anything else

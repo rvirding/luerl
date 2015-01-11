@@ -22,3 +22,17 @@ external_fun_test() ->
     ?assertEqual(BoolVal2, true),
     ?assertEqual(BoolVal3, true).
     
+return_lib_function_test() ->
+    State = luerl:init(),
+    {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
+    {[{function, Fun}], _State2} = luerl:call_function([test], [1], State1),
+    {Res, _State3} = Fun([<<"barfooblafasel">>, <<"foo">>], State1),
+    ?assertEqual(Res, [4.0, 6.0]).
+
+define_fun_in_lua_test() ->
+    State = luerl:init(),
+    {_, State1} = luerl:do(<<"function mkadder(incby)\n  return function(i)\n    print(\"Call into Luerl!\")\n    return i + incby\n  end\nend\n">>, State),
+    {[{function, Fun}], _State2} = luerl:call_function([mkadder], [1], State1),
+    {[{function, Fun2}], _State3} = luerl:call_function([mkadder], [2], State1),
+    ?assertEqual(Fun([4]), [5.0]),
+    ?assertEqual(Fun2([4]), [6.0]).
