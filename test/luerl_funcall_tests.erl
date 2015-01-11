@@ -36,3 +36,12 @@ define_fun_in_lua_test() ->
     {[{function, Fun2}], _State3} = luerl:call_function([mkadder], [2], State1),
     ?assertEqual(Fun([4]), [5.0]),
     ?assertEqual(Fun2([4]), [6.0]).
+
+define_fun2_in_lua_test() ->
+    State = luerl:init(),
+    {_, State1} = luerl:do(<<"function mklist(numentries)\n  return function(entryval)\n    local list = {}\n    for i = 1,numentries do\n      list[i] = entryval\n    end\n    return list\n  end\nend\n">>, State),
+    {[{function, Fun}], _State2} = luerl:call_function([mklist], [5], State1),
+    {[{function, Fun2}], _State3} = luerl:call_function([mklist], [10], State1),
+    ?assertEqual(Fun([4]), [[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]]),
+    ?assertEqual(Fun2([4]), [[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0},
+			      {6,4.0}, {7,4.0}, {8,4.0}, {9,4.0}, {10,4.0}]]).
