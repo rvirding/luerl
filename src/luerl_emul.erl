@@ -964,8 +964,8 @@ do_numfor(Is, Lvs, [Step,Limit,Init|Stk], Env, St, _, Fis) ->
     %% First check if we have numbers.
     case luerl_lib:tonumbers([Init,Limit,Step]) of
 	[I,L,S] ->
-	    Do = fun (St) ->
-			 numfor_loop(I, L, S, Fis, Lvs, Stk, Env, St)
+	    Do = fun (St_) ->
+			 numfor_loop(I, L, S, Fis, Lvs, Stk, Env, St_)
 		 end,
 	    loop_block(Is, Lvs, Stk, Env, St, Do);
 	nil -> badarg_error(loop, [Init,Limit,Step], St)
@@ -994,8 +994,8 @@ do_genfor(Is, Lvs, [Val|Stk], Env, St, _, Fis) ->
 	[F,T,V|_] -> ok;
 	F -> T = nil, V = nil
     end,
-    Do = fun (St) ->
-		 genfor_loop(F, T, V, Fis, Lvs, Stk, Env, St)
+    Do = fun (St_) ->
+		 genfor_loop(F, T, V, Fis, Lvs, Stk, Env, St_)
 	 end,
     loop_block(Is, Lvs, Stk, Env, St, Do).
 
@@ -1270,8 +1270,8 @@ gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,g=G,stk=Stk,meta=Meta}=St) ->
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
-mark([{in_table,_}=T|Todo], More, St, Sf, Tt, Ft) ->
-    %%io:format("gc: ~p\n", [T]),
+mark([{in_table,_}=_T|Todo], More, St, Sf, Tt, Ft) ->
+    %%io:format("gc: ~p\n", [_T]),
     mark(Todo, More, St, Sf, Tt, Ft);
 mark([#tref{i=T}|Todo], More, St0, Sf, Tt, Ft) ->
     case ordsets:is_element(T, St0) of
