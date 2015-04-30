@@ -22,7 +22,7 @@
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
-	 load/1,load/2,loadfile/1,loadfile/2,
+	 load/1,load/2,loadfile/1,loadfile/2,path_loadfile/2,path_loadfile/3,
 	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
@@ -85,18 +85,48 @@ load(Str, St0) when is_list(Str) ->
 	{error,_,_}=E -> E
     end.
 
-%% loadfile(Path) -> {ok,Function,NewState}.
-%% loadfile(Path, State) -> {ok,Function,NewState}.
+%% loadfile(FileName) -> {ok,Function,NewState}.
+%% loadfile(FileName, State) -> {ok,Function,NewState}.
 
-loadfile(Path) -> loadfile(Path, init()).
+loadfile(Name) -> loadfile(Name, init()).
 
-loadfile(Path, St0) ->
-    case luerl_comp:file(Path) of
+loadfile(Name, St0) ->
+    case luerl_comp:file(Name) of
 	{ok,Chunk} ->
 	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
 	    {ok,Func,St1};
 	{error,_,_}=E -> E
     end.
+
+%% path_loadfile(FileName, State) -> {ok,Function,FullName,State}.
+%% path_loadfile(Path, FileName, State) -> {ok,Function,FullName,State}.
+%%  We manually step down the path to get the correct handling of
+%%  filenames by the compiler.
+
+path_loadfile(Name, St) ->
+    Path = case os:getenv("LUA_LOAD_PATH") of
+	       false -> [];			%You get what you asked for
+	       Env ->
+		   %% Get path separator depending on os type.
+		   Sep = case os:type() of
+			     {win32,_} -> ";";
+			     _ -> ":"		%Unix
+			 end,
+		   string:tokens(Env, Sep)	%Split into path list
+	   end,
+    path_loadfile(Path, Name, St).
+
+path_loadfile([Dir|Dirs], Name, St0) ->
+    Full = filename:join(Dir, Name),
+    case loadfile(Full, St0) of
+	{ok,Func,St1} ->
+	    {ok,Func,Full,St1};
+	{error,[{_,_,enoent}],_} ->		%Couldn't find the file
+	    path_loadfile(Dirs, Name, St0);
+	Error -> Error
+    end;
+path_loadfile([], _, _) ->
+    {error,[{none,file,enoent}],[]}.
 
 %% init() -> State.
 init() -> luerl_emul:init().

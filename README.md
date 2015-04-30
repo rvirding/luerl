@@ -104,8 +104,11 @@ As it is possible in Lua to create self-referencing data structures, indeed the 
 #### luerl:load(String|Binary[, State]) -> {ok,Function,NewState} | {error, Reason} .
  Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
 
-#### luerl:loadfile(Path[, State]) -> {ok,Function,NewState}.
+#### luerl:loadfile(FileName[, State]) -> {ok,Function,NewState}.
  Parse a Lua file, and return a compiled chunk ('form').
+
+#### luerl:path_loadfile([Path, ], FileName, State) -> {ok,Function,FullName,State}.
+ Search Path until the file FileName is found. Parse the file and return a compiled chunk ('form'). If Path is not given then the path defined in the environment variable LUA_LOAD_PATH is used.
 
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
@@ -142,7 +145,8 @@ Call a method already defined in the state. `Keys` is a list of keys to the meth
  
 N.B. This interface is subject to change!
 
-Examples
+Included Examples
+-----------------
 
 To run the examples, do `make` and then start the Erlang command line with `erl -pa ./ebin`.  
 **Don't be shocked by the very long dump following each function call.**   
