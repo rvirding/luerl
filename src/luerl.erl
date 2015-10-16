@@ -23,6 +23,7 @@
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
 	 load/1,load/2,loadfile/1,loadfile/2,path_loadfile/2,path_loadfile/3,
+	 load_module/3,load_module1/3,
 	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
@@ -127,6 +128,19 @@ path_loadfile([Dir|Dirs], Name, St0) ->
     end;
 path_loadfile([], _, _) ->
     {error,[{none,file,enoent}],[]}.
+
+%% load_module(TablePath, ModuleName, State) -> State.
+%% load_module1(LuaTablePath, ModuleName, State) -> State.
+%%  Load module and add module table to the path.
+
+load_module(Fp, Mod, St0) when is_list(Fp) ->
+    {Lfp,St1} = encode_list(Fp, St0),
+    load_module1(Lfp, Mod, St1);
+load_module(_, _,_) -> error(badarg).
+
+load_module1(Lfp, Mod, St0) ->
+    {Tab,St1} = Mod:install(St0),
+    luerl_emul:set_table_keys(Lfp, Tab, St1).
 
 %% init() -> State.
 init() -> luerl_emul:init().
@@ -292,29 +306,49 @@ encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
+%%  In decode we track of which tables we have seen to detect
+%%  recursive references and generate an error when that occurs.
 
 decode_list(Lts, St) ->
     lists:map(fun (Lt) -> decode(Lt, St) end, Lts).
 
-decode(nil, _) -> nil;
-decode(false, _) -> false;
-decode(true, _) -> true;
-decode(B, _) when is_binary(B) -> B;
-decode(N, _) when is_number(N) -> N;
-decode(#tref{i=N}, St) ->
-    case ?GET_TABLE(N, St#luerl.ttab) of
-	#table{a=Arr,t=Tab} ->
-	    Fun = fun (K, V, Acc) -> [{decode(K, St),decode(V, St)}|Acc] end,
-	    Ts = ttdict:fold(Fun, [], Tab),
-	    array:sparse_foldr(Fun, Ts, Arr);
-	_Undefined -> error(badarg)
-    end;
-decode({function,Fun}, _) -> {function,Fun};
-decode(#function{}=Fun, State) ->
+decode(LT, St) ->
+    %% Catch errors to clean up call stack.
+    try decode(LT, St, [])
+    catch
+	error:E ->
+	    erlang:raise(error, E, [{?MODULE,decode,2}])
+    end.
+
+decode(nil, _, _) -> nil;
+decode(false, _, _) -> false;
+decode(true, _, _) -> true;
+decode(B, _, _) when is_binary(B) -> B;
+decode(N, _, _) when is_number(N) -> N;
+decode(#tref{i=N}, St, In) ->
+    decode_table(N, St, In);
+decode({function,Fun}, _, _) -> {function,Fun};
+decode(#function{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
 		decode_list(Ret, State2)
 	end,
     {function, F};
-decode(_, _) -> error(badarg).			%Shouldn't have anything else
+decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
+
+decode_table(N, St, In0) ->
+    case lists:member(N, In0) of
+	true -> error(recursive_data);		%Been here before
+	false ->
+	    In1 = [N|In0],			%We are in this as well
+	    case ?GET_TABLE(N, St#luerl.ttab) of
+		#table{a=Arr,t=Tab} ->
+		    Fun = fun (K, V, Acc) ->
+				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
+			  end,
+		    Ts = ttdict:fold(Fun, [], Tab),
+		    array:sparse_foldr(Fun, Ts, Arr);
+		_Undefined -> error(badarg)
+	    end
+    end.

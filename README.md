@@ -79,7 +79,7 @@ Please avoid directly accessing functions in other modules which haven't been de
 **Form** means a portion of precompiled bytecode. (also ambiguously called **Compiled Chunks** here and **Chunks** in the samples.)    
 **State** means a Lua State, this *is* a Lua VM instance.     
 **Path** means a file system path and file name.  
-**FuncPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.  
+**KeyPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.  
 **Keys** I don't know
 
 **Eaxmples**
@@ -110,6 +110,12 @@ As it is possible in Lua to create self-referencing data structures, indeed the 
 #### luerl:path_loadfile([Path, ], FileName, State) -> {ok,Function,FullName,State}.
  Search Path until the file FileName is found. Parse the file and return a compiled chunk ('form'). If Path is not given then the path defined in the environment variable LUA_LOAD_PATH is used.
 
+#### luerl:load_module(KeyPath, ErlangModule, State) -> State.
+Load `ErlangModule` and install its table at `KeyPath`.
+
+#### luerl:load_module1(KeyPath, ErlangModule, State) -> State.
+Load `ErlangModule` and install its table at `KeyPath`.
+
 #### luerl:init() -> State.
  Get a new Lua State = a fresh Lua VM instance.
 
@@ -126,8 +132,8 @@ Call a function already defined in the state. `KeyPath` is a list of keys to the
 #### luerl:call_method(MethPath, Args[, State]) -> {Result,NewState}.
 Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encode/decoded.
 
-#### luerl:call_method1(Keys, Args, State) -> {Result,NewState}
-Call a method already defined in the state. `Keys` is a list of keys to the method. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
+#### luerl:call_method1(MethPath, Args, State) -> {Result,NewState}
+Call a method already defined in the state. `MethPath` is a list of keys to the method. `Keys`, `Args` and `Result` are **NOT** encode/decoded.
 
 #### luerl:stop(State) -> GCedState.
  Garbage collects the state and (todo:) does away with it.
