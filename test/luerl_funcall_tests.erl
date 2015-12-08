@@ -70,3 +70,10 @@ define_fun2_in_lua_test() ->
     ?assertEqual(Fun([4]), [[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]]),
     ?assertEqual(Fun2([4]), [[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0},
 			      {6,4.0}, {7,4.0}, {8,4.0}, {9,4.0}, {10,4.0}]]).
+
+newindex_metamethod_test() ->
+    State = luerl:init(),
+    {[TVal, MVal], _State1} = luerl:do(<<"local t = {}\nlocal m = setmetatable({}, {__newindex = function (key, value)\n  t[key] = value\nend})\n\nm[123] = 456\nreturn t[123], m[123]">>, State),
+    ?assertEqual(TVal, 456.0),
+    ?assertEqual(MVal, nil).
+
