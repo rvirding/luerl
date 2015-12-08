@@ -233,7 +233,8 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    functioncall(Meth, [Key,Val], St);
+		    {_Ret, St1} = functioncall(Meth, [Key,Val], St),
+		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
     end.
@@ -251,7 +252,8 @@ set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    functioncall(Meth, [Key,Val], St);
+		    {_Ret, St1} = functioncall(Meth, [Key,Val], St),
+		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end;
 	_ ->					%Key exists
