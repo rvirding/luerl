@@ -839,7 +839,7 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St);
-	Meta -> functioncall(Meta, Args, Stk, St)
+	Meta -> functioncall(Meta, [Func|Args], Stk, St)
     end.
 
 functioncall(Fis, Lvs, Stk, Env, St0) ->
