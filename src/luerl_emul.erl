@@ -214,7 +214,7 @@ set_table_key(#tref{}=Tref, Key, Val, St) ->
 set_table_key(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
-set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
+set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case ttdict:find(Key, Tab0) of
 	{ok,_} ->				%Key exists
@@ -233,13 +233,13 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    {_Ret, St1} = functioncall(Meth, [Key,Val], St),
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
     end.
 
-set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{ttab=Ts0}=St) ->
+set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
     #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case array:get(I, Arr0) of
 	nil ->					%Key does not exist
@@ -252,7 +252,7 @@ set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    {_Ret, St1} = functioncall(Meth, [Key,Val], St),
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end;

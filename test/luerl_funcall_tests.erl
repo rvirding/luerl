@@ -73,7 +73,7 @@ define_fun2_in_lua_test() ->
 
 newindex_metamethod_test() ->
     State = luerl:init(),
-    {[TVal, MVal], _State1} = luerl:do(<<"local t = {}\nlocal m = setmetatable({}, {__newindex = function (key, value)\n  t[key] = value\nend})\n\nm[123] = 456\nreturn t[123], m[123]">>, State),
+    {[TVal, MVal], _State1} = luerl:do(<<"local t = {}\nlocal m = setmetatable({}, {__newindex = function (tab, key, value)\n  t[key] = value\nend})\n\nm[123] = 456\nreturn t[123], m[123]">>, State),
     ?assertEqual(TVal, 456.0),
     ?assertEqual(MVal, nil).
 
