@@ -80,19 +80,20 @@ init() ->
     %% Now we can start adding libraries. Package MUST be first!
     St5 = load_lib(<<"package">>, luerl_lib_package, St4),
     %% Add the other standard libraries.
-    St6 = alloc_libs([
-		      {<<"bit32">>,luerl_lib_bit32},
-		      {<<"io">>,luerl_lib_io},
-		      {<<"math">>,luerl_lib_math},
-		      {<<"os">>,luerl_lib_os},
-		      {<<"string">>,luerl_lib_string},
-		      {<<"table">>,luerl_lib_table}
-		     ], St5),
+    St6 = load_libs([
+		     {<<"bit32">>,luerl_lib_bit32},
+		     {<<"io">>,luerl_lib_io},
+		     {<<"math">>,luerl_lib_math},
+		     {<<"os">>,luerl_lib_os},
+		     {<<"string">>,luerl_lib_string},
+		     {<<"table">>,luerl_lib_table},
+		     {<<"debug">>,luerl_lib_debug}
+		    ], St5),
     %% Set _G variable to point to it and add it packages.loaded.
     St7 = set_global_key(<<"_G">>, _G, St6),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
 
-alloc_libs(Libs, St) ->
+load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
     lists:foldl(Fun, St, Libs).
 

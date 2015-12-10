@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2015 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
             luerl_lib,
             luerl_lib_basic,
             luerl_lib_bit32,
+            luerl_lib_debug,
             luerl_lib_io,
             luerl_lib_math,
             luerl_lib_os,

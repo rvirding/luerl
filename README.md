@@ -143,7 +143,7 @@ Call a method already defined in the state. `MethPath` is a list of keys to the 
 
 #### luerl:set_table(Path, Value, State) -> State.
  Sets a value inside the Lua state. Value is automatically encoded.
- 
+
  You can use this function to expose an function to the Lua code by
  using this interface:
    fun(Args, State) -> {Results, State}
@@ -318,6 +318,10 @@ Currently implemented functions in the libraries
 - bit32\.rrotate
 - bit32\.extract
 - bit32\.replace
+- debug\.getmetatable
+- debug\.getuservalue
+- debug\.setmetatable
+- debug\.setuservalue
 
 
 Known Bugs

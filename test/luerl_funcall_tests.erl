@@ -46,7 +46,7 @@ external_nostate_fun_test() ->
     ?assertEqual(BoolVal, true),
     ?assertEqual(BoolVal2, true),
     ?assertEqual(BoolVal3, true).
-    
+
 return_lib_function_test() ->
     State = luerl:init(),
     {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
