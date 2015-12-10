@@ -80,12 +80,14 @@ init() ->
     %% Now we can start adding libraries. Package MUST be first!
     St5 = load_lib(<<"package">>, luerl_lib_package, St4),
     %% Add the other standard libraries.
-    St6 = alloc_libs([{<<"string">>,luerl_lib_string},
-		      {<<"table">>,luerl_lib_table},
-		      {<<"math">>,luerl_lib_math},
+    St6 = alloc_libs([
+		      {<<"bit32">>,luerl_lib_bit32},
 		      {<<"io">>,luerl_lib_io},
+		      {<<"math">>,luerl_lib_math},
 		      {<<"os">>,luerl_lib_os},
-		      {<<"bit32">>,luerl_lib_bit32}], St5),
+		      {<<"string">>,luerl_lib_string},
+		      {<<"table">>,luerl_lib_table}
+		     ], St5),
     %% Set _G variable to point to it and add it packages.loaded.
     St7 = set_global_key(<<"_G">>, _G, St6),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
@@ -212,7 +214,7 @@ set_table_key(#tref{}=Tref, Key, Val, St) ->
 set_table_key(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
-set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
+set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case ttdict:find(Key, Tab0) of
 	{ok,_} ->				%Key exists
@@ -231,12 +233,13 @@ set_table_key_key(#tref{i=N}, Key, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    functioncall(Meth, [Key,Val], St);
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
+		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end
     end.
 
-set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{ttab=Ts0}=St) ->
+set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
     #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case array:get(I, Arr0) of
 	nil ->					%Key does not exist
@@ -249,7 +252,8 @@ set_table_int_key(#tref{i=N}, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
-		    functioncall(Meth, [Key,Val], St);
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
+		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
 	    end;
 	_ ->					%Key exists
@@ -835,7 +839,7 @@ functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
 functioncall(Func, Args, Stk, St) ->
     case getmetamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St);
-	Meta -> functioncall(Meta, Args, Stk, St)
+	Meta -> functioncall(Meta, [Func|Args], Stk, St)
     end.
 
 functioncall(Fis, Lvs, Stk, Env, St0) ->

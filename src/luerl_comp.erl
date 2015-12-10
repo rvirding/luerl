@@ -154,14 +154,17 @@ do_passes([], St) -> {ok,St}.
 
 do_read_file(#comp{lfile=Name}=St) ->
     case file:read_file(Name) of
-	{ok,<<239,187,191,Bin/binary>>} ->	%Trim away a stupid BOM
-	    {ok,St#comp{code=binary_to_list(Bin)}};
 	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}};
 	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#comp{code=Str}=St) ->
-    case luerl_scan:string(Str) of
+do_scan(#comp{code=Str0}=St) ->
+    %% Trim away any stupid BOM.
+    case Str0 of
+	[239,187,191|Str1] -> ok;
+	Str1 -> ok
+    end,
+    case luerl_scan:string(Str1) of
 	{ok,Ts,_} -> {ok,St#comp{code=Ts}}; 
 	{error,E,_} -> {error,St#comp{errors=[E]}}
     end.
