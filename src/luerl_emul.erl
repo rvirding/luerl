@@ -152,18 +152,18 @@ alloc_table(Itab, #luerl{ttab=Ts0,tfree=[],tnext=N}=St) ->
     {#tref{i=N},St#luerl{ttab=Ts1,tnext=N+1}}.
 
 init_table(Itab) ->
-    T0 = ttdict:new(),
+    D0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
-    Init = fun ({_,nil}, {T,A}) -> {T,A};	%Ignore nil values
-	       ({K,V}, {T,A}) when is_number(K) ->
+    Init = fun ({_,nil}, {D,A}) -> {D,A};	%Ignore nil values
+	       ({K,V}, {D,A}) when is_number(K) ->
 		   case ?IS_INTEGER(K, I) of
-		       true when I >= 1 -> {T,array:set(I, V, A)};
-		       _NegFalse -> {ttdict:store(K, V, T),A}
+		       true when I >= 1 -> {D,array:set(I, V, A)};
+		       _NegFalse -> {ttdict:store(K, V, D),A}
 		   end;
-	       ({K,V}, {T,A}) -> {ttdict:store(K, V, T),A}
+	       ({K,V}, {D,A}) -> {ttdict:store(K, V, D),A}
 	   end,
-    {T1,A1} = lists:foldl(Init, {T0,A0}, Itab),
-    #table{a=A1,t=T1,m=nil}.
+    {D1,A1} = lists:foldl(Init, {D0,A0}, Itab),
+    #table{a=A1,d=D1,m=nil}.
 
 free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
     %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
@@ -215,22 +215,22 @@ set_table_key(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
 set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
-    #table{t=Tab0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
-    case ttdict:find(Key, Tab0) of
+    #table{d=Dict0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
+    case ttdict:find(Key, Dict0) of
 	{ok,_} ->				%Key exists
-	    Tab1 = if Val =:= nil -> ttdict:erase(Key, Tab0);
-		      true -> ttdict:store(Key, Val, Tab0)
-		   end,
-	    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+	    Dict1 = if Val =:= nil -> ttdict:erase(Key, Dict0);
+		       true -> ttdict:store(Key, Val, Dict0)
+		    end,
+	    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 	    St#luerl{ttab=Ts1};
 	error ->				%Key does not exist
 	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    %% Only add non-nil value.
-		    Tab1 = if Val =:= nil -> Tab0;
-			      true -> ttdict:store(Key, Val, Tab0)
-			   end,
-		    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+		    Dict1 = if Val =:= nil -> Dict0;
+			       true -> ttdict:store(Key, Val, Dict0)
+			    end,
+		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 		    St#luerl{ttab=Ts1};
 		Meth when element(1, Meth) =:= function ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
@@ -281,8 +281,8 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
     end.
 
 get_table_key_key(#tref{i=N}=T, Key, #luerl{ttab=Ts}=St) ->
-    #table{t=Tab,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case ttdict:find(Key, Tab) of
+    #table{d=Dict,m=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
+    case ttdict:find(Key, Dict) of
 	{ok,Val} -> {Val,St};
 	error ->
 	    %% Key not present so try metamethod
@@ -1040,8 +1040,8 @@ getmetatable(S, #luerl{meta=Meta}) when is_binary(S) ->
 getmetatable(_, _) -> nil.			%Other types have no metatables
 
 getmetamethod_tab(#tref{i=M}, E, Ts) ->
-    #table{t=Mtab} = ?GET_TABLE(M, Ts),
-    case ttdict:find(E, Mtab) of
+    #table{d=Mdict} = ?GET_TABLE(M, Ts),
+    case ttdict:find(E, Mdict) of
 	{ok,Mm} -> Mm;
 	error -> nil
     end;
@@ -1283,13 +1283,13 @@ mark([#tref{i=T}|Todo], More, St0, Sf, Tt, Ft) ->
 	    mark(Todo, More, St0, Sf, Tt, Ft);
 	false ->				%Mark it and add to todo
 	    St1 = ordsets:add_element(T, St0),
-	    #table{a=Arr,t=Tab,m=Meta} = ?GET_TABLE(T, Tt),
+	    #table{a=Arr,d=Dict,m=Meta} = ?GET_TABLE(T, Tt),
 	    %% Have to be careful where add Tab and Meta as Tab is
 	    %% [{Key,Val}], Arr is array and Meta is
 	    %% nil|#tref{i=M}. We want lists.
 	    Aes = array:sparse_to_list(Arr),
-	    Tes = ttdict:to_list(Tab),
-	    mark([Meta|Todo], [[{in_table,T}],Tes,Aes,[{in_table,-T}]|More],
+	    Des = ttdict:to_list(Dict),
+	    mark([Meta|Todo], [[{in_table,T}],Des,Aes,[{in_table,-T}]|More],
 		 St1, Sf, Tt, Ft)
     end;
 mark([#fref{i=F}|Todo], More, St, Sf0, Tt, Ft) ->

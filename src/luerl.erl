@@ -343,11 +343,11 @@ decode_table(N, St, In0) ->
 	false ->
 	    In1 = [N|In0],			%We are in this as well
 	    case ?GET_TABLE(N, St#luerl.ttab) of
-		#table{a=Arr,t=Tab} ->
+		#table{a=Arr,d=Dict} ->
 		    Fun = fun (K, V, Acc) ->
 				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
 			  end,
-		    Ts = ttdict:fold(Fun, [], Tab),
+		    Ts = ttdict:fold(Fun, [], Dict),
 		    array:sparse_foldr(Fun, Ts, Arr);
 		_Undefined -> error(badarg)
 	    end

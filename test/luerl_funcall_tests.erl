@@ -76,4 +76,3 @@ newindex_metamethod_test() ->
     {[TVal, MVal], _State1} = luerl:do(<<"local t = {}\nlocal m = setmetatable({}, {__newindex = function (tab, key, value)\n  t[key] = value\nend})\n\nm[123] = 456\nreturn t[123], m[123]">>, State),
     ?assertEqual(TVal, 456.0),
     ?assertEqual(MVal, nil).
-
