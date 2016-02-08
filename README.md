@@ -165,8 +165,8 @@ At the command line you are seeing the Lua State dumped, that is returned by the
     luerl:dofile("./examples/hello/hello.lua").
 
 #### separately parse, then execute
-    {ok, Chunk} = luerl:load("print(\"Hello, Chunk!\")"),
-    State = luerl:init(),
+    EmptyState = luerl:init(),
+    {ok, Chunk, State} = luerl:load("print(\"Hello, Chunk!\")", EmptyState),
     {_Ret, _NewState} = luerl:do(Chunk, State).
 
 #### call a function in the state
@@ -187,7 +187,7 @@ executes the call `g.h:i("a", "b", 42)` in `State0`.
 
 the method can be called like this:
 
-    luerl:do(<<print(inc(4))>>", State1)
+    luerl:do("<<print(inc(4))>>", State1)
 
 For more examples see `examples/hello/hello2.erl`.
 

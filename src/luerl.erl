@@ -277,6 +277,7 @@ encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
 encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
+encode(F, St) when is_map(F) -> encode(maps:to_list(F), St);
 encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
 					  {K1,S1} = encode(K0, S0),
