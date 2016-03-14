@@ -143,27 +143,27 @@ pairs(As, St) -> badarg_error(pairs, As, St).
 
 next([A], St) -> next([A,nil], St);
 next([#tref{i=T},K|_], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
+    #table{a=Arr,d=Dict} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
     if K == nil ->
 	    %% Find the first, start with the array.
-	    %% io:format("n: ~p\n", [{Arr,Tab}]),
-	    next_index(0, Arr, Tab, St);
+	    %% io:format("n: ~p\n", [{Arr,Dict}]),
+	    next_index(0, Arr, Dict, St);
        is_number(K) ->
 	    case ?IS_INTEGER(K, I0) of
 		true when I0 >= 1 ->
-		    next_index(I0, Arr, Tab, St);
-		_NegFalse -> next_key(K, Tab, St)	%Not integer or negative
+		    next_index(I0, Arr, Dict, St);
+		_NegFalse -> next_key(K, Dict, St)	%Not integer or negative
 	    end;
-       true -> next_key(K, Tab, St)
+       true -> next_key(K, Dict, St)
     end;
 next(As, St) -> badarg_error(next, As, St).
 
-next_index(I0, Arr, Tab, St) ->
+next_index(I0, Arr, Dict, St) ->
     case next_index_loop(I0+1, Arr, array:size(Arr)) of
 	{I1,V} -> {[float(I1),V],St};
 	none ->
 	    %% Nothing in the array, take table instead.
-	    first_key(Tab, St)
+	    first_key(Dict, St)
     end.
 
 next_index_loop(I, Arr, S) when I < S ->
@@ -173,14 +173,14 @@ next_index_loop(I, Arr, S) when I < S ->
     end;
 next_index_loop(_, _, _) -> none.
 
-first_key(Tab, St) ->
-    case ttdict:first(Tab) of
+first_key(Dict, St) ->
+    case ttdict:first(Dict) of
 	{ok,{K,V}} -> {[K,V],St};
 	error -> {[nil],St}
     end.
 
-next_key(K, Tab, St) ->
-    case ttdict:next(K, Tab) of
+next_key(K, Dict, St) ->
+    case ttdict:next(K, Dict) of
 	{ok,{N,V}} -> {[N,V],St};
 	error -> {[nil],St}
     end.
@@ -208,55 +208,55 @@ rawlen([#tref{}=T|_], St) ->
 rawlen(As, St) -> badarg_error(rawlen, As, St).
 
 rawget([#tref{i=N},K|_], St) when is_number(K) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
     V = case ?IS_INTEGER(K, I) of
 	    true when I >= 1 ->			%Array index
 		raw_get_index(Arr, I);
 	    _NegFalse ->			%Negative or false
-		raw_get_key(Tab, K)
+		raw_get_key(Dict, K)
 	end,
     {[V],St};
 rawget([#tref{i=N},K|_], St) ->
-    #table{t=Tab} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
-    V = raw_get_key(Tab, K),
+    #table{d=Dict} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
+    V = raw_get_key(Dict, K),
     {[V],St};
 rawget(As, St) -> badarg_error(rawget, As, St).
 
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_number(K) ->
-    #table{a=Arr0,t=Tab0}=T = ?GET_TABLE(N, Ts0),
+    #table{a=Arr0,d=Dict0}=T = ?GET_TABLE(N, Ts0),
     Ts1 = case ?IS_INTEGER(K, I) of
 	      true when I >= 1 ->
 		  Arr1 = raw_set_index(Arr0, I, V),
 		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
 	      _NegFalse ->			%Negative or false
-		  Tab1 = raw_set_key(Tab0, K, V),
-		  ?SET_TABLE(N, T#table{t=Tab1}, Ts0)
+		  Dict1 = raw_set_key(Dict0, K, V),
+		  ?SET_TABLE(N, T#table{d=Dict1}, Ts0)
 	  end,
     {[Tref],St#luerl{ttab=Ts1}};
 rawset([Tref,nil=K,_|_], St) ->
     lua_error({illegal_index,Tref,K}, St);
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) ->
-    #table{t=Tab0}=T = ?GET_TABLE(N, Ts0),
-    Tab1 = raw_set_key(Tab0, K, V),
-    Ts1 = ?SET_TABLE(N, T#table{t=Tab1}, Ts0),
+    #table{d=Dict0}=T = ?GET_TABLE(N, Ts0),
+    Dict1 = raw_set_key(Dict0, K, V),
+    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
     {[Tref],St#luerl{ttab=Ts1}};
 rawset(As, St) -> badarg_error(rawset, As, St).
 
 %% raw_get_index(Array, Index) -> nil | Value.
-%% raw_get_key(Table, Key) -> nil | Value.
+%% raw_get_key(Dict, Key) -> nil | Value.
 
 raw_get_index(Arr, I) -> array:get(I, Arr).
 
-raw_get_key(Tab, K) ->
-    case ttdict:find(K, Tab) of
+raw_get_key(Dict, K) ->
+    case ttdict:find(K, Dict) of
 	{ok,V} -> V;
 	error -> nil
     end.
 
 raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
 
-raw_set_key(Tab, K, nil) -> ttdict:erase(K, Tab);
-raw_set_key(Tab, K, V) -> ttdict:store(K, V, Tab).
+raw_set_key(Dict, K, nil) -> ttdict:erase(K, Dict);
+raw_set_key(Dict, K, V) -> ttdict:store(K, V, Dict).
 
 %% select(Args, State) -> {[Element],State}.
 
@@ -332,8 +332,8 @@ type(_) -> <<"unknown">>.
 getmetatable([O|_], St) ->
     case luerl_emul:getmetatable(O, St) of
 	#tref{i=N}=Meta ->
-	    #table{t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
-	    case ttdict:find(<<"__metatable">>, Tab) of
+	    #table{d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+	    case ttdict:find(<<"__metatable">>, Dict) of
 		{ok,MM} -> {[MM],St};
 		error -> {[Meta],St}
 	    end;

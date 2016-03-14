@@ -124,9 +124,9 @@ format_error(invalid_pattern) ->		%Keep text!
 format_error(invalid_capture) ->		%Keep text!
     io_lib:format("malformed pattern", []);
 format_error({invalid_char_class,C}) ->		%Keep text!
-    io_lib:format("malformed pattern: class ~c", [C]);
+    io_lib:format("malformed pattern (class ~c)", [C]);
 format_error(invalid_char_set) ->		%Keep text!
-    io_lib:format("malformed pattern: missing ]", []);
+    io_lib:format("malformed pattern (missing ']')", []);
 %% Illegal or undefined ops.
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);

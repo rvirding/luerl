@@ -1,7 +1,7 @@
 Luerl - an implementation of Lua in Erlang
 ==========================================
 
-An experimental implementation of Lua 5.2 written solely in pure Erlang.
+Luerl is an implementation of Lua 5.2 written solely in pure Erlang.
 
 Some things which are known not to be implemented or work properly:
 
@@ -82,7 +82,7 @@ Please avoid directly accessing functions in other modules which haven't been de
 **KeyPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.  
 **Keys** I don't know
 
-**Eaxmples**
+**Examples**
 See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
 ####Note####
@@ -143,7 +143,7 @@ Call a method already defined in the state. `MethPath` is a list of keys to the 
 
 #### luerl:set_table(Path, Value, State) -> State.
  Sets a value inside the Lua state. Value is automatically encoded.
- 
+
  You can use this function to expose an function to the Lua code by
  using this interface:
    fun(Args, State) -> {Results, State}
@@ -318,6 +318,10 @@ Currently implemented functions in the libraries
 - bit32\.rrotate
 - bit32\.extract
 - bit32\.replace
+- debug\.getmetatable
+- debug\.getuservalue
+- debug\.setmetatable
+- debug\.setuservalue
 
 
 Known Bugs

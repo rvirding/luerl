@@ -48,7 +48,7 @@
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
--record(table, {a,t=[],m=nil}).			%Table type, array, tab, meta
+-record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 %% There are two function types, this the Lua one, and an Erlang one

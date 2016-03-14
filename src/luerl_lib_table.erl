@@ -63,12 +63,12 @@ concat(As, St0) ->
     end.
 
 do_concat([#tref{i=N}|As], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
     case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
 	[Sep,I] ->
-	    {[do_concat(Arr, Tab, Sep, I, length_loop(Arr))],St};
+	    {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
-	    {[do_concat(Arr, Tab, Sep, I, J)],St};
+	    {[do_concat(Arr, Dict, Sep, I, J)],St};
 	_ -> throw({error,{badarg,concat,As},St})
     end;
 do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
@@ -79,13 +79,13 @@ do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 %%  Erlang.
 
 concat(#tref{i=N}, Sep, I, St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
     J = length_loop(Arr),
-    do_concat(Arr, Tab, Sep, I, J).
+    do_concat(Arr, Dict, Sep, I, J).
 
 concat(#tref{i=N}, Sep, I, J, St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
-    do_concat(Arr, Tab, Sep, I, J).
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+    do_concat(Arr, Dict, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
 
@@ -97,12 +97,12 @@ concat_args([Sep,I]) -> [Sep,I];
 concat_args([Sep,I,nil|_]) -> [Sep,I];
 concat_args([Sep,I,J|_]) -> [Sep,I,J].
 
-do_concat(Arr, Tab, Sep, I, J) ->
-    Conc = concat_table(Arr, Tab, I, J),
+do_concat(Arr, Dict, Sep, I, J) ->
+    Conc = concat_table(Arr, Dict, I, J),
     concat_join(Conc, Sep).
 
-concat_table(Arr, Tab, I, J) ->
-    concat_tab(Arr, Tab, I, J).
+concat_table(Arr, Dict, I, J) ->
+    concat_tab(Arr, Dict, I, J).
 
 %% This and unpack_loop are very similar.
 %% First scan over table up to 0 then the array. We have the indexes
@@ -112,12 +112,12 @@ concat_table(Arr, Tab, I, J) ->
 concat_tab(_, _, N, J) when N > J -> [];	%Done
 concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
     concat_arr(Arr, N, J);
-concat_tab(Arr, Tab, N, J) ->
-    case ttdict:find(N, Tab) of
+concat_tab(Arr, Dict, N, J) ->
+    case ttdict:find(N, Dict) of
 	{ok,V} ->
 	    case luerl_lib:to_list(V) of
 		nil -> throw({error,{illegal_val,concat,V}});
-		S -> [S|concat_tab(Arr, Tab, N+1, J)]
+		S -> [S|concat_tab(Arr, Dict, N+1, J)]
 	    end;
 	error -> throw({error,{illegal_val,concat,nil}})
     end.
@@ -187,18 +187,18 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 
 remove([#tref{i=N}], St) ->
     Ts0 = St#luerl.ttab,
-    #table{a=Arr0,t=Tab0} = T = ?GET_TABLE(N, Ts0),
-    {Ret,Arr1,Tab1} = do_remove_last(Arr0, Tab0),
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
+    #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
+    {Ret,Arr1,Dict1} = do_remove_last(Arr0, Dict0),
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
     {Ret,St#luerl{ttab=Ts1}};
 remove([#tref{i=N},P0|_]=As, St) ->
     Ts0 = St#luerl.ttab,
-    #table{a=Arr0,t=Tab0} = T = ?GET_TABLE(N, Ts0),
+    #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
     case luerl_lib:to_int(P0) of
 	P1 when P1 =/= nil ->
-	    case do_remove(Arr0, Tab0, P1) of
-		{Ret,Arr1,Tab1} ->
-		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,t=Tab1}, Ts0),
+	    case do_remove(Arr0, Dict0, P1) of
+		{Ret,Arr1,Dict1} ->
+		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
 		    {Ret,St#luerl{ttab=Ts1}};
 		badarg -> badarg_error(remove, As, St)
 	    end;
@@ -206,47 +206,47 @@ remove([#tref{i=N},P0|_]=As, St) ->
     end;
 remove(As, St) -> badarg_error(remove, As, St).
 
-test_remove(Arr, Tab) -> do_remove_last(Arr, Tab).
-test_remove(Arr, Tab, N) -> do_remove(Arr, Tab, N). 
+test_remove(Arr, Dict) -> do_remove_last(Arr, Dict).
+test_remove(Arr, Dict, N) -> do_remove(Arr, Dict, N). 
 
-%% do_remove_last(Array, Table) -> {Return,Array,Table}.
+%% do_remove_last(Array, Dict) -> {Return,Array,Dict}.
 %%  Find the length and remove the last element. Return it even if it
 %%  is nil.
 
-do_remove_last(Arr0, Tab0) ->
+do_remove_last(Arr0, Dict0) ->
     case length_loop(Arr0) of
 	0 ->
-	    do_remove_0(Arr0, Tab0);
+	    do_remove_0(Arr0, Dict0);
 	Size ->
 	    Val = array:get(Size, Arr0),
 	    Arr1 = array:set(Size, nil, Arr0),
-	    {[Val],Arr1,Tab0}
+	    {[Val],Arr1,Dict0}
     end.
 
-do_remove_0(Arr, Tab0) ->
-    case ttdict:find(0.0, Tab0) of
+do_remove_0(Arr, Dict0) ->
+    case ttdict:find(0.0, Dict0) of
 	{ok,Val} ->
-	    Tab1 = ttdict:erase(0.0, Tab0),
-	    {[Val],Arr,Tab1};
+	    Dict1 = ttdict:erase(0.0, Dict0),
+	    {[Val],Arr,Dict1};
 	error ->
-	    {[nil],Arr,Tab0}
+	    {[nil],Arr,Dict0}
     end.
 
-%% do_remove(Array, Table, P) -> {Return,Array,Table} | badarg.
+%% do_remove(Array, Dict, P) -> {Return,Array,Dict} | badarg.
 %%  Don't ask, it tries to emulate the "real" Lua, where we can't
-%%  remove elements elements outside of the "proper" 1..n table.
+%%  remove elements elements outside of the "proper" 1..n dict.
 
-do_remove(Arr, Tab, P) ->
-    do_remove(Arr, Tab, P, length_loop(Arr)).
+do_remove(Arr, Dict, P) ->
+    do_remove(Arr, Dict, P, length_loop(Arr)).
 
-do_remove(Arr, Tab, 0, 0) ->
-    do_remove_0(Arr, Tab);
-do_remove(Arr, Tab, 1, 0) ->
-    {[nil],Arr,Tab};
-do_remove(Arr0, Tab, P, Size) when P >= 1, P =< Size+1 ->
+do_remove(Arr, Dict, 0, 0) ->
+    do_remove_0(Arr, Dict);
+do_remove(Arr, Dict, 1, 0) ->
+    {[nil],Arr,Dict};
+do_remove(Arr0, Dict, P, Size) when P >= 1, P =< Size+1 ->
     Ret = array:get(P, Arr0),
     Arr1 = remove_array_1(Arr0, P),
-    {[Ret],Arr1,Tab};
+    {[Ret],Arr1,Dict};
 do_remove(_, _, _, _) -> badarg.
 
 remove_array_1(Arr0, N) ->
@@ -270,14 +270,14 @@ pack_loop([], N) -> [{<<"n">>,N}].
 %% unpack - unpack table into return values.
 
 unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr,t=Tab} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
     case luerl_lib:to_ints(unpack_args(As)) of
 	[I] ->
-	    Unp = do_unpack(Arr, Tab, I, length_loop(Arr)),
+	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
 	    {Unp,St};
 	[I,J] ->
-	    Unp = do_unpack(Arr, Tab, I, J),
+	    Unp = do_unpack(Arr, Dict, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
 	nil -> badarg_error(unpack, [T|As], St)	%Not numbers
@@ -298,17 +298,17 @@ unpack_args([I,J|_]) -> [I,J].			%Only use two arguments
 %% and limits as integers and explicitly use '==' to compare with
 %% float values in table.
 
-do_unpack(Arr, Tab, I, J) -> unpack_tab(Arr, Tab, I, J).
+do_unpack(Arr, Dict, I, J) -> unpack_tab(Arr, Dict, I, J).
 
 unpack_tab(_, _, N, J) when N > J -> [];	%Done
 unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
     unpack_arr(Arr, N, J);
-unpack_tab(Arr, Tab, N, J) ->
-    E = case ttdict:find(N, Tab) of
+unpack_tab(Arr, Dict, N, J) ->
+    E = case ttdict:find(N, Dict) of
 	    {ok,V} -> V;
 	    error -> nil
 	end,
-    [E|unpack_tab(Arr, Tab, N+1, J)].
+    [E|unpack_tab(Arr, Dict, N+1, J)].
 
 unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
