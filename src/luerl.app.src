@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2016 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -13,14 +13,13 @@
 %% limitations under the License.
 
 {application, luerl,
- [
-  {description, "Luerl - an implementation of Lua on Erlang"},
-  {vsn, "1"},
+ [{description, "Luerl - an implementation of Lua on Erlang"},
+  {vsn, "0.3"},
+  {modules, []},
   {registered, []},
-  {applications, [
-                  kernel,
-                  stdlib
-                 ]},
-  {mod, { luerl_app, []}},
-  {env, []}
+  {applications, [kernel, stdlib]},
+  {env, []},
+  {mod, {luerl_app, []}},
+  {maintainers, ["Robert Virding"]},
+  {licenses, ["Apache"]}
  ]}.

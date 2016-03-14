@@ -1,7 +1,7 @@
 Luerl - an implementation of Lua in Erlang
 ==========================================
 
-An experimental implementation of Lua 5.2 written solely in pure Erlang.
+Luerl is an implementation of Lua 5.2 written solely in pure Erlang.
 
 Some things which are known not to be implemented or work properly:
 
