@@ -82,7 +82,7 @@ Please avoid directly accessing functions in other modules which haven't been de
 **KeyPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.  
 **Keys** I don't know
 
-**Eaxmples**
+**Examples**
 See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
 ####Note####
