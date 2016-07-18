@@ -42,7 +42,7 @@ $(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
 	erlc -o $(SRCDIR) $<
 
 clean:
-	@ rm -rf $(BEAMDIR)
+	@ rm -f $(BEAMDIR)/*.beam
 	@ rm -f *.beam
 	@ rm -f erl_crash.dump
 	@ rm -f $(XRL_INTERM)
