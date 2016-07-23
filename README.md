@@ -187,7 +187,7 @@ executes the call `g.h:i("a", "b", 42)` in `State0`.
 
 the method can be called like this:
 
-    luerl:do("<<print(inc(4))>>", State1)
+    luerl:do(<<"print(inc(4))">>, State1)
 
 For more examples see `examples/hello/hello2.erl`.
 
