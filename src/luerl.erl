@@ -303,6 +303,11 @@ encode(F, St) when is_function(F, 1) ->
 		 encode_list(Res, State)
 	 end,
     {{function, F1}, St};
+encode({userdata, Obj}, St) ->
+    {#userdata{d = Obj}, St};
+encode({userdata, Obj, Meta}, St) ->
+    {MetaTab, _} = luerl_emul:get_table_keys(Meta, St),
+    {#userdata{d = Obj, m = MetaTab}, St};
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
@@ -336,6 +341,7 @@ decode(#function{}=Fun, State, _) ->
 		decode_list(Ret, State2)
 	end,
     {function, F};
+decode(#userdata{d=Obj}, St, _) -> Obj;
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->

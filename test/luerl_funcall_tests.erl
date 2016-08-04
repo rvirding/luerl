@@ -76,3 +76,24 @@ newindex_metamethod_test() ->
     {[TVal, MVal], _State1} = luerl:do(<<"local t = {}\nlocal m = setmetatable({}, {__newindex = function (tab, key, value)\n  t[key] = value\nend})\n\nm[123] = 456\nreturn t[123], m[123]">>, State),
     ?assertEqual(TVal, 456.0),
     ?assertEqual(MVal, nil).
+
+%% A nonsense example, as an array is used for the underlying table strutures in luerl,
+%% but its a convenient test of the userdata techniques
+userdata_fix_test() ->
+    St0 = luerl:init(),
+    UD = array:from_list([10.0,20.0,30.0,40.0,50.0]),
+    AccessFun = fun([A, K], St) ->
+                        {[array:get(erlang:trunc(K), A)], St}
+                end,
+    St1 = luerl:set_table([<<"testmeta">>],
+                          [{<<"__index">>, AccessFun}], St0),
+    St2 = luerl:set_table([<<"test">>], {userdata, UD, [<<"testmeta">>]}, St1),
+    
+    %% Test results...
+    {UD1, _} = luerl:get_table([<<"test">>], St2),
+    {[Val1, Val2, Val20], _} = luerl:do("return test[1], test[2], test[20]", St2),
+    ?assertEqual(UD, UD1),
+    ?assertEqual(Val1, 20.0),
+    ?assertEqual(Val2, 30.0),
+    ?assertEqual(Val20, <<"undefined">>).
+
