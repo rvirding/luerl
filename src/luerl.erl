@@ -341,7 +341,7 @@ decode(#function{}=Fun, State, _) ->
 		decode_list(Ret, State2)
 	end,
     {function, F};
-decode(#userdata{d=Obj}, St, _) -> Obj;
+decode(#userdata{d=Obj}, _, _) -> Obj;
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->

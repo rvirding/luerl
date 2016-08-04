@@ -85,15 +85,23 @@ userdata_fix_test() ->
     AccessFun = fun([A, K], St) ->
                         {[array:get(erlang:trunc(K), A)], St}
                 end,
+    SetFun = fun([A, K, V], St) ->
+                     {[{userdata, array:set(erlang:trunc(K), V, A)}], St}
+             end,
     St1 = luerl:set_table([<<"testmeta">>],
-                          [{<<"__index">>, AccessFun}], St0),
+                          [{<<"__index">>, AccessFun}
+                           , {<<"__newindex">>, SetFun}], St0),
     St2 = luerl:set_table([<<"test">>], {userdata, UD, [<<"testmeta">>]}, St1),
+    {_, St3} = luerl:do("test[2] = 300", St2),
+    St4 = luerl:set_table([<<"test">>], {userdata, array:from_list([1,2,3]), [<<"testmeta">>]}, St3),
     
     %% Test results...
     {UD1, _} = luerl:get_table([<<"test">>], St2),
-    {[Val1, Val2, Val20], _} = luerl:do("return test[1], test[2], test[20]", St2),
+    {[Val1, Val2, Val20], _} = luerl:do("return test[1], test[2], test[20]", St3),
+    {[Val4], _} = luerl:do("return test[0]", St4),
+    
     ?assertEqual(UD, UD1),
     ?assertEqual(Val1, 20.0),
-    ?assertEqual(Val2, 30.0),
-    ?assertEqual(Val20, <<"undefined">>).
-
+    ?assertEqual(Val2, 300.0),
+    ?assertEqual(Val20, <<"undefined">>),
+    ?assertEqual(Val4, 1).
