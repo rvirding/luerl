@@ -32,6 +32,8 @@
 
 -import(lists, [member/2,keysearch/3,mapfoldl/3]).
 
+-include_lib("kernel/include/file.hrl").
+
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
@@ -108,8 +110,9 @@ compile(Ps, St0) ->
 %%  {done,PrintFun,Ext}
 
 file_passes() ->				%Reading from file
-    [{do,fun do_read_file/1}|
-     list_passes()].
+    [{do,fun do_read_file/1},
+     {do,fun do_parse/1}|
+     forms_passes()].
 
 list_passes() ->				%Scanning string
     [{do,fun do_scan/1},
@@ -149,22 +152,31 @@ do_passes([], St) -> {ok,St}.
 %% do_scan(State) -> {ok,State} | {error,State}.
 %% do_parse(State) -> {ok,State} | {error,State}.
 %% do_pass_1(State) -> {ok,State} | {error,State}.
-%% do_return(State) -> {ok,State}.
 %%  The actual compiler passes.
 
 do_read_file(#comp{lfile=Name}=St) ->
-    case file:read_file(Name) of
-	{ok,Bin} -> {ok,St#comp{code=binary_to_list(Bin)}};
+    %% Read the bytes in a file skipping an initial # line or Windows BOM.
+    case file:open(Name, [read]) of
+	{ok,F} ->
+	    %% Check if first line a script or Windows BOM, if so skip it.
+	    case io:get_line(F, '') of
+		"#" ++ _ -> ok;			%Skip line
+		[239,187,191|_] ->
+		    file:position(F, 3);	%Skip BOM
+		_ -> file:position(F, bof)	%Get it all
+	    end,
+	    %% Now read the file.
+	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
+		      {ok,Ts,_} -> {ok,St#comp{code=Ts}};
+		      {error,E,L} -> {error,St#comp{errors=[{L,io,E}]}}
+		  end,
+	    file:close(F),
+	    Ret;
 	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#comp{code=Str0}=St) ->
-    %% Trim away any stupid BOM.
-    case Str0 of
-	[239,187,191|Str1] -> ok;
-	Str1 -> ok
-    end,
-    case luerl_scan:string(Str1) of
+do_scan(#comp{code=Str}=St) ->
+    case luerl_scan:string(Str) of
 	{ok,Ts,_} -> {ok,St#comp{code=Ts}}; 
 	{error,E,_} -> {error,St#comp{errors=[E]}}
     end.
