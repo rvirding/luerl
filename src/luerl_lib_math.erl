@@ -208,14 +208,26 @@ rad(As, St) ->
 	_ -> badarg_error(sinh, As, St)
     end.
 
+%% Use the correct random number module.
+
+-ifdef(NEW_RAND).
+-define(RAND_UNIFORM(), rand:uniform()).
+-define(RAND_UNIFORM(L), rand:uniform(L)).
+-define(RAND_SEED(S1,S2,S3), rand:seed(exs1024, {S1,S2,S3})).
+-else.
+-define(RAND_UNIFORM(), random:uniform()).
+-define(RAND_UNIFORM(L), random:uniform(L)).
+-define(RAND_SEED(S1,S2,S3), random:seed(S1, S2, S3)).
+-endif.
+
 random(As, St) ->
     case luerl_lib:to_ints(As) of
-	[] -> {[random:uniform()],St};		%0-1.0
+	[] -> {[?RAND_UNIFORM()],St};		%0-1.0
 	[M] when M > 1 ->
-	    R = random:uniform(M),
+	    R = ?RAND_UNIFORM(M),
 	    {[float(R)],St};
 	[M,N] when N > M ->
-	    R = random:uniform(N - M),
+	    R = ?RAND_UNIFORM(N - M),
 	    {[float(R + M)],St};
 	_ -> badarg_error(random, As, St)
     end.
@@ -225,7 +237,7 @@ randomseed(As, St) ->
 	[S|_] ->
 	    %% Split float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
-	    random:seed(A1, A2, A3),
+	    ?RAND_SEED(A1, A2, A3),
 	    {[],St};
 	_ -> badarg_error(randomseed, As, St)
     end.
