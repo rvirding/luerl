@@ -21,7 +21,7 @@ main(_) ->
     file:write_file("comp_opts.mk", "COMP_OPTS = " ++ CompOpts ++ "\n").
 
 comp_opts(Version) ->
-    Copts0 = "-DERLANG_VERSION=" ++ Version,
+    Copts0 = "-DERLANG_VERSION=\\\"" ++ Version ++ "\\\"",
     Copts1 = ?IF(Version >= "17", Copts0 ++ " " ++ ?HAS_MAPS_OPT, Copts0),
     Copts2 = ?IF(Version >= "18", Copts1 ++ " " ++ ?FULL_KEYS_OPT, Copts1),
     Copts3 = ?IF(Version >= "19",
@@ -38,11 +38,25 @@ append_copts([]) -> [].
 
 otp_release() ->
     case erlang:system_info(otp_release) of
-        [$R,N1,N2|_] when is_integer(N1), is_integer(N2) ->
+        [$R,N1|Rest] when is_integer(N1) ->
             %% If OTP <= R16, take the digits.
-            [N1,N2];
+            [N1|Rest];
         Rel ->
-            %% If OTP >= 17.x, erlang:system_info(otp_release) returns just
-            %% the major version number.
-            Rel
+            %% If OTP >= 17.x, erlang:system_info(otp_release) returns
+            %% just the major version number.
+            File = filename:join([code:root_dir(),"releases",Rel,"OTP_VERSION"]),
+            case file:read_file(File) of
+                {error, _} -> Rel;
+                {ok, Vsn} ->
+                    Size = byte_size(Vsn),
+                    %% The shortest vsn string consists of at least
+                    %% two digits followed by "\n". Therefore, it's
+                    %% safe to assume Size >= 3.
+                    case binary:part(Vsn, {Size, -3}) of
+                        <<"**\n">> ->
+                            binary:bin_to_list(Vsn, {0, Size - 3});
+                        _ ->
+                            binary:bin_to_list(Vsn, {0, Size - 1})
+                    end
+            end
     end.
