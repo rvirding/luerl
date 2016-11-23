@@ -67,4 +67,4 @@ debug:
 .PHONY: all examples clean
 
 # this protects the intermediate .erl files from make's auto deletion
-.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
+#.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
