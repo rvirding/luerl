@@ -212,9 +212,19 @@ set_table_key(Tab, nil=Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St);
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
+set_table_key(#userdata{} = U, Key, Val, St) ->
+    set_table_key_key(U, Key, Val, St);
 set_table_key(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
+set_table_key_key(#userdata{m=Meta}=U, Key, Val, #luerl{ttab=Ts0}=St) ->
+    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
+        Meth when element(1, Meth) =:= function ->
+            {_Ret, St1} = functioncall(Meth, [U, Key, Val], St),
+            St1;
+        _ ->
+            lua_error({illegal_index, U, Key}, St)
+    end;
 set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
     #table{d=Dict0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case ttdict:find(Key, Dict0) of

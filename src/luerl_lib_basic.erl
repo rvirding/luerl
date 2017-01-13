@@ -344,8 +344,17 @@ setmetatable([#tref{}=T,#tref{}=M|_], St) ->
     do_setmetatable(T, M, St);
 setmetatable([#tref{}=T,nil|_], St) ->
     do_setmetatable(T, nil, St);
+setmetatable([#userdata{} = U, #tref{}=M|_], St) ->
+    do_setmetatable(U, M, St);
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
+do_setmetatable(#userdata{} = U, M, St) ->
+    case luerl_emul:getmetamethod(U, <<"__metatable">>, St) of
+    nil ->
+        Ts = ?UPD_TABLE(U, fun (Tab) -> Tab#userdata{m=M} end, St#luerl.ttab),
+        {[U],St#luerl{ttab=Ts}};
+    _ -> badarg_error(setmetatable, [U], St)
+    end;
 do_setmetatable(#tref{i=N}=T, M, St) ->
     case luerl_emul:getmetamethod(T, <<"__metatable">>, St) of
 	nil ->
