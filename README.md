@@ -85,7 +85,7 @@ Please avoid directly accessing functions in other modules which haven't been de
 **Examples**
 See below and files `hello.erl` and especially `hello2.erl` in `examples/hello/`.
 
-####Note####
+#### Note ####
 
 As it is possible in Lua to create self-referencing data structures, indeed the standard libraries have many instances of this, then using the functions which decode their return values can cause an infinite loop during the decoding. An simple example is the top level table which contains a key **_G** which references the top-level table.
 
