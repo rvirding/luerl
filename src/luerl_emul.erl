@@ -1212,17 +1212,22 @@ le_meta(Op, A1, A2, St0) ->
     end.
 
 concat_op(A1, A2) ->
-    case luerl_lib:tostring(A1) of
-	nil ->
-	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-	S1 ->
-	    case luerl_lib:tostring(A2) of
-		nil ->
-		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-		S2 ->
-		    {ok,<<S1/binary,S2/binary>>}
-	    end
-    end.
+  case application:get_env(luerl, no_string_ops) of
+    {ok, true} ->
+      {error, {forbidden, concat_op}};
+    _ ->
+      case luerl_lib:tostring(A1) of
+        nil ->
+          {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+        S1 ->
+          case luerl_lib:tostring(A2) of
+            nil ->
+              {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+            S2 ->
+              {ok,<<S1/binary,S2/binary>>}
+          end
+      end
+  end.
 
 concat_meta(A1, A2, St0) ->
     case getmetamethod(A1, A2, <<"__concat">>, St0) of
