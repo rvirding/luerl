@@ -14,12 +14,13 @@
 
 {application, luerl,
  [{description, "Luerl - an implementation of Lua on Erlang"},
-  {vsn, "0.3"},
+  {vsn, "0.3.0"},
   {modules, []},
   {registered, []},
   {applications, [kernel, stdlib]},
   {env, []},
   {mod, {luerl_app, []}},
   {maintainers, ["Robert Virding"]},
-  {licenses, ["Apache"]}
+  {licenses, ["Apache"]},
+  {links,[{"Github", "https://github.com/rvirding/luerl"}]}
  ]}.
