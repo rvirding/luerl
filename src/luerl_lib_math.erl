@@ -18,12 +18,15 @@
 
 -module(luerl_lib_math).
 
+-include("luerl.hrl").
+
 -export([install/1,fmod/2,frexp/2]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    St2 = St#luerl{rnd = rand:seed_s(exs1024)},
+    luerl_emul:alloc_table(table(), St2).
 
 table() ->
     [{<<"abs">>,{function,fun abs/2}},
@@ -208,37 +211,27 @@ rad(As, St) ->
 	_ -> badarg_error(sinh, As, St)
     end.
 
-%% Use the correct random number module.
-
--ifdef(NEW_RAND).
--define(RAND_UNIFORM(), rand:uniform()).
--define(RAND_UNIFORM(L), rand:uniform(L)).
--define(RAND_SEED(S1,S2,S3), rand:seed(exs1024, {S1,S2,S3})).
--else.
--define(RAND_UNIFORM(), random:uniform()).
--define(RAND_UNIFORM(L), random:uniform(L)).
--define(RAND_SEED(S1,S2,S3), random:seed(S1, S2, S3)).
--endif.
-
 random(As, St) ->
-    case luerl_lib:to_ints(As) of
-	[] -> {[?RAND_UNIFORM()],St};		%0-1.0
-	[M] when M > 1 ->
-	    R = ?RAND_UNIFORM(M),
-	    {[float(R)],St};
-	[M,N] when N > M ->
-	    R = ?RAND_UNIFORM(N - M),
-	    {[float(R + M)],St};
-	_ -> badarg_error(random, As, St)
-    end.
+  case luerl_lib:to_ints(As) of
+    [] ->
+      {R, NewRnd} = rand:uniform_s(St#luerl.rnd),
+      {[R], St#luerl{rnd = NewRnd}};		%0-1.0
+    [M] when M > 1 ->
+      {R, NewRnd} = rand:uniform_s(M, St#luerl.rnd),
+      {[float(R)], St#luerl{rnd = NewRnd}};
+    [M,N] when N > M ->
+      {R, NewRnd} = rand:uniform_s(N - M, St#luerl.rnd),
+      {[float(R + M)], St#luerl{rnd = NewRnd}};
+    _ -> badarg_error(random, As, St)
+  end.
 
 randomseed(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[S|_] ->
 	    %% Split float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
-	    ?RAND_SEED(A1, A2, A3),
-	    {[],St};
+	    Rnd = rand:seed_s(exs1024, {A1, A2, A3}),
+        {[],St#luerl{rnd=Rnd}};
 	_ -> badarg_error(randomseed, As, St)
     end.
 
