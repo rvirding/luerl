@@ -28,7 +28,8 @@
 		stk=[],				%Current stack
 		%%
 		meta=[],			%Data type metatables
-		tag				%Unique tag
+    rnd, %Random state
+    tag				%Unique tag
 	       }).
 
 -record(heap, {ttab,tfree,tnext,
