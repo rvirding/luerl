@@ -18,12 +18,32 @@
 
 -module(luerl_lib_math).
 
+-include("luerl.hrl").
+
 -export([install/1,fmod/2,frexp/2]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
-install(St) ->
-    luerl_emul:alloc_table(table(), St).
+%% Use the correct random number module.
+
+-ifdef(NEW_RAND).
+-define(RAND_UNIFORM(S), rand:uniform_s(S)).
+-define(RAND_UNIFORM(L, S), rand:uniform_s(L, S)).
+-define(RAND_SEED(), rand:seed_s(exs1024)).
+-define(RAND_SEED(S1,S2,S3), rand:seed_s(exs1024, {S1,S2,S3})).
+-else.
+-define(RAND_UNIFORM(S), random:uniform_s(S)).
+-define(RAND_UNIFORM(L, S), random:uniform_s(L, S)).
+-define(RAND_SEED(), random:seed0()).
+-define(RAND_SEED(S1,S2,S3),			%Naughty, copied from source
+	{(abs(S1) rem (30269-1) + 1),		%PRIME1
+	 (abs(S2) rem (30307-1) + 1),		%PRIME2
+	 (abs(S3) rem (30323-1) + 1)}).		%PRIME3
+-endif.
+
+install(St0) ->
+    St1 = St0#luerl{rand=?RAND_SEED()},		%Default initial random seed
+    luerl_emul:alloc_table(table(), St1).
 
 table() ->
     [{<<"abs">>,{function,fun abs/2}},
@@ -208,27 +228,17 @@ rad(As, St) ->
 	_ -> badarg_error(sinh, As, St)
     end.
 
-%% Use the correct random number module.
-
--ifdef(NEW_RAND).
--define(RAND_UNIFORM(), rand:uniform()).
--define(RAND_UNIFORM(L), rand:uniform(L)).
--define(RAND_SEED(S1,S2,S3), rand:seed(exs1024, {S1,S2,S3})).
--else.
--define(RAND_UNIFORM(), random:uniform()).
--define(RAND_UNIFORM(L), random:uniform(L)).
--define(RAND_SEED(S1,S2,S3), random:seed(S1, S2, S3)).
--endif.
-
-random(As, St) ->
+random(As, #luerl{rand=S0}=St) ->
     case luerl_lib:to_ints(As) of
-	[] -> {[?RAND_UNIFORM()],St};		%0-1.0
+	[] ->					%0.0 - 1.0
+	    {R,S1} = ?RAND_UNIFORM(S0),
+	    {[R],St#luerl{rand=S1}};
 	[M] when M > 1 ->
-	    R = ?RAND_UNIFORM(M),
-	    {[float(R)],St};
+	    {R,S1} = ?RAND_UNIFORM(M, S0),
+	    {[float(R)],St#luerl{rand=S1}};
 	[M,N] when N > M ->
-	    R = ?RAND_UNIFORM(N - M),
-	    {[float(R + M)],St};
+	    {R,S1} = ?RAND_UNIFORM(N - M, S0),
+	    {[float(R + M)],St#luerl{rand=S1}};
 	_ -> badarg_error(random, As, St)
     end.
 
@@ -237,8 +247,7 @@ randomseed(As, St) ->
 	[S|_] ->
 	    %% Split float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
-	    ?RAND_SEED(A1, A2, A3),
-	    {[],St};
+	    {[],St#luerl{rand=?RAND_SEED(A1, A2, A3)}};
 	_ -> badarg_error(randomseed, As, St)
     end.
 

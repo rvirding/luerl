@@ -28,6 +28,7 @@
 		stk=[],				%Current stack
 		%%
 		meta=[],			%Data type metatables
+		rand,				%Random state
 		tag				%Unique tag
 	       }).
 
