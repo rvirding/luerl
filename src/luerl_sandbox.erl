@@ -37,6 +37,7 @@
         [?LUERL_GLOBAL, loadfile],
         [?LUERL_GLOBAL, loadstring]
     ]).
+-define(TIMEOUT, 100).
 
 %% init([, State|TablePaths[, TablePaths]]) -> State
 init() ->
@@ -53,14 +54,7 @@ init(St0, [Path|Tail]) ->
   St1 = luerl:set_table(Path, ?SANDBOXED_VALUE, St0),
   init(St1, Tail).
 
--ifdef(NEW_RAND).
--define(RAND_SEED(S1,S2,S3), rand:seed(exs1024, {S1,S2,S3})).
--else.
--define(RAND_SEED(S1,S2,S3), random:seed(S1, S2, S3)).
--endif.
--define(NEW_SEED(), os:timestamp()).
-
-%% run(String|Binary|Form[, State[, MaxReductions|Flags[, Flags[, RandomSeed]]]]) -> {Term,State}|{error,Term}
+%% run(String|Binary|Form[, State[, MaxReductions|Flags[, Flags[, Timeout]]]]) -> {Term,State}|{error,Term}
 run(S) ->
   run(S, init()).
 
@@ -73,22 +67,21 @@ run(S, St, Flags) when is_list(Flags) ->
     run(S, St, 0, Flags).
 
 run(S, St, MaxR, Flags) ->
-    run(S, St, MaxR, Flags, ?NEW_SEED()).
+    run(S, St, MaxR, Flags, ?TIMEOUT).
 
-run(S, St, 0, Flags, Seed) ->
-    Runner = start(self(), S, St, Flags, Seed),
-    receive_response(Runner);
-run(S, St, MaxR, Flags, Seed) ->
-    Runner = start(self(), S, St, Flags, Seed),
+run(S, St, 0, Flags, Timeout) ->
+    Runner = start(self(), S, St, Flags),
+    receive_response(Runner, Timeout);
+run(S, St, MaxR, Flags, Timeout) ->
+    Runner = start(self(), S, St, Flags),
     case wait_reductions(Runner, MaxR) of
         {killed, R} -> {error, {reductions, R}};
-        ok -> receive_response(Runner)
+        ok -> receive_response(Runner, Timeout)
     end.
 
-start(Parent, S, St, Flags, {S1,S2,S3}) ->
+start(Parent, S, St, Flags) ->
     spawn_opt(fun() ->
         try
-            ?RAND_SEED(S1, S2, S3),
             Reply = luerl:do(S, St),
             erlang:send(Parent, {self(), Reply})
         catch
@@ -108,12 +101,11 @@ wait_reductions(Runner, MaxR) ->
             wait_reductions(Runner, MaxR)
     end.
 
--define(TIMEOUT, 100).
-receive_response(Runner) ->
+receive_response(Runner, Timeout) ->
     receive
         {Runner, Reply} -> Reply;
         {error, Error} -> Error
     after
-      ?TIMEOUT ->
+      Timeout ->
         {error, timeout}
     end.

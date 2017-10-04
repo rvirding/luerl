@@ -27,22 +27,16 @@ run() ->
     %% script runner with reduction counting and process flags
     MaxReductions = 100,
     ProcessFlags = [{priority, low}],
+    Timeout = 1000,
     {error, {reductions, R0}} = luerl_sandbox:run("a={}; for i=1,1000000 do a[i] = 5 end", St0, MaxReductions),
     io:format("killed process with reductions ~p > 100~n",[R0]),
-    {error, {reductions, R1}} = luerl_sandbox:run("x = 'a'; while true do x = x .. x end", luerl:init(), MaxReductions, ProcessFlags),
+    {error, {reductions, R1}} = luerl_sandbox:run("x = 'a'; while true do x = x .. x end", luerl:init(), MaxReductions, ProcessFlags, Timeout),
     io:format("killed process with reductions ~p > 100~n",[R1]),
 
     %% unlimited reductions
     UnlimitedReductions = 0,
     {[], _} = luerl_sandbox:run("a={}; for i=1,10 do a[i] = 5 end", St0, UnlimitedReductions),
     io:format("Finished running with unlimited reductions ~n",[]),
-
-    %% random seeding
-    Seed1 = {1,1,1}, Seed2 = {2,2,2},
-    {[RandA], _} = luerl_sandbox:run("return math.random(100)", St0, MaxReductions, [], Seed1),
-    {[RandB], _} = luerl_sandbox:run("return math.random(100)", St0, MaxReductions, [], Seed1),
-    {[RandC], _} = luerl_sandbox:run("return math.random(100)", St0, MaxReductions, [], Seed2),
-    io:format("random seed ~p == ~p != ~p ~n",[RandA,RandB,RandC]),
 
     done.
 
