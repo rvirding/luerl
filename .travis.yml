@@ -1,0 +1,7 @@
+language: erlang
+otp_release:
+   - 19.3
+   - 20.0
+before_script:
+  - "./bootstrap_travis.sh"
+script: "./rebar3 eunit"
