@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Hello Erlang - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Hello Erlang";
+    var mkdocs_page_input_path = "Hello-Erlang.md";
+    var mkdocs_page_url = "/Hello-Erlang/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../Data-representation/" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Data-representation/">Data representation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Hello Erlang</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#functions">Functions</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#return-values">return values</a></li>
+        
+            <li><a class="toctree-l3" href="#examples">Examples</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-examples/">Hello examples</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Interface-functions/">Interface functions</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Standard-library/">Standard library</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../When-to-use-Luerl/">When to use Luerl</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../Data-representation/">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../Data-representation/">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Hello Erlang</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>The Lua interpreter runs entirely inside its own Lua VM implemented in Erlang/OTP, however by itself has no access to any Erlang functions or modules.</p>
+<p>This means that the only way to extend the reach of a Lua script is by filling the tables in the interpreter state with Lua functions that can reach over that boundary.</p>
+<p>On the most basic level the standard libraries (<code>luerl_lib_...</code>) provide some of those functions. When <code>luerl:init()</code> is run to create a new lua-state those libraries get loaded and their functions added to the related tables, <code>luerl_lib_io</code> is loaded to <code>io</code> and so on.</p>
+<p>That is a good start for basic programs but in the case we use <code>luerl</code> to extend our own program with scripting capabilities we need more. Adding our own functions (that call our own Erlang logic) can be done by using <code>luerl:set_table/3</code> with a function as the second argument.</p>
+<h2 id="functions">Functions</h2>
+<p>A few words should be said about how functions are handled in Luerl. Here a Lua function maps to an Erlang function with two arguments:</p>
+<ul>
+<li>the list of arguments passed to the Lua function</li>
+<li>the current state of the Lua interpreter</li>
+</ul>
+<p>It then does it's work and return a tuple of two arguments:</p>
+<ul>
+<li>a list of return values</li>
+<li>the new state of the Lua interpreter</li>
+</ul>
+<p>So the call:</p>
+<pre><code class="lua">add(1, 2) # =&gt; 3
+</code></pre>
+
+<p>would look like this for the Erlang code interpreting it:</p>
+<pre><code class="erlang">add([1, 2], St) -&gt;
+  {[1 + 2], St}
+</code></pre>
+
+<h3 id="return-values">return values</h3>
+<p>We can return a few value types from a function (as each element of the return list):</p>
+<ul>
+<li>a number (will always be treated as a float)</li>
+<li>a (binary) string</li>
+<li>a table, which is represented as a list of tuples where the first argument is a key and the second is the value.</li>
+<li>a list (which will then be translated into a table with integer indexes)</li>
+<li>a function (of arity/2)</li>
+</ul>
+<h3 id="examples">Examples</h3>
+<h4 id="add-function">Add function</h4>
+<p>A very trivial example would be a add function:</p>
+<pre><code class="erlang">%% Initiate an empty state.
+St0 = luerl:init().
+%% Put the add function in the main table of the state (and get a new one)
+St1 = luerl:set_table([add], fun([A, B], St) -&gt; {[A + B], St} end, St0).
+%% evaluate a little example script.
+luerl:eval(&quot;return add(1, 1)&quot;, St1).
+</code></pre>
+
+<p>A more complex example would be creating a process that counts things (yes that can also be done with variables but let's ignore that part). We implement a function called <code>counter</code> that will spawn a new erlang process that waits for messages. Then we return a table with 3 functions (<code>add</code>, <code>sub</code>, and <code>get</code>) that act as closures around the processes PID. We now have a lua table that can uses <code>send</code>, <code>receive</code> and <code>spawn</code> all functions that usually can't be accessed from <code>luerl</code> directly.</p>
+<h4 id="counter-process">Counter process</h4>
+<pre><code class="erlang">%% Our loop function for the process
+Loop = fun(N, L) -&gt;
+         receive
+           {get, Pid, Ref} -&gt;
+             Pid ! {count, Ref, N},
+             L(N, L);
+           {add, X} -&gt;
+             L(N + X, L);
+           {sub, X} -&gt;
+             L(N - X, L)
+          end
+        end.
+%% The initial state.
+St0 = luerl:init().
+%% We add the counter function that returns a table
+St1 = luerl:set_table([counter], fun([Initial], St) -&gt; 
+  %% Spawn a process with the loop function (defined above).
+  Pid = spawn(fun() -&gt; Loop(Initial, Loop) end),
+  %% Create a table (a list of tuples) to return
+  %% those anonymous functions use Pid which is defined in
+  %% the current scope but won't be visible outside or to lua.
+  R = [{add, fun([N], StF) -&gt; Pid ! {add, N}, {[N], StF} end},
+       {sub, fun([N], StF) -&gt; Pid ! {sub, N}, {[N], StF} end},
+       {get, fun([], StF) -&gt; 
+               Ref = erlang:make_ref(),
+               Pid ! {get, self(), Ref},
+               receive
+                 {count, Ref, N} -&gt;
+                   {[N], StF}
+               after
+                 10000 -&gt;
+                   {[timeout], StF}
+               end
+             end}],
+     %% return the table we just created
+     {[R], St}
+   end, St0).
+%% We call a little script now it will:
+%% 1) create a new counter
+%% 2) print the initial state
+%% 3) add 1 to the counter
+%% 4) print the changed state
+luerl:eval(&quot;c = counter(0); print(\&quot;0: \&quot;, c.get()); c.add(1); print(\&quot;1: \&quot;, c.get())&quot;, St1).
+%% The output will be:
+%%   1: 0
+%%   2: 1
+</code></pre>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../Hello-Lua/" class="btn btn-neutral float-right" title="Hello Lua">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../Getting-started/" class="btn btn-neutral" title="Getting started"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../Getting-started/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../Hello-Lua/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>

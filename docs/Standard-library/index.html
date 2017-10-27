@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Standard library - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Standard library";
+    var mkdocs_page_input_path = "Standard-library.md";
+    var mkdocs_page_url = "/Standard-library/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../Data-representation/" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Data-representation/">Data representation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Erlang/">Hello Erlang</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-examples/">Hello examples</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Interface-functions/">Interface functions</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Standard library</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#luerl_libfirst_valuereturnlist-value">luerl_lib:first_value(ReturnList) -&gt; Value.</a></li>
+    
+
+    <li class="toctree-l2"><a href="#luerl_libis_true_valuereturnlist-true-false">luerl_lib:is_true_value(ReturnList) -&gt; true | false.</a></li>
+    
+
+    <li class="toctree-l2"><a href="#current-implementation-functions">Current implementation functions</a></li>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../When-to-use-Luerl/">When to use Luerl</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../Data-representation/">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../Data-representation/">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Standard library</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>There is also a library module, <code>luerl_lib</code>, which contains functions which may be used.</p>
+<h4 id="luerl_libfirst_valuereturnlist-value">luerl_lib:first_value(ReturnList) -&gt; Value.</h4>
+<h4 id="luerl_libis_true_valuereturnlist-true-false">luerl_lib:is_true_value(ReturnList) -&gt; true | false.</h4>
+<h3 id="current-implementation-functions">Current implementation functions</h3>
+<ul>
+<li>_G</li>
+<li>_VERSION</li>
+<li>assert</li>
+<li>collectgarbage</li>
+<li>dofile</li>
+<li>eprint</li>
+<li>error</li>
+<li>getmetatable</li>
+<li>ipairs</li>
+<li>load</li>
+<li>loadfile</li>
+<li>next</li>
+<li>pairs</li>
+<li>pcall</li>
+<li>print</li>
+<li>rawequal</li>
+<li>rawget</li>
+<li>rawlen</li>
+<li>rawset</li>
+<li>require</li>
+<li>select</li>
+<li>setmetatable</li>
+<li>tonumber</li>
+<li>tostring</li>
+<li>type</li>
+<li>unpack</li>
+<li>io.flush</li>
+<li>io.write</li>
+<li>math.abs</li>
+<li>math.acos</li>
+<li>math.asin</li>
+<li>math.atan</li>
+<li>math.atan2</li>
+<li>math.ceil</li>
+<li>math.cos</li>
+<li>math.cosh</li>
+<li>math.deg</li>
+<li>math.exp</li>
+<li>math.floor</li>
+<li>math.fmod</li>
+<li>math.frexp</li>
+<li>math.huge</li>
+<li>math.ldexp</li>
+<li>math.log</li>
+<li>math.log10</li>
+<li>math.max</li>
+<li>math.min</li>
+<li>math.modf</li>
+<li>math.pi</li>
+<li>math.pow</li>
+<li>math.rad</li>
+<li>math.random</li>
+<li>math.randomseed</li>
+<li>math.sin</li>
+<li>math.sinh</li>
+<li>math.sqrt</li>
+<li>math.tan</li>
+<li>math.tanh</li>
+<li>os.clock</li>
+<li>os.date</li>
+<li>os.difftime</li>
+<li>os.getenv</li>
+<li>os.time</li>
+<li>package.config</li>
+<li>package.loaded</li>
+<li>package.preload</li>
+<li>package.path</li>
+<li>package.searchers</li>
+<li>package.searchpath</li>
+<li>string.byte</li>
+<li>string.char</li>
+<li>string.find</li>
+<li>string.format (should handle most things now)</li>
+<li>string.gmatch</li>
+<li>string.gsub</li>
+<li>string.len</li>
+<li>string.lower</li>
+<li>string.match</li>
+<li>string.rep</li>
+<li>string.reverse</li>
+<li>string.sub</li>
+<li>string.upper</li>
+<li>table.concat</li>
+<li>table.insert</li>
+<li>table.pack</li>
+<li>table.remove</li>
+<li>table.sort</li>
+<li>table.unpack</li>
+<li>bit32.band</li>
+<li>bit32.bnot</li>
+<li>bit32.bor</li>
+<li>bit32.btest</li>
+<li>bit32.bxor</li>
+<li>bit32.lshift</li>
+<li>bit32.rshift</li>
+<li>bit32.arshift</li>
+<li>bit32.lrotate</li>
+<li>bit32.rrotate</li>
+<li>bit32.extract</li>
+<li>bit32.replace</li>
+<li>debug.getmetatable</li>
+<li>debug.getuservalue</li>
+<li>debug.setmetatable</li>
+<li>debug.setuservalue</li>
+</ul>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../The-Lua-API/" class="btn btn-neutral float-right" title="The Lua API">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../Known-bugs/" class="btn btn-neutral" title="Known bugs"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../Known-bugs/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../The-Lua-API/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Data representation - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Data representation";
+    var mkdocs_page_input_path = "Data-representation.md";
+    var mkdocs_page_url = "/Data-representation/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="./" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Data representation</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#data-types">Data types</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#nil">Nil</a></li>
+        
+            <li><a class="toctree-l3" href="#booleans">Booleans</a></li>
+        
+            <li><a class="toctree-l3" href="#strings">Strings</a></li>
+        
+            <li><a class="toctree-l3" href="#numbers">Numbers</a></li>
+        
+            <li><a class="toctree-l3" href="#tables">Tables</a></li>
+        
+            <li><a class="toctree-l3" href="#functions">Functions</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Erlang/">Hello Erlang</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-examples/">Hello examples</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Interface-functions/">Interface functions</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Standard-library/">Standard library</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../When-to-use-Luerl/">When to use Luerl</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="./">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="./">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Data representation</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>Luerl represents data in two ways, an internal and external formats. The external format is designed to interface as nice as possible with native Erlang while the internal format represents data as it is handled inside this implementation of the Lua 5.2 VM and interpreter.</p>
+<p>The <code>luerl</code> module has two groups of functions, those ending in '1' and those that don't. Those that don't assume that the arguments are in external format and automatically encodes them, while those ending in '1' assume they are in internal format.</p>
+<p>In most cases using the external format makes code more readable and understandable. However saving the translation costs by directly manipulating data in the internal format can be worth it, once a function for the internal representation is used you are hooked and there is no going back! </p>
+<p>To illustrate the following two code examples are identical the first using the external representation the second using the internal one:</p>
+<pre><code class="erlang">St0 = luerl:init().
+F = fun(_, StIn) -&gt;
+    {[[{&lt;&lt;&quot;a&quot;&gt;&gt;, 1.0}]], StIn}
+  end.
+St1 = luerl:set_table([t], F, St0).
+luerl:eval(&quot;return t()&quot;, St1).
+</code></pre>
+
+<pre><code class="erlang">S0 = luerl:init().
+F = fun ([], Sti) -&gt;
+    {T, Sto} = luerl_emul:alloc_table([{&lt;&lt;&quot;a&quot;&gt;&gt;, 1.0}], Sti),
+    {[T], Sto}
+  end.
+S1 = luerl:set_table1([&lt;&lt;&quot;t&quot;&gt;&gt;], {function, F}, S0).
+luerl:eval(&quot;return t()&quot;, S1). 
+</code></pre>
+
+<h2 id="data-types">Data types</h2>
+<p>For the Lua data types we internally use their corresponding Erlang type:</p>
+<p><code>nil        - atom nil</code></p>
+<p><code>true/false - atoms true/false</code></p>
+<p><code>strings    - string binaries</code></p>
+<p><code>numbers    - floats</code></p>
+<p><code>tables     - #table{} with array for keys 1..n, ordict for rest</code></p>
+<p><code>functions  - #function{} or {function,Fun}</code></p>
+<p>See <a href="https://github.com/rvirding/luerl/blob/develop/src/luerl.hrl">luerl.hrl</a> for the field names of the records.</p>
+<p>All tables are combinations of Erlang ttdicts and arrays. In each table an
+array is used for integer keys &gt;= 1 while an ttdict is used for all other keys.</p>
+<p>We use this information when building/processing tables.</p>
+<h3 id="nil">Nil</h3>
+<p>Nil is a type represented by the Erlang atom <em>nil</em>, whose main property is to be different from any other value. Lua uses nil as a kind of non-value, to represent the absence of a useful value.</p>
+<h3 id="booleans">Booleans</h3>
+<p>Erlang atoms <em>true</em> and <em>false</em>.</p>
+<h3 id="strings">Strings</h3>
+<p>Strings are represented the same in both formats, luerl uses binary strings list strings will be interpreted as a table!</p>
+<h3 id="numbers">Numbers</h3>
+<p>Numbers are the same in both internal and external representations, they are simple float numbers. Please be aware that in Lua &lt;= 5.2 numbers are treated as floats.</p>
+<h3 id="tables">Tables</h3>
+<p>Tables in Lua are known as associative arrays. All Lua types can be used as keys, except <code>nil</code>.</p>
+<p>Tables are the only data structure mechanism in Lua, tables implement many data types in simple and efficient ways, lists, sets, arrays, sparse matrices, structures, the kitchen sink, you name it. Tables in Lua are also used for several other purposes like global variables, modules, object and classes, next are some notes about the insides of its Luerl implementation.</p>
+<p>In the external format tables are represented as lists of tuples, where the first element is the index and the second the value or as lists of values where the index is implicitly assigned by their position in the list (starting with 1). The tables <code>[1]</code> and <code>[{1,1}]</code> are identical.</p>
+<p>In the internal format tables are represented as references, to allocate a table reference the function <code>luerl_emul:alloc_table/2</code> is that returns a new reference and a state that includes this reference then given a name using <code>luerl:set_table1/3</code>. Single keys can be accessed using <code>luerl:get_table1/2</code> to resolve a name to a reference and then <code>luerl_emul:get_table_keys/3</code> to get the value for a given key in the table.</p>
+<h3 id="functions">Functions</h3>
+<p>In the external representations functions are simply functions of the arity/2, where the first argument is a list of function arguments and the state at the time of function execution.</p>
+<p>They return a tuple with a list of return values as the first argument and the new state. </p>
+<p>All parameters are in the external format and all return values need to be in the external format.</p>
+<p>In the internal format functions are a tuple with the first element being the atom <code>function</code> and the second a function of the arity/2.</p>
+<p>Both the return values as well as the function parameters are in the internal format as well.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../Getting-started/" class="btn btn-neutral float-right" title="Getting started">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+      
+        <span style="margin-left: 15px"><a href="../Getting-started/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>

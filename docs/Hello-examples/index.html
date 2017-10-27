@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Hello examples - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Hello examples";
+    var mkdocs_page_input_path = "Hello-examples.md";
+    var mkdocs_page_url = "/Hello-examples/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../Data-representation/" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Data-representation/">Data representation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Erlang/">Hello Erlang</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Hello examples</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#execute-a-string">execute a string</a></li>
+    
+
+    <li class="toctree-l2"><a href="#execute-a-file">execute a file</a></li>
+    
+
+    <li class="toctree-l2"><a href="#separately-parse-then-execute">separately parse, then execute</a></li>
+    
+
+    <li class="toctree-l2"><a href="#call-a-function-in-the-state">call a function in the state</a></li>
+    
+
+    <li class="toctree-l2"><a href="#call-a-method-in-the-state">call a method in the state</a></li>
+    
+
+    <li class="toctree-l2"><a href="#define-a-method-in-the-state">define a method in the state</a></li>
+    
+
+    <li class="toctree-l2"><a href="#examples">Examples</a></li>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Interface-functions/">Interface functions</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Standard-library/">Standard library</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../When-to-use-Luerl/">When to use Luerl</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../Data-representation/">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../Data-representation/">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Hello examples</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>To run the examples, do <code>make</code> and then start the Erlang command line with <code>erl -pa ./ebin</code>.<br />
+<strong>Don't be shocked by the very long dump following each function call.</strong> <br />
+At the command line you are seeing the Lua State dumped, that is returned by these calls:</p>
+<h4 id="execute-a-string">execute a string</h4>
+<pre><code>luerl:do("print(\"Hello, Robert!\")").
+</code></pre>
+<h4 id="execute-a-file">execute a file</h4>
+<pre><code>luerl:dofile("./examples/hello/hello.lua").
+</code></pre>
+<h4 id="separately-parse-then-execute">separately parse, then execute</h4>
+<pre><code>EmptyState = luerl:init(),
+{ok, Chunk, State} = luerl:load("print(\"Hello, Chunk!\")", EmptyState),
+{_Ret, _NewState} = luerl:do(Chunk, State).
+</code></pre>
+<h4 id="call-a-function-in-the-state">call a function in the state</h4>
+<pre><code>{Res,State1} = luerl:call_function([table,pack], [&lt;&lt;"a"&gt;&gt;,&lt;&lt;"b"&gt;&gt;,42], State0)
+</code></pre>
+<p>executes the call <code>table.pack("a", "b", 42)</code> in <code>State0</code>. E.g.:</p>
+<pre><code>{Res,State1} = luerl:call([table,pack], [&lt;&lt;"a"&gt;&gt;,&lt;&lt;"b"&gt;&gt;,42]),
+io:format("~p~n",[Res]).
+</code></pre>
+<h4 id="call-a-method-in-the-state">call a method in the state</h4>
+<pre><code>{Res,State1} = luerl:call_method([g,h,i], [&lt;&lt;"a"&gt;&gt;,&lt;&lt;"b"&gt;&gt;,42], State0)
+</code></pre>
+<p>executes the call <code>g.h:i("a", "b", 42)</code> in <code>State0</code>.</p>
+<h4 id="define-a-method-in-the-state">define a method in the state</h4>
+<pre><code>State1 = luerl:set_table([inc], fun([Val], State) -&gt; {[Val+1], State} end)
+</code></pre>
+<p>the method can be called like this:</p>
+<pre><code>luerl:do(&lt;&lt;"print(inc(4))"&gt;&gt;, State1)
+</code></pre>
+<h2 id="examples">Examples</h2>
+<p>For more information see the <a href="https://github.com/rvirding/luerl/tree/develop/examples">examples</a> directory:  </p>
+<p><code>./hello.erl</code> is very brief while <code>examples/hello/hello2.erl</code> offers a comprehensive list on how use the individual interface functions.</p>
+<p>You can build and run these samples with:</p>
+<pre><code>make examples
+</code></pre>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../Home/" class="btn btn-neutral float-right" title="Home">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../Hello-Lua/" class="btn btn-neutral" title="Hello Lua"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../Hello-Lua/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../Home/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>

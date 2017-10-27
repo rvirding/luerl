@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>When to use Luerl - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "When to use Luerl";
+    var mkdocs_page_input_path = "When-to-use-Luerl.md";
+    var mkdocs_page_url = "/When-to-use-Luerl/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../Data-representation/" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Data-representation/">Data representation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Erlang/">Hello Erlang</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-examples/">Hello examples</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Interface-functions/">Interface functions</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Standard-library/">Standard library</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">When to use Luerl</a>
+    <ul class="subnav">
+            
+    </ul>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../Data-representation/">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../Data-representation/">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>When to use Luerl</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p><strong>Fast Language Switch:</strong> Luerl should allow you to switch between Erlang and
+Lua incredibly fast, introducing a way to use very small bits of logic
+programmed in Lua, inside an Erlang application, with good performance.</p>
+<p><strong>Multicore:</strong> Luerl provides a way to transparently utilize multicores. The
+underlying Erlang VM takes care of the distribution.</p>
+<p><strong>Microprocesses:</strong> It should give you a Lua environment that allows you to
+effortlessly run tens of thousands of Lua processes in parallel, leveraging the
+famed microprocesses implementation of the Erlang VM. The empty Luerl
+State footprint will be yet smaller than the C Lua State footprint.</p>
+<p><strong>Forking Up:</strong> Because of the immutable nature of the Luerl VM, it becomes
+a natural operation to use the same Lua State as a starting point for multiple
+parallel calculations.</p>
+<p>However, Luerl will generally run slower than a reasonable native Lua
+implementation. This is mainly due the emulation of mutable data on top of an
+immutable world. There is really no way around this. An alternative would be
+to implement a special Lua memory outside of the normal Erlang, but this would
+defeat the purpose of Luerl. It would instead be then more logical to connect to
+a native Lua.</p>
+<p>Some valid use cases for Luerl are:</p>
+<ul>
+<li>
+<p>Lua code will be run only occasionally and it wouldn't be worth
+  managing an extra language implementation in the application.</p>
+</li>
+<li>
+<p>The Lua code chunks are small so the slower speed is weighed up by
+  Luerl's faster interface.</p>
+</li>
+<li>
+<p>The Lua code calculates and reads variables more than changing them.</p>
+</li>
+<li>
+<p>The same Lua State is repeatedly used to 'fork up' as a basis for
+  massively many parallel calculations, based on the same state.</p>
+</li>
+<li>
+<p>It is easy to run multiple instances of Luerl which could better
+  utilise multicores.</p>
+</li>
+</ul>
+<p>There may be others.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+      
+        <a href="../VM-&-compiler/" class="btn btn-neutral" title="VM & compiler"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../VM-&-compiler/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>

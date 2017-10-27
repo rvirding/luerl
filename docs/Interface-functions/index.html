@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../img/favicon.ico">
+  <title>Interface functions - Luerl</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="../css/highlight.css">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Interface functions";
+    var mkdocs_page_input_path = "Interface-functions.md";
+    var mkdocs_page_url = "/Interface-functions/";
+  </script>
+  
+  <script src="../js/jquery-2.1.1.min.js"></script>
+  <script src="../js/modernizr-2.8.3.min.js"></script>
+  <script type="text/javascript" src="../js/highlight.pack.js"></script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../Data-representation/" class="icon icon-home"> Luerl</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Data-representation/">Data representation</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Getting-started/">Getting started</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Erlang/">Hello Erlang</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-Lua/">Hello Lua</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Hello-examples/">Hello examples</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Home/">Home</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Installing-Luerl/">Installing Luerl</a>
+	    </li>
+          
+            <li class="toctree-l1 current">
+		
+    <a class="current" href="./">Interface functions</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l2"><a href="#spec-definitions">Spec Definitions</a></li>
+    
+
+    <li class="toctree-l2"><a href="#hello-examples">Hello Examples</a></li>
+    
+
+    <li class="toctree-l2"><a href="#functions">Functions</a></li>
+    
+        <ul>
+        
+            <li><a class="toctree-l3" href="#luerlevalstringbinaryform-state-ok-result-error-reason">luerl:eval(String|Binary|Form[, State]) -&gt; {ok, Result} | {error, Reason}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlevalfilepath-state-ok-result-error-reason">luerl:evalfile(Path[, State]) -&gt; {ok, Result} | {error, Reason}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerldostringbinaryform-state-result-newstate">luerl:do(String|Binary|Form[, State]) -&gt; {Result, NewState}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerldofilepath-state-result-newstate">luerl:dofile(Path[, State]) -&gt; {Result, NewState}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlloadstringbinary-state-okfunctionnewstate-error-reason">luerl:load(String|Binary[, State]) -&gt; {ok,Function,NewState} | {error, Reason} .</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlloadfilefilename-state-okfunctionnewstate">luerl:loadfile(FileName[, State]) -&gt; {ok,Function,NewState}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlpath_loadfilepath-filename-state-okfunctionfullnamestate">luerl:path_loadfile([Path, ], FileName, State) -&gt; {ok,Function,FullName,State}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlload_modulekeypath-erlangmodule-state-state">luerl:load_module(KeyPath, ErlangModule, State) -&gt; State.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlload_module1keypath-erlangmodule-state-state">luerl:load_module1(KeyPath, ErlangModule, State) -&gt; State.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlinit-state">luerl:init() -&gt; State.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcallform-args-state-resultstate">luerl:call(Form, Args[, State]) -&gt; {Result,State}</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcall_chunkform-args-state-resultstate">luerl:call_chunk(Form, Args[, State]) -&gt; {Result,State}</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcall_functionkeypath-args-state-resultnewstate">luerl:call_function(KeyPath, Args[, State]) -&gt; {Result,NewState}</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcall_function1keypath-args-state-resultnewstate">luerl:call_function1(KeyPath, Args, State) -&gt; {Result,NewState}</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcall_methodmethpath-args-state-resultnewstate">luerl:call_method(MethPath, Args[, State]) -&gt; {Result,NewState}.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlcall_method1methpath-args-state-resultnewstate">luerl:call_method1(MethPath, Args, State) -&gt; {Result,NewState}</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlstopstate-gcedstate">luerl:stop(State) -&gt; GCedState.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlgcstate-state">luerl:gc(State) -&gt; State.</a></li>
+        
+            <li><a class="toctree-l3" href="#luerlset_tablepath-value-state-state">luerl:set_table(Path, Value, State) -&gt; State.</a></li>
+        
+        </ul>
+    
+
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Known-bugs/">Known bugs</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../Standard-library/">Standard library</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../The-Lua-API/">The Lua API</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../VM-&-compiler/">VM & compiler</a>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <a class="" href="../When-to-use-Luerl/">When to use Luerl</a>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../Data-representation/">Luerl</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../Data-representation/">Docs</a> &raquo;</li>
+    
+      
+    
+    <li>Interface functions</li>
+    <li class="wy-breadcrumbs-aside">
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <p>All functions optionally accept a <strong>Lua State</strong> parameter. The Lua State is the state of a Lua VM instance. It can be carried from one call to the next. If no State is passed in, a new state is initiated for the function call.</p>
+<p>As it is possible in Lua to create self-referencing data structures, indeed the standard libraries have many instances of this, then using the functions which decode their return values can cause an infinite loop during the decoding. An simple example is the top level table which contains a key <strong>_G</strong> which references the top-level table.</p>
+<p>Note that Lua <strong>Chunks</strong> (see definition below) can travel between different States. They are precompiled bits of code, independent of State. That you can 'carry around' this is no unique to Luerl but a low-level implementation detail of the standard Lua <a href="https://lua.org">language</a>, for more on chunks <a href="https://www.lua.org/manual/5.2/manual.html#3.3.2">read</a> the official Lua 5.2 <a href="https://www.lua.org/manual/5.2/manual.html">reference manual</a>.</p>
+<h3 id="spec-definitions">Spec Definitions</h3>
+<p><strong>Binary</strong> means an Erlang binary string. <br />
+<strong>Chunks</strong> means a portion of precompiled bytecode. <br />
+<strong>State</strong> means a Lua State, this <em>is</em> a Lua VM instance.      <br />
+<strong>Path</strong> means a file system path and file name.<br />
+<strong>KeyPath</strong> means an Erlang list of <strong>atoms</strong> representing nested names, e.g. [table,pack] for table.pack.<br />
+<strong>Keys</strong> means Lua table keys, the keys of a key-value structure.</p>
+<h3 id="hello-examples">Hello Examples</h3>
+<p>See below and files <code>hello.erl</code> and <code>hello2.erl</code> in <a href="https://github.com/rvirding/luerl/tree/develop/examples/hello">examples/hello/</a>.</p>
+<h3 id="functions">Functions</h3>
+<p><strong>eval</strong> and <strong>do</strong> functions differ only in what they return. The <strong>do</strong> functions return results and a new Lua State, the <strong>eval</strong> functions return a tuple starting on 'ok' or 'error', then the result, or cause of error.</p>
+<pre><code>do --&gt; {Result, State}
+
+eval --&gt; {ok, Result} | {error, Reason}
+</code></pre>
+<h4 id="luerlevalstringbinaryform-state-ok-result-error-reason">luerl:eval(String|Binary|Form[, State]) -&gt; {ok, Result} | {error, Reason}.</h4>
+<p>Evaluate a Lua expression passed in as a string or binary, and return its result.</p>
+<h4 id="luerlevalfilepath-state-ok-result-error-reason">luerl:evalfile(Path[, State]) -&gt; {ok, Result} | {error, Reason}.</h4>
+<p>Load and execute a file, and return the result.</p>
+<h4 id="luerldostringbinaryform-state-result-newstate">luerl:do(String|Binary|Form[, State]) -&gt; {Result, NewState}.</h4>
+<p>Evaluate a Lua expression and return its result, and the new Lua State.</p>
+<h4 id="luerldofilepath-state-result-newstate">luerl:dofile(Path[, State]) -&gt; {Result, NewState}.</h4>
+<p>Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:do("return dofile('FileName')").</p>
+<h4 id="luerlloadstringbinary-state-okfunctionnewstate-error-reason">luerl:load(String|Binary[, State]) -&gt; {ok,Function,NewState} | {error, Reason} .</h4>
+<p>Parse a Lua chunk as string or binary, and return a compiled chunk ('form').</p>
+<h4 id="luerlloadfilefilename-state-okfunctionnewstate">luerl:loadfile(FileName[, State]) -&gt; {ok,Function,NewState}.</h4>
+<p>Parse a Lua file, and return a compiled chunk ('form').</p>
+<h4 id="luerlpath_loadfilepath-filename-state-okfunctionfullnamestate">luerl:path_loadfile([Path, ], FileName, State) -&gt; {ok,Function,FullName,State}.</h4>
+<p>Search Path until the file FileName is found. Parse the file and return a compiled chunk ('form'). If Path is not given then the path defined in the environment variable LUA_LOAD_PATH is used.</p>
+<h4 id="luerlload_modulekeypath-erlangmodule-state-state">luerl:load_module(KeyPath, ErlangModule, State) -&gt; State.</h4>
+<p>Load <code>ErlangModule</code> and install its table at <code>KeyPath</code>.</p>
+<h4 id="luerlload_module1keypath-erlangmodule-state-state">luerl:load_module1(KeyPath, ErlangModule, State) -&gt; State.</h4>
+<p>Load <code>ErlangModule</code> and install its table at <code>KeyPath</code>.</p>
+<h4 id="luerlinit-state">luerl:init() -&gt; State.</h4>
+<p>Get a new Lua State = a fresh Lua VM instance.</p>
+<h4 id="luerlcallform-args-state-resultstate">luerl:call(Form, Args[, State]) -&gt; {Result,State}</h4>
+<h4 id="luerlcall_chunkform-args-state-resultstate">luerl:call_chunk(Form, Args[, State]) -&gt; {Result,State}</h4>
+<p>Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.</p>
+<h4 id="luerlcall_functionkeypath-args-state-resultnewstate">luerl:call_function(KeyPath, Args[, State]) -&gt; {Result,NewState}</h4>
+<p>Call a function already defined in the state. <code>KeyPath</code> is a list of names to the function. <code>KeyPath</code>, <code>Args</code> and <code>Result</code> are automatically encode/decoded.</p>
+<h4 id="luerlcall_function1keypath-args-state-resultnewstate">luerl:call_function1(KeyPath, Args, State) -&gt; {Result,NewState}</h4>
+<p>Call a function already defined in the state. <code>KeyPath</code> is a list of keys to the function. <code>KeyPath</code>, <code>Args</code> and <code>Result</code> are <strong>NOT</strong> encode/decoded.</p>
+<h4 id="luerlcall_methodmethpath-args-state-resultnewstate">luerl:call_method(MethPath, Args[, State]) -&gt; {Result,NewState}.</h4>
+<p>Call a method already defined in the state. <code>MethPath</code> is a list of names to the method. <code>MethPath</code>, <code>Args</code> and <code>Result</code> are automatically encode/decoded.</p>
+<h4 id="luerlcall_method1methpath-args-state-resultnewstate">luerl:call_method1(MethPath, Args, State) -&gt; {Result,NewState}</h4>
+<p>Call a method already defined in the state. <code>MethPath</code> is a list of keys to the method. <code>Keys</code>, <code>Args</code> and <code>Result</code> are <strong>NOT</strong> encode/decoded.</p>
+<h4 id="luerlstopstate-gcedstate">luerl:stop(State) -&gt; GCedState.</h4>
+<p>Garbage collects the state and (todo:) does away with it.</p>
+<h4 id="luerlgcstate-state">luerl:gc(State) -&gt; State.</h4>
+<p>Runs the (experimental) garbage collector on a state and returns the new state.</p>
+<h4 id="luerlset_tablepath-value-state-state">luerl:set_table(Path, Value, State) -&gt; State.</h4>
+<p>Sets a value inside the Lua state. Value is automatically encoded.</p>
+<p>You can use this function to expose an function to the Lua code by
+ using this interface:
+   fun(Args, State) -&gt; {Results, State}
+ Args and Results must be a list of Luerl compatible erlang values.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../Known-bugs/" class="btn btn-neutral float-right" title="Known bugs">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../Installing-Luerl/" class="btn btn-neutral" title="Installing Luerl"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+      
+        <span><a href="../Installing-Luerl/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../Known-bugs/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '..';</script>
+    <script src="../js/theme.js"></script>
+      <script src="../search/require.js"></script>
+      <script src="../search/search.js"></script>
+
+</body>
+</html>
