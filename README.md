@@ -1,7 +1,7 @@
-Luerl - an implementation of Lua in Erlang
-==========================================
+# Luerl - Lua in Erlang
+[![Chat on Slack](https://img.shields.io/badge/chat-on%20slack-7A5979.svg)](https://luerl.slack.com/messages) [![Build Status](https://travis-ci.org/rvirding/luerl.svg?branch=develop)](https://travis-ci.org/rvirding/luerl)
 
-Luerl is an implementation of standard Lua 5.2 written in Erlang/OTP.
+> [Luerl](https://luerl.org) is an implementation of standard Lua 5.2 written in Erlang/OTP.
 
 Lua is a powerful, efficient, lightweight, embeddable scripting language common in games, IoT devices, AI bots, machine learning and scientific computing research.
 
