@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -335,14 +335,14 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
-decode({function,Fun}, _, _) -> {function,Fun};
-decode(#function{}=Fun, State, _) ->
+decode(#erl_func{code=Fun}, _, _) -> {function,Fun};
+decode(#lua_func{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
 		decode_list(Ret, State2)
 	end,
-    {function, F};
+    {function,F};
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->

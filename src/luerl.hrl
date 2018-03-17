@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -52,13 +52,13 @@
 -record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
-%% There are two function types, this the Lua one, and an Erlang one
-%% with the same name. So no type for it.
--record(function,{lsz,				%Local var size
+%% There are two function types, the Lua one, and the Erlang one.
+-record(lua_func,{lsz,				%Local var size
 		  esz,				%Env var size
 		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block
+-record(erl_func,{code}).			%Erlang code (fun)
 
 -record(fref, {i}).				%Frame reference, index
 

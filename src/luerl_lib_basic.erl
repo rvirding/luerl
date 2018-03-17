@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -304,8 +304,8 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#function{}) -> <<"function:">>;	%Functions defined in Lua
-tostring({function,_}) -> <<"function:">>;	%Internal functions
+tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
+tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
 tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
@@ -317,8 +317,8 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
-type(#function{}) -> <<"function">>;		%Functions defined in Lua
-type({function,_}) -> <<"function">>;		%Internal functions
+type(#lua_func{}) -> <<"function">>;		%Functions defined in Lua
+type(#erl_func{}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
 type(#userdata{}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
