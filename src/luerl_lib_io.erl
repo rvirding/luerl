@@ -32,8 +32,8 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"flush">>,{function,fun flush/2}},
-     {<<"write">>,{function,fun write/2}}
+    [{<<"flush">>,#erl_func{code=fun flush/2}},
+     {<<"write">>,#erl_func{code=fun write/2}}
     ].
 
 flush(_, St) -> {[true],St}.

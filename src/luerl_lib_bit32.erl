@@ -18,6 +18,8 @@
 
 -module(luerl_lib_bit32).
 
+-include("luerl.hrl").
+
 -export([install/1]).
 
 -import(luerl_lib, [badarg_error/3]).	%Shorten this
@@ -32,18 +34,18 @@ install(St) ->
     luerl_emul:alloc_table(table(), St).
 
 table() ->
-    [{<<"band">>,{function,fun fband/2}},
-     {<<"bnot">>,{function,fun fbnot/2}},
-     {<<"bor">>,{function,fun fbor/2}},
-     {<<"btest">>,{function,fun fbtest/2}},
-     {<<"bxor">>,{function,fun fbxor/2}},
-     {<<"lshift">>,{function,fun flshift/2}},
-     {<<"rshift">>,{function,fun frshift/2}},
-     {<<"arshift">>,{function,fun farshift/2}},
-     {<<"lrotate">>,{function,fun flrotate/2}},
-     {<<"rrotate">>,{function,fun frrotate/2}},
-     {<<"extract">>,{function,fun fextract/2}},
-     {<<"replace">>,{function,fun freplace/2}}
+    [{<<"band">>,#erl_func{code=fun fband/2}},
+     {<<"bnot">>,#erl_func{code=fun fbnot/2}},
+     {<<"bor">>,#erl_func{code=fun fbor/2}},
+     {<<"btest">>,#erl_func{code=fun fbtest/2}},
+     {<<"bxor">>,#erl_func{code=fun fbxor/2}},
+     {<<"lshift">>,#erl_func{code=fun flshift/2}},
+     {<<"rshift">>,#erl_func{code=fun frshift/2}},
+     {<<"arshift">>,#erl_func{code=fun farshift/2}},
+     {<<"lrotate">>,#erl_func{code=fun flrotate/2}},
+     {<<"rrotate">>,#erl_func{code=fun frrotate/2}},
+     {<<"extract">>,#erl_func{code=fun fextract/2}},
+     {<<"replace">>,#erl_func{code=fun freplace/2}}
      ].
 
 fband(As, St) ->

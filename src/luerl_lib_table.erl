@@ -44,12 +44,12 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"concat">>,{function,fun concat/2}},
-     {<<"insert">>,{function,fun insert/2}},
-     {<<"pack">>,{function,fun pack/2}},
-     {<<"remove">>,{function,fun remove/2}},
-     {<<"sort">>,{function,fun sort/2}},
-     {<<"unpack">>,{function,fun unpack/2}}
+    [{<<"concat">>,#erl_func{code=fun concat/2}},
+     {<<"insert">>,#erl_func{code=fun insert/2}},
+     {<<"pack">>,#erl_func{code=fun pack/2}},
+     {<<"remove">>,#erl_func{code=fun remove/2}},
+     {<<"sort">>,#erl_func{code=fun sort/2}},
+     {<<"unpack">>,#erl_func{code=fun unpack/2}}
     ].
 
 %% concat - concat the elements of a list into a string.

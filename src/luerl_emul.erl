@@ -697,7 +697,7 @@ do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 
@@ -706,7 +706,7 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 

@@ -302,14 +302,14 @@ encode(F, St) when is_function(F, 2) ->
 		 {Res, State1} = F(Args1, State),
 		 encode_list(Res, State1)
 	 end,
-    {{function, F1}, St};
+    {#erl_func{code=F1}, St};
 encode(F, St) when is_function(F, 1) ->
     F1 = fun(Args, State) ->
 		 Args1 = decode_list(Args, State),
 		 Res = F(Args1),
 		 encode_list(Res, State)
 	 end,
-    {{function, F1}, St};
+    {#erl_func{code=F1}, St};
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
@@ -335,14 +335,14 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
-decode(#erl_func{code=Fun}, _, _) -> {function,Fun};
+decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(#lua_func{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
 		decode_list(Ret, State2)
 	end,
-    {function,F};
+    F;						%Just a bare fun
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->
