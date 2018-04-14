@@ -1,6 +1,6 @@
 %% -*- mode: erlang; indent-tabs-mode: nil -*-
 
-Conf0 = CONFIG,
+Conf0 = CONFIG ++ application:get_all_env(luerl),
 HasOpt = {d,'HAS_MAPS',true},
 FullOpt = {d,'HAS_FULL_KEYS',true},
 RecOpt = {d,'NEW_REC_CORE',true},
