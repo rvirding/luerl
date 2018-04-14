@@ -34,10 +34,10 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"getmetatable">>,{function,fun getmetatable/2}},
-     {<<"getuservalue">>,{function,fun getuservalue/2}},
-     {<<"setmetatable">>,{function,fun setmetatable/2}},
-     {<<"setuservalue">>,{function,fun setuservalue/2}}
+    [{<<"getmetatable">>,#erl_func{code=fun getmetatable/2}},
+     {<<"getuservalue">>,#erl_func{code=fun getuservalue/2}},
+     {<<"setmetatable">>,#erl_func{code=fun setmetatable/2}},
+     {<<"setuservalue">>,#erl_func{code=fun setuservalue/2}}
     ].
 
 %% getmetatable([Value|_], State) -> {[Table],State}.

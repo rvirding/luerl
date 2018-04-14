@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -233,7 +233,10 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 			    end,
 		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		Meth when element(1, Meth) =:= function ->
+		#lua_func{}=Meth ->
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
+		    St1;
+		#erl_func{}=Meth ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -252,7 +255,10 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		Meth when element(1, Meth) =:= function ->
+		#lua_func{}=Meth ->
+		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
+		    St1;
+		#erl_func{}=Meth ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -274,7 +280,10 @@ get_table_key(#tref{}=Tref, Key, St) ->
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key}, St);
-	Meth when element(1, Meth) =:= function ->
+	#lua_func{}=Meth ->
+	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
+	    {first_value(Vs),St1};
+	#erl_func{}=Meth ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->					%Recurse down the metatable
@@ -302,7 +311,10 @@ get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
 get_table_metamethod(T, Meta, Key, Ts, St) ->
     case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 	nil -> {nil,St};
-	Meth when element(1, Meth) =:= function ->
+	#lua_func{}=Meth ->
+	    {Vs,St1} = functioncall(Meth, [T,Key], St),
+	    {first_value(Vs),St1};
+	#erl_func{}=Meth ->
 	    {Vs,St1} = functioncall(Meth, [T,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->				%Recurse down the metatable
@@ -388,11 +400,11 @@ load_function([?FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
 
 call(Func, St) -> call(Func, [], St).
 
-call(#function{}=Func, Args, St0) ->		%Already defined
+call(#lua_func{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call({function,_}=Func, Args, St0) ->		%Internal erlang function
+call(#erl_func{}=Func, Args, St0) ->		%Internal erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
@@ -685,7 +697,7 @@ do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 
@@ -694,14 +706,14 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 
 %% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
 
 do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
-    {#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
+    {#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
@@ -807,10 +819,10 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
+functioncall(#lua_func{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
     functioncall(Fis, [], Stk, Env, St0);
-functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No local variables, only env variables.
     E0 = erlang:make_tuple(Esz, nil),
@@ -818,14 +830,14 @@ functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Fref,St1} = alloc_frame(E1, St0),
     {Ret,St2} = functioncall(Fis, [], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall(#function{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No env variables, only local variables.
     L0 = erlang:make_tuple(Lsz, nil),
     L1 = assign_local_pars(Pars, Args, L0),
     {Ret,St1} = functioncall(Fis, [L1], Stk, Env, St0),
     {Ret,St1};
-functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     L0 = erlang:make_tuple(Lsz, nil),
     E0 = erlang:make_tuple(Esz, nil),
@@ -833,7 +845,7 @@ functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Fref,St1} = alloc_frame(E1, St0),
     {Ret,St2} = functioncall(Fis, [L1], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
+functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
@@ -1306,10 +1318,10 @@ mark([#fref{i=F}|Todo], More, St, Sf0, Tt, Ft) ->
 	    Ses = tuple_to_list(array:get(F, Ft)),
 	    mark(Todo, [Ses|More], St, Sf1, Tt, Ft)
     end;
-mark([#function{env=Env}|Todo], More, St, Sf, Tt, Ft) ->
+mark([#lua_func{env=Env}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, [Env|More], St, Sf, Tt, Ft);
 %% Catch these as they would match table key-value pair.
-mark([{function,_}|Todo], More, St, Sf, Tt, Ft) ->
+mark([#erl_func{}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, More, St, Sf, Tt, Ft);
 mark([#thread{}|Todo], More, St, Sf, Tt, Ft) ->
     mark(Todo, More, St, Sf, Tt, Ft);
