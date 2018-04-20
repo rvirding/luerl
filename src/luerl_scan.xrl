@@ -116,6 +116,8 @@ Rules.
 
 Erlang code.
 
+-include("luerl.hrl").
+
 -export([is_keyword/1]).
 
 %% name_token(Chars, Line) ->
@@ -163,8 +165,13 @@ string_token(Cs0, Len, L) ->
     Cs = string:substr(Cs0, 2, Len - 2),	%Strip quotes
     case catch {ok,chars(Cs)} of
 	{ok,S} ->
-	    {token,{'STRING',L,list_to_binary(S)}};
-	error -> {error,"illegal string"}
+            case ?IOLIST_TO_BINARY(S) of
+                {ok, B} ->
+                    {token,{'STRING',L, B}};
+                {error, string_too_large} ->
+                    {error, "string too large"}
+            end;
+  error -> {error,"illegal string"}
     end.
 
 chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits

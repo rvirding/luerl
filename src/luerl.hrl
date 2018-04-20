@@ -67,6 +67,16 @@
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
+-ifdef(SANDBOX_STRINGS).
+-define(IOLIST_TO_BINARY(S),
+        case luerl_lib_string:iolist_byte_size(S) < 64 of
+            true -> {ok, iolist_to_binary(S)};
+            false -> {error, string_too_large}
+        end).
+-else.
+-define(IOLIST_TO_BINARY(S), {ok, iolist_to_binary(S)}).
+-endif.
+
 %% Different methods for storing tables in the global data #luerl{}.
 %% Access through macros to allow testing with different storage
 %% methods. This is inefficient with ETS tables where it would
