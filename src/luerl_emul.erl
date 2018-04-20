@@ -1106,7 +1106,7 @@ op('/', A1, A2) ->
     numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
 op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end);
+	       fun (N1,N2) -> N1 - floor(N1/N2)*N2 end);
 op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
@@ -1121,6 +1121,16 @@ op('>', A1, A2) -> lt_op('>', A2, A1);
 op('..', A1, A2) -> concat_op(A1, A2);
 %% Bad args here.
 op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
+
+%% We need a floor to do the mod in the same way as Lua. This doesn't
+%% exist before 20 so we have to do it ourselves.
+
+floor(X) ->
+    T = float(trunc(X)),
+    if X >= 0.0 -> T;
+       X =:= T -> T;
+       true -> T - 1.0
+    end.
 
 %% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
 %% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
