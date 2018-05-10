@@ -23,9 +23,12 @@
 %% The basic entry point to set up the function table.
 -export([install/1]).
 
+%% Utility
+-export([iolist_byte_size/1]).
+
 %% Export some test functions.
 -export([test_gsub/3,test_match_pat/3,test_pat/1,
-	 test_byte/3,test_do_find/4,test_sub/2,test_sub/3, iolist_byte_size/1]).
+	 test_byte/3,test_do_find/4,test_sub/2,test_sub/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 

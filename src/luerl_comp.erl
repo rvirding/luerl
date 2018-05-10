@@ -590,6 +590,7 @@ tableconstructor(Fs, St0) ->
 %% var_name(Line, Name) -> #var{}.
 %% lit_name(Line, Name) -> #lit{}.
 
+name_string(Name) when is_binary(Name) -> Name;
 name_string(Name) -> atom_to_binary(Name, latin1).
 
 lit_name(L, N) -> #lit{l=L,v=name_string(N)}.
