@@ -286,9 +286,8 @@ tonumber(As, St) -> badarg_error(tonumber, As, St).
 tostring([Arg|_], St) ->
     case luerl_emul:getmetamethod(Arg, <<"__tostring">>, St) of
 	nil -> {[tostring(Arg)],St};
-	M when element(1, M) =:= function ->
-	    {R,St1} = luerl_emul:functioncall(M, [Arg], St),
-	    {R,St1}
+	M when ?IS_FUNCTION(M) ->
+	    luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
     end.
 
 tostring(nil) -> <<"nil">>;

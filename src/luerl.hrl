@@ -62,6 +62,8 @@
 
 -record(fref, {i}).				%Frame reference, index
 
+%% Test if it a function, of either sort.
+-define(IS_FUNCTION(F), (is_record(F, lua_func) orelse is_record(F, erl_func))).
 
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).

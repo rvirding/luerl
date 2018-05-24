@@ -167,8 +167,7 @@ search_loaders_loop(Mod, [L|Ls], Estr, St0) ->	%Try the next loader
     %% Call the searcher function
     case luerl_emul:functioncall(L, [Mod], St0) of
 	%% Searcher found a loader.
-	{[F|_],_}=Ret when element(1, F) =:= function ->
-	    Ret;
+	{[F|_],_}=Ret when ?IS_FUNCTION(F) -> Ret;
 	%% Searcher found no loader.
 	{[S|_],St1} when is_binary(S) ->
 	    Estr1 = <<Estr/binary,S/binary>>,	%Append new info string

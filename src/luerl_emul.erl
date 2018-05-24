@@ -233,10 +233,7 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 			    end,
 		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		#lua_func{}=Meth ->
-		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
-		    St1;
-		#erl_func{}=Meth ->
+		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -255,10 +252,7 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		#lua_func{}=Meth ->
-		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
-		    St1;
-		#erl_func{}=Meth ->
+		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -280,10 +274,7 @@ get_table_key(#tref{}=Tref, Key, St) ->
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key}, St);
-	#lua_func{}=Meth ->
-	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
-	    {first_value(Vs),St1};
-	#erl_func{}=Meth ->
+	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->					%Recurse down the metatable
@@ -311,10 +302,7 @@ get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
 get_table_metamethod(T, Meta, Key, Ts, St) ->
     case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 	nil -> {nil,St};
-	#lua_func{}=Meth ->
-	    {Vs,St1} = functioncall(Meth, [T,Key], St),
-	    {first_value(Vs),St1};
-	#erl_func{}=Meth ->
+	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [T,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->				%Recurse down the metatable
