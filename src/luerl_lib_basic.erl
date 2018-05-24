@@ -301,9 +301,16 @@ tostring(N) when is_number(N) ->
 		integer_to_list(round(N));
 	   true -> io_lib:write(N)
 	end,
-    iolist_to_binary(S);
+    case ?IOLIST_TO_BINARY(S) of
+      {ok, S} -> S;
+      {error, E} -> error({E, N})
+    end;
 tostring(S) when is_binary(S) -> S;
-tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
+tostring(#tref{i=I}) ->
+  case ?IOLIST_TO_BINARY(["table: ",io_lib:write(I)]) of
+    {ok, S} -> S;
+    {error, E} -> error({E, I})
+  end;
 tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
 tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
