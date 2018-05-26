@@ -1221,18 +1221,24 @@ le_meta(Op, A1, A2, St0) ->
 	    {boolean_value(Ret),St1}
     end.
 
+-ifdef(SANDBOX_STRINGS).
+-define(CONCAT(S1, S2), ?IOLIST_TO_BINARY([S1, S2])).
+-else.
+-define(CONCAT(S1, S2), {ok, <<S1/binary,S2/binary>>}).
+-endif.
+
 concat_op(A1, A2) ->
-    case luerl_lib:tostring(A1) of
-	nil ->
-	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-	S1 ->
-	    case luerl_lib:tostring(A2) of
-		nil ->
-		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-		S2 ->
-		    {ok,<<S1/binary,S2/binary>>}
-	    end
-    end.
+  case luerl_lib:tostring(A1) of
+    nil ->
+      {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+    S1 ->
+      case luerl_lib:tostring(A2) of
+        nil ->
+          {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
+        S2 ->
+              ?CONCAT(S1, S2)
+      end
+  end.
 
 concat_meta(A1, A2, St0) ->
     case getmetamethod(A1, A2, <<"__concat">>, St0) of

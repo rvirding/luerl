@@ -116,6 +116,8 @@ Rules.
 
 Erlang code.
 
+-include("luerl.hrl").
+
 -export([is_keyword/1]).
 
 %% name_token(Chars, Line) ->
@@ -123,13 +125,15 @@ Erlang code.
 %% Build a name from list of legal characters, else error.
 
 name_token(Cs, L) ->
-    case catch {ok,list_to_atom(Cs)} of
-	{ok,Name} ->
-	    case is_keyword(Name) of
-		true -> {token,{Name,L}};
-		false -> {token,{'NAME',L,Name}}
-	    end;
-	_ -> {error,"illegal name"}
+    case is_keyword(Cs) of
+        true -> {token, {list_to_atom(Cs), L}};
+        false ->
+            case ?IOLIST_TO_BINARY(Cs) of
+                {ok, B} ->
+                    {token, {'NAME', L, B}};
+                {error, string_too_large} ->
+                    {error, "identifier too long"}
+            end
     end.
 
 %% base_token(Chars, Base, Line) -> Integer.
@@ -163,8 +167,13 @@ string_token(Cs0, Len, L) ->
     Cs = string:substr(Cs0, 2, Len - 2),	%Strip quotes
     case catch {ok,chars(Cs)} of
 	{ok,S} ->
-	    {token,{'STRING',L,list_to_binary(S)}};
-	error -> {error,"illegal string"}
+            case ?IOLIST_TO_BINARY(S) of
+                {ok, B} ->
+                    {token,{'STRING',L, B}};
+                {error, string_too_large} ->
+                    {error, "string too large"}
+            end;
+  error -> {error,"illegal string"}
     end.
 
 chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits
@@ -223,26 +232,26 @@ long_bracket(Line, Cs) ->
 %% is_keyword(Name) -> boolean().
 %% Test if the name is a keyword.
 
-is_keyword('and') -> true;
-is_keyword('break') -> true;
-is_keyword('do') -> true;
-is_keyword('else') -> true;
-is_keyword('elseif') -> true;
-is_keyword('end') -> true;
-is_keyword('false') -> true;
-is_keyword('for') -> true;
-is_keyword('function') -> true;
-is_keyword('goto') -> true;
-is_keyword('if') -> true;
-is_keyword('in') -> true;
-is_keyword('local') -> true;
-is_keyword('nil') -> true;
-is_keyword('not') -> true;
-is_keyword('or') -> true;
-is_keyword('repeat') -> true;
-is_keyword('return') -> true;
-is_keyword('then') -> true;
-is_keyword('true') -> true;
-is_keyword('until') -> true;
-is_keyword('while') -> true;
+is_keyword("and") -> true;
+is_keyword("break") -> true;
+is_keyword("do") -> true;
+is_keyword("else") -> true;
+is_keyword("elseif") -> true;
+is_keyword("end") -> true;
+is_keyword("false") -> true;
+is_keyword("for") -> true;
+is_keyword("function") -> true;
+is_keyword("goto") -> true;
+is_keyword("if") -> true;
+is_keyword("in") -> true;
+is_keyword("local") -> true;
+is_keyword("nil") -> true;
+is_keyword("not") -> true;
+is_keyword("or") -> true;
+is_keyword("repeat") -> true;
+is_keyword("return") -> true;
+is_keyword("then") -> true;
+is_keyword("true") -> true;
+is_keyword("until") -> true;
+is_keyword("while") -> true;
 is_keyword(_) -> false.

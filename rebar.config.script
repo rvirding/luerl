@@ -1,6 +1,6 @@
 %% -*- mode: erlang; indent-tabs-mode: nil -*-
 
-Conf0 = CONFIG,                                 %The original config
+Conf0 = CONFIG ++ application:get_all_env(luerl),
 
 %% Do a deep set stepping down a list of keys replacing/adding last
 %% with value. Named funs would be nicer but not always available.
@@ -45,6 +45,7 @@ Version = case erlang:system_info(otp_release) of
 %% Collect the macro definitions we will add to the compiler options.
 
 %% Erlc macro definitions.
+
 HasOpt = {d,'HAS_MAPS',true},
 FullOpt = {d,'HAS_FULL_KEYS',true},
 RecOpt = {d,'NEW_REC_CORE',true},

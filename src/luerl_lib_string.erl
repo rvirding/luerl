@@ -23,6 +23,9 @@
 %% The basic entry point to set up the function table.
 -export([install/1]).
 
+%% Utility
+-export([iolist_byte_size/1]).
+
 %% Export some test functions.
 -export([test_gsub/3,test_match_pat/3,test_pat/1,
 	 test_byte/3,test_do_find/4,test_sub/2,test_sub/3]).
@@ -301,6 +304,10 @@ lower(As, St) ->
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
 	_ -> badarg_error(lower, As, St)	%nil or []
     end.
+
+iolist_byte_size(S) when is_list(S) -> lists:sum(lists:map(fun iolist_byte_size/1, S));
+iolist_byte_size(S) when is_integer(S) -> 1;
+iolist_byte_size(S) when is_binary(S) -> byte_size(S).
 
 %% match(String, Pattern [, Init]) -> [Match].
 
