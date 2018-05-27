@@ -1,7 +1,7 @@
 Luerl - Lua in Erlang
 =====================
 
-Luerl is an implementation of standard Lua 5.2 written in Erlang/OTP.
+[Luerl](https://luerl.org) is an implementation of standard Lua 5.2 written in Erlang/OTP.
 
 Lua is a powerful, efficient, lightweight, embeddable scripting language common in games, IoT devices, AI bots, machine learning and scientific computing research.
 
