@@ -284,7 +284,7 @@ encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
 encode(I, St) when is_integer(I) -> {float(I),St};
 encode(F, St) when is_float(F) -> {F,St};
-encode(F, St) when ?IS_MAP(F) -> encode(maps:to_list(F), St);
+encode(F, St) when ?IS_MAP(F) -> encode([{<<"__type">>, <<"map">>} | maps:to_list(F)], St);
 encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
 					  {K1,S1} = encode(K0, S0),
@@ -346,17 +346,26 @@ decode(#lua_func{}=Fun, State, _) ->
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->
-    case lists:member(N, In0) of
-	true -> error(recursive_data);		%Been here before
-	false ->
-	    In1 = [N|In0],			%We are in this as well
-	    case ?GET_TABLE(N, St#luerl.ttab) of
-		#table{a=Arr,d=Dict} ->
-		    Fun = fun (K, V, Acc) ->
-				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
-			  end,
-		    Ts = ttdict:fold(Fun, [], Dict),
-		    array:sparse_foldr(Fun, Ts, Arr);
-		_Undefined -> error(badarg)
-	    end
-    end.
+  case lists:member(N, In0) of
+    true -> error(recursive_data);		%Been here before
+    false ->
+      In1 = [N|In0],			%We are in this as well
+      case ?GET_TABLE(N, St#luerl.ttab) of
+        #table{a=Arr,d=Dict} = T->
+          Fun = fun (K, V, Acc) ->
+                  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
+                end,
+          Ts = ttdict:fold(Fun, [], Dict),
+          Decoded = array:sparse_foldr(Fun, Ts, Arr),
+          case lists:keytake(<<"__type">>, 1, Decoded) of
+            false ->
+              Decoded;
+            {value, {<<"__type">>, Type}, OriginalList} ->
+              case Type of
+                <<"map">> ->
+                  maps:from_list(OriginalList)
+              end
+          end;
+        _Undefined -> error(badarg)
+      end
+  end.
