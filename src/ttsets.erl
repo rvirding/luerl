@@ -76,12 +76,12 @@ is_set(_) -> false.
 -spec size(Set::ttset()) -> non_neg_integer().
 %% Return the number of elements in Set.
 
-size(empty) -> 0; 
+size(empty) -> 0;
 size({A,_,B}) ->
     size(A) + size(B) + 1;
 size({A,_,B,_,C}) ->
     size(A) + size(B) + size(C) + 2.
-    
+
 -spec to_list(Set::ttset()) -> [Element::any()].
 %% Return the elements in Set as a list.
 

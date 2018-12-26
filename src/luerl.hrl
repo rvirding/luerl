@@ -23,6 +23,7 @@
 
 -record(luerl, {ttab,tfree,tnext,		%Table table, free, next
 		ftab,ffree,fnext,		%Frame table, free, next
+                utab,ufree,unext,               %Userdata table, free, next
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
@@ -33,7 +34,8 @@
 	       }).
 
 -record(heap, {ttab,tfree,tnext,
-	       ftab,ffree,fnext}).
+	       ftab,ffree,fnext,
+               utab,ufree,unext}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
 %% -record(eenv, {env=[]}).			%Environment
@@ -50,6 +52,7 @@
 
 -record(tref, {i}).				%Table reference, index
 -record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
+-record(uref, {i}).                             %Userdata reference, index
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 %% There are two function types, the Lua one, and the Erlang one.
@@ -74,8 +77,23 @@
 %% methods. This is inefficient with ETS tables where it would
 %% probably be better to use bags and acces with match/select.
 
-%% Set which table store to use.
+%% Set which table store to use. We check if we have full maps before
+%% we use them just to protect ourselves.
+-ifdef(HAS_FULL_KEYS).
+-define(TS_USE_MAPS, true).
+-else.
 -define(TS_USE_ARRAY, true).
+-endif.
+
+-ifdef(TS_USE_MAPS).
+-define(MAKE_TABLE(), maps:new()).
+-define(GET_TABLE(N, Ts), maps:get(N, Ts)).
+-define(SET_TABLE(N, T, Ts), maps:put(N, T, Ts)).
+-define(UPD_TABLE(N, Upd, Ts), maps:update_with(N, Upd, Ts)).
+-define(DEL_TABLE(N, Ts), maps:remove(N, Ts)).
+-define(FILTER_TABLES(Pred, Ts), maps:filter(Pred, Ts)).
+-define(FOLD_TABLES(Fun, Acc, Ts), maps:fold(Fun, Acc, Ts)).
+-endif.
 
 -ifdef(TS_USE_ORDDICT).
 %% Using orddict to handle tables.

@@ -310,6 +310,8 @@ encode(F, St) when is_function(F, 1) ->
 		 encode_list(Res, State)
 	 end,
     {#erl_func{code=F1}, St};
+encode({userdata,Data}, St) ->
+    luerl_emul:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
@@ -335,6 +337,8 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
+decode(#uref{i=N}, St, _) ->
+    decode_userdata(N, St);
 decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(#lua_func{}=Fun, State, _) ->
     F = fun(Args) ->
@@ -360,3 +364,7 @@ decode_table(N, St, In0) ->
 		_Undefined -> error(badarg)
 	    end
     end.
+
+decode_userdata(N, St) ->
+    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
+    {userdata,Data}.

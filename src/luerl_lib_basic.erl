@@ -303,10 +303,10 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
+tostring(#uref{}) -> <<"userdata">>;
 tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
 tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
-tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
 
 type([Arg|_], St) -> {[type(Arg)],St}.		%Only one return value!
@@ -316,10 +316,10 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
+type(#uref{}) -> <<"userdata">>;
 type(#lua_func{}) -> <<"function">>;		%Functions defined in Lua
 type(#erl_func{}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
-type(#userdata{}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
 
 %% getmetatable([Value|_], State) -> {Table,State}.
