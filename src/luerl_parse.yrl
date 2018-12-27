@@ -36,25 +36,32 @@ tableconstructor fieldlist fields field fieldsep
 binop unop uminus.
 
 Terminals
-NAME NUMBER STRING
+NAME NUMERAL LITERALSTRING
 
 'and' 'break' 'do' 'else' 'elseif' 'end' 'false' 'for' 'function' 'goto' 'if' 
 'in' 'local' 'nil' 'not' 'or' 'repeat' 'return' 'then' 'true' 'until' 'while' 
 
-'+' '-' '*' '/' '%' '^' '#' '==' '~=' '<=' '>=' '<' '>' '='
+'+' '-' '*' '/' '//' '%' '^' '&' '|' '~' '>>' '<<' '#'
+'==' '~=' '<=' '>=' '<' '>' '='
 '(' ')' '{' '}' '[' ']' '::' ';' ':' ',' '.' '..' '...' .
 
 
 Rootsymbol chunk.
 
+%% uminus needed for '-' as it has duplicate precedences.
+
 Left 100 'or'.
 Left 200 'and'.
 Left 300 '<' '>' '<=' '>=' '~=' '=='.
-Right 400 '..'.
-Left 500 '+' '-'.
-Left 600 '*' '/' '%'.
-Unary 700 'not' '#' uminus.
-Right 800 '^'.
+Left 400 '|'.
+Left 500 '~'.
+Left 600 '&'.
+Left 700 '<<' '>>'.
+Right 800 '..'.
+Left 900 '+' '-'.
+Left 1000 '*' '/' '//' '%'.
+Unary 1100 'not' '#' uminus.
+Right 1200 '^'.
 
 chunk -> block : '$1'  .
 
@@ -144,8 +151,8 @@ explist -> explist ',' exp : '$1' ++ ['$3'] .
 exp -> 'nil' : '$1' .
 exp -> 'false' : '$1' .
 exp -> 'true' : '$1' .
-exp -> NUMBER : '$1' .
-exp -> STRING : '$1' .
+exp -> NUMERAL : '$1' .
+exp -> LITERALSTRING : '$1' .
 exp -> '...' : '$1' .
 exp -> functiondef : '$1' .
 exp -> prefixexp : '$1' .
@@ -165,7 +172,7 @@ functioncall -> prefixexp ':' NAME args :
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
 args -> tableconstructor : ['$1'] .		%Syntactic sugar
-args -> STRING : ['$1'] .			%Syntactic sugar
+args -> LITERALSTRING : ['$1'] .		%Syntactic sugar
 
 functiondef -> 'function' funcbody : functiondef(line('$1'), '$2').
 
@@ -200,8 +207,14 @@ binop -> exp '+' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '-' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '*' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '/' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '//' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '%' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '^' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '&' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '|' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '~' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '>>' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
+binop -> exp '<<' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '==' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '~=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp '<=' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
@@ -213,7 +226,8 @@ binop -> exp 'and' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 binop -> exp 'or' exp : {op,line('$2'),cat('$2'),'$1','$3'}.
 
 unop -> 'not' exp : {op,line('$1'),cat('$1'),'$2'} .
-unop -> '#' exp :  {op,line('$1'),cat('$1'),'$2'} .
+unop -> '#' exp : {op,line('$1'),cat('$1'),'$2'} .
+unop -> '~' exp : {op,line('$1'),cat('$1'),'$2'} .
 unop -> uminus : '$1' .
      
 uminus -> '-' exp : {op,line('$1'),'-','$2'} .

@@ -276,7 +276,7 @@ stmt({repeat,Line,B,Exp}, St) ->
 stmt({'if',Line,Tests,Else}, St) ->
     if_stmt(Line, Tests, Else, St);
 stmt({for,Line,V,I,L,B}, St) ->			%Default step of 1.0
-    numfor_stmt(Line, V, I, L, {'NUMBER',Line,1.0}, B, St);
+    numfor_stmt(Line, V, I, L, {'NUMERAL',Line,1.0}, B, St);
 stmt({for,Line,V,I,L,S,B}, St) ->
     numfor_stmt(Line, V, I, L, S, B, St);
 stmt({for,Line,Ns,Gs,B}, St) ->
@@ -494,8 +494,8 @@ explist([], St) -> {[],St}.			%No expressions at all
 exp({nil,L}, St) -> {#lit{l=L,v=nil},St};
 exp({false,L}, St) -> {#lit{l=L,v=false},St};
 exp({true,L}, St) -> {#lit{l=L,v=true},St};
-exp({'NUMBER',L,N}, St) -> {#lit{l=L,v=N},St};
-exp({'STRING',L,S}, St) -> {#lit{l=L,v=S},St};
+exp({'NUMERAL',L,N}, St) -> {#lit{l=L,v=N},St};
+exp({'LITERALSTRING',L,S}, St) -> {#lit{l=L,v=S},St};
 exp({'...',L}, St) ->
     {var_name(L, '...'),St};
     %% {#lit{l=L,v='...'},St};
