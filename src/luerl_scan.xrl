@@ -19,7 +19,7 @@
 Definitions.
 
 D = [0-9]
-H = [0-9A-Za-z]
+H = [0-9A-Fa-f]
 U = [A-Z]
 L = [a-z]
 
@@ -32,7 +32,7 @@ Rules.
 %% Integers.
 {D}+ : 
 	case catch {ok,list_to_integer(TokenChars)} of
-	    {ok,I} -> {token,{'NUMBER',TokenLine,float(I)}};
+	    {ok,I} -> {token,{'NUMERAL',TokenLine,I}};
 	    _ -> {error,"illegal number"}
 	end.
 0[xX]{H}+ :
@@ -40,24 +40,24 @@ Rules.
 %% Floats, we have separate rules to make them easier to handle.
 {D}+\.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float(TokenChars)} of
-	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
 {D}+[eE][-+]?{D}+ :
 	[M,E] = string:tokens(TokenChars, "eE"),
 	case catch {ok,list_to_float(M ++ ".0e" ++ E)} of
-	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
 {D}+\.([eE][-+]?{D}+)? :
 	[M|E] = string:tokens(TokenChars, "."),
 	case catch {ok,list_to_float(lists:append([M,".0"|E]))} of
-	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
 \.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float("0" ++ TokenChars)} of
-	    {ok,F} -> {token,{'NUMBER',TokenLine,F}};
+	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
 	    _ -> {error,"illegal number"}
 	end.
 
@@ -73,20 +73,26 @@ Rules.
  	long_bracket(TokenLine, Cs).
 
 %% Other known tokens.
-\+ : {token,{'+',TokenLine}}.
-\- : {token,{'-',TokenLine}}.
-\* : {token,{'*',TokenLine}}.
-\/ : {token,{'/',TokenLine}}.
-\% : {token,{'%',TokenLine}}.
-\^ : {token,{'^',TokenLine}}.
-\# : {token,{'#',TokenLine}}.
-== : {token,{'==',TokenLine}}.
-~= : {token,{'~=',TokenLine}}.
-<= : {token,{'<=',TokenLine}}.
->= : {token,{'>=',TokenLine}}.
-< :  {token,{'<',TokenLine}}.
-> :  {token,{'>',TokenLine}}.
-= :  {token,{'=',TokenLine}}.
+\+  : {token,{'+',TokenLine}}.
+\-  : {token,{'-',TokenLine}}.
+\*  : {token,{'*',TokenLine}}.
+\/  : {token,{'/',TokenLine}}.
+\// : {token,{'//',TokenLine}}.
+\%  : {token,{'%',TokenLine}}.
+\^  : {token,{'^',TokenLine}}.
+\&  : {token,{'&',TokenLine}}.
+\|  : {token,{'|',TokenLine}}.
+\~  : {token,{'~',TokenLine}}.
+\>> : {token,{'>>',TokenLine}}.
+\<< : {token,{'<<',TokenLine}}.
+\#  : {token,{'#',TokenLine}}.
+==  : {token,{'==',TokenLine}}.
+~=  : {token,{'~=',TokenLine}}.
+<=  : {token,{'<=',TokenLine}}.
+>=  : {token,{'>=',TokenLine}}.
+<  :  {token,{'<',TokenLine}}.
+>  :  {token,{'>',TokenLine}}.
+=  :  {token,{'=',TokenLine}}.
 \( : {token,{'(',TokenLine}}.
 \) : {token,{')',TokenLine}}.
 \{ : {token,{'{',TokenLine}}.
@@ -138,7 +144,7 @@ name_token(Cs, L) ->
 
 base_token(Cs, B, L) ->
     case base1(Cs, B, 0) of
-	{I,[]} -> {token,{'NUMBER',L,float(I)}};
+	{I,[]} -> {token,{'NUMERAL',L,I}};
 	{_,_} -> {error,"illegal based number"}
     end.
 
@@ -155,7 +161,7 @@ base1([C|Cs], _Base, SoFar) -> {SoFar,[C|Cs]};
 base1([], _Base, N) -> {N,[]}.
 
 %% string_token(InputChars, Length, Line) ->
-%%      {token,{'STRING',Line,Cs}} | {error,E}.
+%%      {token,{'LITERALSTRING',Line,Cs}} | {error,E}.
 %% Convert an input string into the corresponding string
 %% characters. We know that the input string is correct.
 
@@ -163,7 +169,7 @@ string_token(Cs0, Len, L) ->
     Cs = string:substr(Cs0, 2, Len - 2),	%Strip quotes
     case catch {ok,chars(Cs)} of
 	{ok,S} ->
-	    {token,{'STRING',L,list_to_binary(S)}};
+	    {token,{'LITERALSTRING',L,list_to_binary(S)}};
 	error -> {error,"illegal string"}
     end.
 
@@ -215,10 +221,10 @@ escape_char(C) -> C.
 
 long_bracket(Line, [$\n|Cs]) ->
     S = list_to_binary(Cs),
-    {token,{'STRING',Line,S}};
+    {token,{'LITERALSTRING',Line,S}};
 long_bracket(Line, Cs) ->
     S = list_to_binary(Cs),
-    {token,{'STRING',Line,S}}.
+    {token,{'LITERALSTRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
 %% Test if the name is a keyword.
