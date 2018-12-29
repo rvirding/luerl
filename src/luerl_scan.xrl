@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -36,7 +36,9 @@ Rules.
 	    _ -> {error,"illegal number"}
 	end.
 0[xX]{H}+ :
-	base_token(string:substr(TokenChars, 3), 16, TokenLine).
+        Int = list_to_integer(string:substr(TokenChars, 3), 16),
+        {token,{'NUMERAL',TokenLine,Int}}.
+
 %% Floats, we have separate rules to make them easier to handle.
 {D}+\.{D}+([eE][-+]?{D}+)? :
 	case catch {ok,list_to_float(TokenChars)} of
@@ -59,6 +61,19 @@ Rules.
 	case catch {ok,list_to_float("0" ++ TokenChars)} of
 	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
 	    _ -> {error,"illegal number"}
+	end.
+
+%% Hexadecimal floats, we have one complex rule to handle bad formats
+%% more like the Lua parser.
+
+0[xX]{H}*\.?{H}*([pP][+-]?{D}+)? :
+        Tcs = string:substr(TokenChars, 3),
+	case lists:splitwith(fun (C) -> (C =/= $p) and (C =/= $P) end, Tcs) of
+	    {Mcs,[]} when Mcs /= [] ->
+		hex_float(Mcs, [], TokenLine);
+	    {Mcs,[_P|Ecs]} when Ecs /= [] ->
+		hex_float(Mcs, Ecs, TokenLine);
+	    _Other -> {error,"illegal based number"}
 	end.
 
 %% Strings. 
@@ -116,7 +131,7 @@ Rules.
 --\[\n :	skip_token.
 --\[[^[\n].* :	skip_token.
 
-%% --aa([^b]|b[^b])*b+b
+%% --aa([^y]|y[^zy])*y+z
 --\[\[([^]]|\][^]])*\]+\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
 
@@ -138,27 +153,43 @@ name_token(Cs, L) ->
 	_ -> {error,"illegal name"}
     end.
 
-%% base_token(Chars, Base, Line) -> Integer.
-%% Convert a string of Base characters into a number. We know that
-%% the strings only contain the correct character.
+%% hex_float(Mantissa, Exponent) -> {token,{'NUMERAL',Line,Float}} | {error,E}.
+%% hex_mantissa(Chars) -> Float.
+%% hex_fraction(Chars, Pow, SoFar) -> Fraction.
 
-base_token(Cs, B, L) ->
-    case base1(Cs, B, 0) of
-	{I,[]} -> {token,{'NUMERAL',L,I}};
-	{_,_} -> {error,"illegal based number"}
+hex_float(Mcs, [], Line) ->
+    case hex_mantissa(Mcs) of
+	{float,M} -> {token,{'NUMERAL',Line,M}};
+	error -> {error,"illegal based number"}
+    end;
+hex_float(Mcs, Ecs, Line) ->
+    case hex_mantissa(Mcs) of
+	{float,M} ->
+	    case catch list_to_integer(Ecs, 10) of
+		{'EXIT',_} -> {error,"illegal based number"};
+		E -> {token,{'NUMERAL',Line,M * math:pow(2, E)}}
+	    end;
+	error -> {error,"illegal based number"}
     end.
 
-base1([C|Cs], Base, SoFar) when C >= $0, C =< $9, C < Base + $0 ->
-    Next = SoFar * Base + (C - $0),
-    base1(Cs, Base, Next);
-base1([C|Cs], Base, SoFar) when C >= $a, C =< $f, C < Base + $a - 10 ->
-    Next = SoFar * Base + (C - $a + 10),
-    base1(Cs, Base, Next);
-base1([C|Cs], Base, SoFar) when C >= $A, C =< $F, C < Base + $A - 10 ->
-    Next = SoFar * Base + (C - $A + 10),
-    base1(Cs, Base, Next);
-base1([C|Cs], _Base, SoFar) -> {SoFar,[C|Cs]};
-base1([], _Base, N) -> {N,[]}.
+hex_mantissa(Mcs) ->
+    case lists:splitwith(fun (C) -> C =/= $. end, Mcs) of
+	{[],[]} -> error;			%Nothing at all
+	{[],[$.]} -> error;			%Only a '.'
+	{[],[$.|Fcs]} -> {float,hex_fraction(Fcs, 16.0, 0.0)};
+	{Hcs,[]} -> {float,float(list_to_integer(Hcs, 16))};
+	{Hcs,[$.|Fcs]} ->
+	    H = float(list_to_integer(Hcs, 16)),
+	    {float,hex_fraction(Fcs, 16.0, H)}
+    end.
+
+hex_fraction([C|Cs], Pow, SoFar) when C >= $0, C =< $9 ->
+    hex_fraction(Cs, Pow*16, SoFar + (C - $0)/Pow);
+hex_fraction([C|Cs], Pow, SoFar) when C >= $a, C =< $f ->
+    hex_fraction(Cs, Pow*16, SoFar + (C - $a + 10)/Pow);
+hex_fraction([C|Cs], Pow, SoFar) when C >= $A, C =< $F ->
+    hex_fraction(Cs, Pow*16, SoFar + (C - $A + 10)/Pow);
+hex_fraction([], _Pow, SoFar) -> SoFar.
 
 %% string_token(InputChars, Length, Line) ->
 %%      {token,{'LITERALSTRING',Line,Cs}} | {error,E}.
