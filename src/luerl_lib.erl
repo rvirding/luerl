@@ -127,9 +127,9 @@ bin_to_float(B) -> str_to_float(binary_to_list(B)).
 
 str_to_float(S) ->
     case luerl_scan:string(S) of
-	{ok,[{'NUMBER',_,N}],_} -> {ok,N};
-	{ok,[{'+',_},{'NUMBER',_,N}],_} -> {ok,N};
-	{ok,[{'-',_},{'NUMBER',_,N}],_} -> {ok,-N};
+	{ok,[{'NUMERAL',_,N}],_} -> {ok,N};
+	{ok,[{'+',_},{'NUMERAL',_,N}],_} -> {ok,N};
+	{ok,[{'-',_},{'NUMERAL',_,N}],_} -> {ok,-N};
 	_ -> error
     end.
 
@@ -164,7 +164,7 @@ tonumber(A, B) ->
 
 %% tonumber(A, B) ->
 %%     case tonumbers([A,B]) of
-%% 	[N1,N2] when ?IS_INTEGER(N1) ->
+%% 	[N1,N2] when ?IS_FLOAT_INT(N1) ->
 %% 	    N1 * math:pow(10,N2);
 %% 	nil -> nil
 %%     end.
@@ -172,7 +172,9 @@ tonumber(A, B) ->
 tointeger(A) ->
     case tonumber(A) of
 	nil -> nil;
-	N -> float(round(N))
+	N when is_integer(N) -> N;
+	N when ?IS_FLOAT_INT(N) -> round(N);
+	_ -> nil
     end.
 
 tonumbers(As) -> tonumbers(As, []).

@@ -159,8 +159,10 @@ init_table(Itab) ->
     D0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {D,A}) -> {D,A};	%Ignore nil values
-	       ({K,V}, {D,A}) when is_number(K) ->
-		   case ?IS_INTEGER(K, I) of
+	       ({K,V}, {D,A}) when is_integer(K), K >= 1 ->
+		   {D,array:set(K, V, A)};
+	       ({K,V}, {D,A}) when is_float(K) ->
+		   case ?IS_FLOAT_INT(K, I) of
 		       true when I >= 1 -> {D,array:set(I, V, A)};
 		       _NegFalse -> {ttdict:store(K, V, D),A}
 		   end;
@@ -206,8 +208,10 @@ set_table_keys(Tab0, [K|Ks], Val, St0) ->
 %%  not from the table; however, we won't add a nil value.
 %%  NOTE: WE ALWAYS RETURN A SINGLE VALUE!
 
-set_table_key(#tref{}=Tref, Key, Val, St) when is_number(Key) ->
-    case ?IS_INTEGER(Key, I) of
+set_table_key(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
+    set_table_int_key(Tref, Key, Key, Val, St);
+set_table_key(#tref{}=Tref, Key, Val, St) when is_float(Key) ->
+    case ?IS_FLOAT_INT(Key, I) of
 	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
 	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
     end;
@@ -267,8 +271,10 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 	    St#luerl{ttab=Ts1}
     end.
 
-get_table_key(#tref{}=Tref, Key, St) when is_number(Key) ->
-    case ?IS_INTEGER(Key, I) of
+get_table_key(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
+    get_table_int_key(Tref, Key, Key, St);
+get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
+    case ?IS_FLOAT_INT(Key, I) of
 	true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
 	_NegFalse -> get_table_key_key(Tref, Key, St)
     end;
@@ -1104,9 +1110,8 @@ build_tab_loop(C, [V,K|Stk], Fs) ->
 op('-', A) ->
     numeric_op('-', A, <<"__unm">>, fun (N) -> -N end);
 op('not', A) -> {ok,not ?IS_TRUE(A)};
-%% op('not', false) -> {[true]};
-%% op('not', nil) -> {[true]};
-%% op('not', _) -> {[false]};			%Everything else is false
+op('~', A) ->
+    integer_op('~', A, <<"__bnot">>, fun (N) -> {ok,bnot(N)} end);
 op('#', B) when is_binary(B) -> {ok,float(byte_size(B))};
 op('#', #tref{}=T) ->
     {meta,fun (_, St) -> luerl_lib_table:length(T, St) end};
@@ -1121,12 +1126,27 @@ op('*', A1, A2) ->
     numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
 op('/', A1, A2) ->
     numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
+op('//', A1, A2) ->
+    numeric_op('/', A1, A2, <<"__idiv">>,
+	       fun (N1,N2) when is_integer(N1), is_integer(N2) -> floor(N1/N2);
+		   (N1,N2) -> 0.0 + floor(N1/N2) end);
 op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
 	       fun (N1,N2) -> N1 - floor(N1/N2)*N2 end);
 op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
+%% Bitwise operators.
+op('&', A1, A2) ->
+    integer_op('&', A1, A2, <<"__band">>, fun (N1,N2) -> N1 band N2 end);
+op('|', A1, A2) ->
+    integer_op('|', A1, A2, <<"__bor">>, fun (N1,N2) -> N1 bor N2 end);
+op('~', A1, A2) ->
+    integer_op('|', A1, A2, <<"__bxor">>, fun (N1,N2) -> N1 bxor N2 end);
+op('<<', A1, A2) ->
+    integer_op('<<', A1, A2, <<"__shl">>, fun (N1,N2) -> N1 bsl N2 end);
+op('>>', A1, A2) ->
+    integer_op('>>', A1, A2, <<"__shr">>, fun (N1,N2) -> N1 bsr N2 end);
 %% Relational operators, getting close.
 op('==', A1, A2) -> eq_op('==', A1, A2);
 op('~=', A1, A2) -> neq_op('~=', A1, A2);
@@ -1139,15 +1159,16 @@ op('..', A1, A2) -> concat_op(A1, A2);
 %% Bad args here.
 op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
 
+-ifndef(HAS_FLOOR).
 %% We need a floor to do the mod in the same way as Lua. This doesn't
 %% exist before 20 so we have to do it ourselves.
 
 floor(X) ->
-    T = float(trunc(X)),
-    if X >= 0.0 -> T;
-       X =:= T -> T;
-       true -> T - 1.0
+    T = trunc(X),
+    if X >= 0 -> T;
+       true -> T - 1
     end.
+-endif.
 
 %% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
 %% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
@@ -1176,6 +1197,23 @@ numeric_op(Op, A1, A2, E, Raw) ->
 	    end
     end.
 
+integer_op(Op, A, E, Raw) ->
+    case luerl_lib:tointeger(A) of
+	nil -> {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end};
+	N -> {ok,Raw(N)}
+    end.
+
+integer_op(Op, A1, A2, E, Raw) ->
+    case luerl_lib:tointeger(A1) of
+	nil -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+	N1 ->
+	    case luerl_lib:tointeger(A2) of
+		nil ->
+		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+		N2 -> {ok,Raw(N1, N2)}
+	    end
+    end.
+
 numeric_meta(Op, A, E, St0) ->
     case getmetamethod(A, E, St0) of
 	nil -> badarg_error(Op, [A], St0);	%No meta method
@@ -1192,11 +1230,11 @@ numeric_meta(Op, A1, A2, E, St0) ->
 	    {first_value(Ret),St1}
     end.
 
-eq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,true};
+eq_op(_Op, A1, A2) when A1 == A2 -> {ok,true};
 eq_op(_Op, A1, A2) ->
     {meta,fun (_, St) -> eq_meta(A1, A2, St) end}.
 
-neq_op(_Op, A1, A2) when A1 =:= A2 -> {ok,false};
+neq_op(_Op, A1, A2) when A1 == A2 -> {ok,false};
 neq_op(_Op, A1, A2) ->
     {meta,fun (_, St0) ->
 		  {Ret,St1} = eq_meta(A1, A2, St0),

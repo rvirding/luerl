@@ -282,8 +282,7 @@ encode(false, St) -> {false,St};
 encode(true, St) -> {true,St};
 encode(B, St) when is_binary(B) -> {B,St};
 encode(A, St) when is_atom(A) -> {atom_to_binary(A, latin1),St};
-encode(I, St) when is_integer(I) -> {float(I),St};
-encode(F, St) when is_float(F) -> {F,St};
+encode(N, St) when is_number(N) -> {N,St};	%Integers and floats
 encode(F, St) when ?IS_MAP(F) -> encode(maps:to_list(F), St);
 encode(L, St0) when is_list(L) ->
     {Es,{_,St1}} = lists:mapfoldl(fun ({K0,V0}, {I,S0}) ->
@@ -293,7 +292,7 @@ encode(L, St0) when is_list(L) ->
 				      (V0, {I,S0}) ->
 					  {V1,S1} = encode(V0, S0),
 					  {{I,V1},{I+1,S1}}
-			      end, {1.0,St0}, L),
+			      end, {1,St0}, L),
     {T,St2} = luerl_emul:alloc_table(Es, St1),
     {T,St2};					%No more to do for now
 encode(F, St) when is_function(F, 2) ->
@@ -334,7 +333,7 @@ decode(nil, _, _) -> nil;
 decode(false, _, _) -> false;
 decode(true, _, _) -> true;
 decode(B, _, _) when is_binary(B) -> B;
-decode(N, _, _) when is_number(N) -> N;
+decode(N, _, _) when is_number(N) -> N;		%Integers and floats
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
 decode(#uref{i=N}, St, _) ->

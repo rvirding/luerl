@@ -35,7 +35,7 @@ install(St) ->
 %% Caller will convert this list to the correct format.
 
 table() ->
-    [{<<"_VERSION">>,<<"Lua 5.2">>},		%We are optimistic
+    [{<<"_VERSION">>,<<"Lua 5.3">>},            %We are optimistic
      {<<"assert">>,#erl_func{code=fun assert/2}},
      {<<"collectgarbage">>,#erl_func{code=fun collectgarbage/2}},
      {<<"dofile">>,#erl_func{code=fun dofile/2}},
@@ -107,24 +107,19 @@ error(As, St) -> badarg_error(error, As, St).
 
 ipairs([#tref{}=Tref|_], St) ->
     case luerl_emul:getmetamethod(Tref, <<"__ipairs">>, St) of
-	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0.0],St};
+	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 ipairs(As, St) -> badarg_error(ipairs, As, St).
     
-ipairs_next([A], St) -> ipairs_next([A,0.0], St);
+ipairs_next([A], St) -> ipairs_next([A,0], St);
 ipairs_next([#tref{i=T},K|_], St) ->
     #table{a=Arr} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
-    case ?IS_INTEGER(K, I) of
-	true when I >= 0 ->
-	    Next = I + 1,
-	    case raw_get_index(Arr, Next) of
-		nil -> {[nil],St};
-		V -> {[float(Next),V],St}
-	    end;
-	_NegFalse -> lua_error({invalid_key,ipairs,K}, St)
-    end;
-ipairs_next(As, St) -> badarg_error(ipairs, As, St).
+    Next = K + 1,
+    case raw_get_index(Arr, Next) of
+	nil -> {[nil],St};
+	V -> {[Next,V],St}
+    end.
 
 %% pairs(Args, State) -> {[Func,Table,Key],State}.
 %%  Return a function to step over all the key-value pairs in a table.
@@ -148,10 +143,12 @@ next([#tref{i=T},K|_], St) ->
 	    %% Find the first, start with the array.
 	    %% io:format("n: ~p\n", [{Arr,Dict}]),
 	    next_index(0, Arr, Dict, St);
-       is_number(K) ->
-	    case ?IS_INTEGER(K, I0) of
-		true when I0 >= 1 ->
-		    next_index(I0, Arr, Dict, St);
+       is_integer(K), K >= 1 ->
+	    next_index(K, Arr, Dict, St);
+       is_float(K) ->
+	    case ?IS_FLOAT_INT(K, I) of
+		true when I >= 1 ->
+		    next_index(I, Arr, Dict, St);
 		_NegFalse -> next_key(K, Dict, St)	%Not integer or negative
 	    end;
        true -> next_key(K, Dict, St)
@@ -160,7 +157,7 @@ next(As, St) -> badarg_error(next, As, St).
 
 next_index(I0, Arr, Dict, St) ->
     case next_index_loop(I0+1, Arr, array:size(Arr)) of
-	{I1,V} -> {[float(I1),V],St};
+	{I1,V} -> {[I1,V],St};
 	none ->
 	    %% Nothing in the array, take table instead.
 	    first_key(Dict, St)
@@ -207,9 +204,13 @@ rawlen([#tref{}=T|_], St) ->
     {[luerl_lib_table:raw_length(T, St)],St};
 rawlen(As, St) -> badarg_error(rawlen, As, St).
 
-rawget([#tref{i=N},K|_], St) when is_number(K) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
-    V = case ?IS_INTEGER(K, I) of
+rawget([#tref{i=N},K|_], St) when is_integer(K), K >= 1 ->
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),	%Get the table.
+    V = raw_get_index(Arr, K),
+    {[V],St};
+rawget([#tref{i=N},K|_], St) when is_float(K) ->
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),        %Get the table.
+    V = case ?IS_FLOAT_INT(K, I) of
 	    true when I >= 1 ->			%Array index
 		raw_get_index(Arr, I);
 	    _NegFalse ->			%Negative or false
@@ -222,9 +223,15 @@ rawget([#tref{i=N},K|_], St) ->
     {[V],St};
 rawget(As, St) -> badarg_error(rawget, As, St).
 
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_number(K) ->
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St)
+  when is_integer(K), K >= 1 ->
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    Arr1 = raw_set_index(Arr0, K, V),
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+    {[Tref],St#luerl{ttab=Ts1}};
+rawset([#tref{i=N}=Tref,K,V|_], #luerl{ttab=Ts0}=St) when is_float(K) ->
     #table{a=Arr0,d=Dict0}=T = ?GET_TABLE(N, Ts0),
-    Ts1 = case ?IS_INTEGER(K, I) of
+    Ts1 = case ?IS_FLOAT_INT(K, I) of
 	      true when I >= 1 ->
 		  Arr1 = raw_set_index(Arr0, I, V),
 		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
@@ -294,13 +301,13 @@ tostring(nil) -> <<"nil">>;
 tostring(false) -> <<"false">>;
 tostring(true) -> <<"true">>;
 tostring(N) when is_number(N) ->
-    A = abs(N),
-    %% Print really big/small "integers" as floats as well.
-    S = if ?IS_INTEGER(N), A < 1.0e14 ->
-		integer_to_list(round(N));
-	   true -> io_lib:write(N)
-	end,
-    iolist_to_binary(S);
+    %% A = abs(N),
+    %% %% Print really big/small "integers" as floats as well.
+    %% S = if ?IS_FLOAT_INT(N), A < 1.0e14 ->
+    %% 		integer_to_list(round(N));
+    %% 	   true -> io_lib:write(N)
+    %% 	end,
+    iolist_to_binary(io_lib:write(N));
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
 tostring(#uref{}) -> <<"userdata">>;
