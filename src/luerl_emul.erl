@@ -1128,11 +1128,18 @@ op('/', A1, A2) ->
     numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
 op('//', A1, A2) ->
     numeric_op('/', A1, A2, <<"__idiv">>,
-	       fun (N1,N2) when is_integer(N1), is_integer(N2) -> floor(N1/N2);
-		   (N1,N2) -> 0.0 + floor(N1/N2) end);
+	       fun (N1,N2) when is_integer(N1), is_integer(N2) ->
+               case N1 rem N2 of
+                 0 -> N1 div N2;
+                 _ -> floor(N1/N2)
+               end;
+             (N1,N2) -> 0.0 + floor(N1/N2)
+         end);
 op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - floor(N1/N2)*N2 end);
+	       fun (N1,N2) when is_integer(N1), is_integer(N2) -> N1 rem N2;
+             (N1, N2) -> N1 - floor(N1/N2)*N2
+         end);
 op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
