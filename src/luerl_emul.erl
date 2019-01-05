@@ -1126,17 +1126,44 @@ op('*', A1, A2) ->
     numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
 op('/', A1, A2) ->
     numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
+%% The '//' and '%' operators are specially handled to avoid first
+%% converting integers to floats and potentially lose precision.
 op('//', A1, A2) ->
-    numeric_op('/', A1, A2, <<"__idiv">>,
-	       fun (N1,N2) when is_integer(N1), is_integer(N2) -> floor(N1/N2);
+    numeric_op('//', A1, A2, <<"__idiv">>,
+	       fun (N1,N2) when is_integer(N1), is_integer(N2) ->
+		       Idiv = N1 div N2,
+		       Irem = N1 rem N2,
+		       if Irem =:= 0 -> Idiv;
+			  Idiv < 0 -> Idiv - 1;
+			  true -> Idiv
+		       end;
 		   (N1,N2) -> 0.0 + floor(N1/N2) end);
 op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - floor(N1/N2)*N2 end);
+               fun (N1,N2) when is_integer(N1), is_integer(N2) ->
+                       Irem = N1 rem N2,
+                       if (Irem < 0) and (N2 >= 0) -> Irem + N2;
+                          (Irem > 0) and (N2 < 0) -> Irem + N2;
+                          true -> Irem
+                       end;
+                       %% if Irem < 0 ->
+                       %%         if N2 < 0 -> Irem;
+                       %%            true -> Irem + N2
+                       %%         end;
+                       %%    Irem > 0 ->
+                       %%         if N2 < 0 -> Irem + N2;
+                       %%            true -> Irem
+                       %%         end;
+                       %%    true -> 0             %Irem =:= 0
+                       %% end;
+                   (N1,N2) -> N1 - floor(N1/N2)*N2 end);
 op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
 %% Bitwise operators.
+
+%% The '>>' is an arithmetic shift as a logical shift implies a word
+%% size which we don't have.
 op('&', A1, A2) ->
     integer_op('&', A1, A2, <<"__band">>, fun (N1,N2) -> N1 band N2 end);
 op('|', A1, A2) ->
@@ -1163,9 +1190,11 @@ op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
 %% We need a floor to do the mod in the same way as Lua. This doesn't
 %% exist before 20 so we have to do it ourselves.
 
+%% floor(Number) -> integer().
 floor(X) ->
     T = trunc(X),
     if X >= 0 -> T;
+       X == T -> T;
        true -> T - 1
     end.
 -endif.
