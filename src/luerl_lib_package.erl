@@ -37,7 +37,7 @@
 
 install(St0) ->
     St1 = luerl_emul:set_global_key(<<"require">>,
-				    {function,fun require/2}, St0),
+				    #erl_func{code=fun require/2}, St0),
     {S,St2} = luerl_emul:alloc_table(searchers_table(), St1),
     {L,St3} = luerl_emul:alloc_table(loaded_table(), St2),
     {P,St4} = luerl_emul:alloc_table(preload_table(), St3),
@@ -56,19 +56,19 @@ table(S, L, P) ->
      {<<"preload">>,P},
      {<<"path">>,path()},
      {<<"searchers">>,S},
-     {<<"searchpath">>,{function,fun searchpath/2}}
+     {<<"searchpath">>,#erl_func{code=fun searchpath/2}}
     ].
 
 searchers_table() ->
-    [{1.0,{function,fun preload_searcher/2}},
-     {2.0,{function,fun lua_searcher/2}}].
+    [{1.0,#erl_func{code=fun preload_searcher/2}},
+     {2.0,#erl_func{code=fun lua_searcher/2}}].
 
 preload_table() -> [].
 
 loaded_table() -> [].
 
 %% meta_table() ->
-%%     [{<<"__index">>,{function,fun meta_values/2}}
+%%     [{<<"__index">>,#erl_func{code=fun meta_values/2}}
 %%     ].
 
 %% config()
@@ -167,8 +167,7 @@ search_loaders_loop(Mod, [L|Ls], Estr, St0) ->	%Try the next loader
     %% Call the searcher function
     case luerl_emul:functioncall(L, [Mod], St0) of
 	%% Searcher found a loader.
-	{[F|_],_}=Ret when element(1, F) =:= function ->
-	    Ret;
+	{[F|_],_}=Ret when ?IS_FUNCTION(F) -> Ret;
 	%% Searcher found no loader.
 	{[S|_],St1} when is_binary(S) ->
 	    Estr1 = <<Estr/binary,S/binary>>,	%Append new info string

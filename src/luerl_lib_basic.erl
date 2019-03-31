@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -36,30 +36,30 @@ install(St) ->
 
 table() ->
     [{<<"_VERSION">>,<<"Lua 5.2">>},		%We are optimistic
-     {<<"assert">>,{function,fun assert/2}},
-     {<<"collectgarbage">>,{function,fun collectgarbage/2}},
-     {<<"dofile">>,{function,fun dofile/2}},
-     {<<"eprint">>,{function,fun eprint/2}},
-     {<<"error">>,{function,fun error/2}},
-     {<<"getmetatable">>,{function,fun getmetatable/2}},
-     {<<"ipairs">>,{function,fun ipairs/2}},
-     {<<"load">>,{function,fun load/2}},
-     {<<"loadfile">>,{function,fun loadfile/2}},
-     {<<"loadstring">>,{function,fun loadstring/2}}, %For Lua 5.1 compatibility
-     {<<"next">>,{function,fun next/2}},
-     {<<"pairs">>,{function,fun pairs/2}},
-     {<<"pcall">>,{function,fun pcall/2}},
-     {<<"print">>,{function,fun print/2}},
-     {<<"rawequal">>,{function,fun rawequal/2}},
-     {<<"rawget">>,{function,fun rawget/2}},
-     {<<"rawlen">>,{function,fun rawlen/2}},
-     {<<"rawset">>,{function,fun rawset/2}},
-     {<<"select">>,{function,fun select/2}},
-     {<<"setmetatable">>,{function,fun setmetatable/2}},
-     {<<"tonumber">>,{function,fun tonumber/2}},
-     {<<"tostring">>,{function,fun tostring/2}},
-     {<<"type">>,{function,fun type/2}},
-     {<<"unpack">>,{function,fun unpack/2}}	%For Lua 5.1 compatibility
+     {<<"assert">>,#erl_func{code=fun assert/2}},
+     {<<"collectgarbage">>,#erl_func{code=fun collectgarbage/2}},
+     {<<"dofile">>,#erl_func{code=fun dofile/2}},
+     {<<"eprint">>,#erl_func{code=fun eprint/2}},
+     {<<"error">>,#erl_func{code=fun error/2}},
+     {<<"getmetatable">>,#erl_func{code=fun getmetatable/2}},
+     {<<"ipairs">>,#erl_func{code=fun ipairs/2}},
+     {<<"load">>,#erl_func{code=fun load/2}},
+     {<<"loadfile">>,#erl_func{code=fun loadfile/2}},
+     {<<"loadstring">>,#erl_func{code=fun loadstring/2}}, %For Lua 5.1 compatibility
+     {<<"next">>,#erl_func{code=fun next/2}},
+     {<<"pairs">>,#erl_func{code=fun pairs/2}},
+     {<<"pcall">>,#erl_func{code=fun pcall/2}},
+     {<<"print">>,#erl_func{code=fun print/2}},
+     {<<"rawequal">>,#erl_func{code=fun rawequal/2}},
+     {<<"rawget">>,#erl_func{code=fun rawget/2}},
+     {<<"rawlen">>,#erl_func{code=fun rawlen/2}},
+     {<<"rawset">>,#erl_func{code=fun rawset/2}},
+     {<<"select">>,#erl_func{code=fun select/2}},
+     {<<"setmetatable">>,#erl_func{code=fun setmetatable/2}},
+     {<<"tonumber">>,#erl_func{code=fun tonumber/2}},
+     {<<"tostring">>,#erl_func{code=fun tostring/2}},
+     {<<"type">>,#erl_func{code=fun type/2}},
+     {<<"unpack">>,#erl_func{code=fun unpack/2}}	%For Lua 5.1 compatibility
     ].
 
 assert(As, St) ->
@@ -107,7 +107,7 @@ error(As, St) -> badarg_error(error, As, St).
 
 ipairs([#tref{}=Tref|_], St) ->
     case luerl_emul:getmetamethod(Tref, <<"__ipairs">>, St) of
-	nil -> {[{function,fun ipairs_next/2},Tref,0.0],St};
+	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0.0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 ipairs(As, St) -> badarg_error(ipairs, As, St).
@@ -131,7 +131,7 @@ ipairs_next(As, St) -> badarg_error(ipairs, As, St).
 
 pairs([#tref{}=Tref|_], St) ->
     case luerl_emul:getmetamethod(Tref, <<"__pairs">>, St) of
-	nil -> {[{function,fun next/2},Tref,nil],St};
+	nil -> {[#erl_func{code=fun next/2},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 pairs(As, St) -> badarg_error(pairs, As, St).
@@ -286,9 +286,8 @@ tonumber(As, St) -> badarg_error(tonumber, As, St).
 tostring([Arg|_], St) ->
     case luerl_emul:getmetamethod(Arg, <<"__tostring">>, St) of
 	nil -> {[tostring(Arg)],St};
-	M when element(1, M) =:= function ->
-	    {R,St1} = luerl_emul:functioncall(M, [Arg], St),
-	    {R,St1}
+	M when ?IS_FUNCTION(M) ->
+	    luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
     end.
 
 tostring(nil) -> <<"nil">>;
@@ -304,10 +303,10 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(S);
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#function{}) -> <<"function:">>;	%Functions defined in Lua
-tostring({function,_}) -> <<"function:">>;	%Internal functions
+tostring(#uref{}) -> <<"userdata">>;
+tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
+tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
-tostring(#userdata{}) -> <<"userdata">>;
 tostring(_) -> <<"unknown">>.
 
 type([Arg|_], St) -> {[type(Arg)],St}.		%Only one return value!
@@ -317,10 +316,10 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
-type(#function{}) -> <<"function">>;		%Functions defined in Lua
-type({function,_}) -> <<"function">>;		%Internal functions
+type(#uref{}) -> <<"userdata">>;
+type(#lua_func{}) -> <<"function">>;		%Functions defined in Lua
+type(#erl_func{}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
-type(#userdata{}) -> <<"userdata">>;
 type(_) -> <<"unknown">>.
 
 %% getmetatable([Value|_], State) -> {Table,State}.

@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -35,8 +35,6 @@
 	 tointegers/1,tointegers/2,tostring/1,tostrings/1,tostrings/2,
 	 conv_list/2,conv_list/3]).
 
--export([anew/1,asiz/1,aget/2,aset/3,aclr/2,asl/3,asr/3]).
-
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
 
@@ -44,60 +42,13 @@ lua_error(E, St) -> error({lua_error,E,St}).
 
 badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 
-%% Experimental structure for the array/list part of a table. List of
-%% segments containing values, all nil fields are gaps.
-%% Array :: [{First,Last,Elements}].
-
-anew(_) -> [].
-
-asiz(A) -> asiz(A, 0).
-
-asiz([{_,L,_}|A], _) -> asiz(A, L);
-asiz([], S) -> S.
-
-aget(I, [{I,_,Es}|_]) -> hd(Es);		%First element
-aget(I, [{F,L,Es}|_]) when I >= F, I =< L ->	%It's in here
-    lists:nth(I-F+1, Es);
-aget(I, [{_,L,_}|A]) when I > L ->		%Not yet
-    aget(I, A);
-aget(_, _) -> nil.				%Not at all
-
-aset(I, nil, A) -> aclr(I, A);			%Setting to nil is clearing
-aset(I, V, [{F,L,Es}|A]) when I >= F, I =< L -> %Set it here
-    [{F,L,setnth(I-F+1, V, Es)}|A];
-aset(I, V, [{F,L,Es}]) when I =:= L+1, F-L < 10 ->
-    [{F,I,Es ++ [V]}];
-aset(I, V, [{_,L,_}=S|A]) when I > L ->		%Not yet
-    [S|aset(I, V, A)];
-aset(I, V, [{F,L,Es}|A]) when I == F-1 ->	%Drop it at head
-    [{F-1,L,[V|Es]}|A];
-aset(I, V, A) ->
-    [{I,I,[V]}|A].
-
-aclr(I, [{F,L,[_|Es]}|A]) when I =:= F ->	%Prepend it
-    [{F+1,L,Es}|A];
-aclr(I, [{F,L,Es}|A]) when I =:= L ->
-    [{F,L-1,lists:sublist(Es, L-F)}|A];
-aclr(I, [{F,L,Es}|A]) when I > F, I < L ->
-    Bc = I-F,
-    {Bef,[_|Aft]} = lists:split(Bc, Es),	%Split and drop
-    [{F,I-1,Bef},{I+1,L,Aft}|A];
-aclr(I, [S|A]) -> [S|aclr(I, A)];
-aclr(_, A) -> A.
-
-asl(_, _, A) -> A.
-
-asr(_, _, A) -> A.
-
-setnth(1, V, [_|Es]) -> [V|Es];
-setnth(N, V, [E|Es]) -> [E|setnth(N-1, V, Es)].
-
 %% format_error(LuaError) -> ErrorString.
 %%  Some of these use same text as Lua error string, so be careful if
 %%  modifying them.
 
 format_error({undefined_method, Name, Args0, Line}) ->
-    io_lib:format("undefined_method ~w with args: ~p on line ~p", [Name, Args0, Line]);
+    io_lib:format("undefined_method ~w with args: ~p on line ~p",
+                  [Name, Args0, Line]);
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
 format_error({method_on_nil, Key}) ->

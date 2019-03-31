@@ -45,20 +45,20 @@ metatable(T) ->					%String type metatable
     [{<<"__index">>,T}].
 
 table() ->					%String table
-    [{<<"byte">>,{function,fun byte/2}},
-     {<<"char">>,{function,fun char/2}},
-     {<<"dump">>,{function,fun dump/2}},
-     {<<"find">>,{function,fun find/2}},
-     {<<"format">>,{function, fun format/2}},
-     {<<"gmatch">>,{function,fun gmatch/2}},
-     {<<"gsub">>,{function,fun gsub/2}},
-     {<<"len">>,{function,fun len/2}},
-     {<<"lower">>,{function,fun lower/2}},
-     {<<"match">>,{function,fun match/2}},
-     {<<"rep">>,{function,fun rep/2}},
-     {<<"reverse">>,{function,fun reverse/2}},
-     {<<"sub">>,{function,fun sub/2}},
-     {<<"upper">>,{function,fun upper/2}}
+    [{<<"byte">>,#erl_func{code=fun byte/2}},
+     {<<"char">>,#erl_func{code=fun char/2}},
+     {<<"dump">>,#erl_func{code=fun dump/2}},
+     {<<"find">>,#erl_func{code=fun find/2}},
+     {<<"format">>,#erl_func{code= fun format/2}},
+     {<<"gmatch">>,#erl_func{code=fun gmatch/2}},
+     {<<"gsub">>,#erl_func{code=fun gsub/2}},
+     {<<"len">>,#erl_func{code=fun len/2}},
+     {<<"lower">>,#erl_func{code=fun lower/2}},
+     {<<"match">>,#erl_func{code=fun match/2}},
+     {<<"rep">>,#erl_func{code=fun rep/2}},
+     {<<"reverse">>,#erl_func{code=fun reverse/2}},
+     {<<"sub">>,#erl_func{code=fun sub/2}},
+     {<<"upper">>,#erl_func{code=fun upper/2}}
     ].
 
 %% byte(String [, I [, J]] ) -> [Code]
@@ -250,7 +250,7 @@ gsub_repl(Cas, S, #tref{}=T, St0) ->
     end,
     {R,St1} = luerl_emul:get_table_key(T, Key, St0),
     {[gsub_repl_val(S, R, Ca)],St1};
-gsub_repl(Cas0, S, Repl, St0) when element(1, Repl) =:= function ->
+gsub_repl(Cas0, S, Repl, St0) when ?IS_FUNCTION(Repl) ->
     case Cas0 of				%Export both Ca and Args
 	[Ca] -> Args = [match_cap(Ca, S)];
 	[Ca|Cas] -> Args = match_caps(Cas, S)

@@ -18,44 +18,64 @@
 
 -module(luerl_lib_math).
 
+-include("luerl.hrl").
+
 -export([install/1,fmod/2,frexp/2]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
-install(St) ->
-    luerl_emul:alloc_table(table(), St).
+%% Use the correct random number module.
+
+-ifdef(NEW_RAND).
+-define(RAND_UNIFORM(S), rand:uniform_s(S)).
+-define(RAND_UNIFORM(L, S), rand:uniform_s(L, S)).
+-define(RAND_SEED(), rand:seed_s(exs1024)).
+-define(RAND_SEED(S1,S2,S3), rand:seed_s(exs1024, {S1,S2,S3})).
+-else.
+-define(RAND_UNIFORM(S), random:uniform_s(S)).
+-define(RAND_UNIFORM(L, S), random:uniform_s(L, S)).
+-define(RAND_SEED(), random:seed0()).
+-define(RAND_SEED(S1,S2,S3),			%Naughty, copied from source
+	{(abs(S1) rem (30269-1) + 1),		%PRIME1
+	 (abs(S2) rem (30307-1) + 1),		%PRIME2
+	 (abs(S3) rem (30323-1) + 1)}).		%PRIME3
+-endif.
+
+install(St0) ->
+    St1 = St0#luerl{rand=?RAND_SEED()},		%Default initial random seed
+    luerl_emul:alloc_table(table(), St1).
 
 table() ->
-    [{<<"abs">>,{function,fun abs/2}},
-     {<<"acos">>,{function,fun acos/2}},
-     {<<"asin">>,{function,fun asin/2}},
-     {<<"atan">>,{function,fun atan/2}},
-     {<<"atan2">>,{function,fun atan2/2}},
-     {<<"ceil">>,{function,fun ceil/2}},
-     {<<"cos">>,{function,fun cos/2}},
-     {<<"cosh">>,{function,fun cosh/2}},
-     {<<"deg">>,{function,fun deg/2}},
-     {<<"exp">>,{function,fun exp/2}},
-     {<<"floor">>,{function,fun floor/2}},
-     {<<"fmod">>,{function,fun fmod/2}},
-     {<<"frexp">>,{function,fun frexp/2}},
+    [{<<"abs">>,#erl_func{code=fun abs/2}},
+     {<<"acos">>,#erl_func{code=fun acos/2}},
+     {<<"asin">>,#erl_func{code=fun asin/2}},
+     {<<"atan">>,#erl_func{code=fun atan/2}},
+     {<<"atan2">>,#erl_func{code=fun atan2/2}},
+     {<<"ceil">>,#erl_func{code=fun ceil/2}},
+     {<<"cos">>,#erl_func{code=fun cos/2}},
+     {<<"cosh">>,#erl_func{code=fun cosh/2}},
+     {<<"deg">>,#erl_func{code=fun deg/2}},
+     {<<"exp">>,#erl_func{code=fun exp/2}},
+     {<<"floor">>,#erl_func{code=fun floor/2}},
+     {<<"fmod">>,#erl_func{code=fun fmod/2}},
+     {<<"frexp">>,#erl_func{code=fun frexp/2}},
      {<<"huge">>,1.7976931348623157e308},	%From the specs
-     {<<"ldexp">>,{function,fun ldexp/2}},
-     {<<"log">>,{function,fun log/2}},
-     {<<"log10">>,{function,fun log10/2}},	%For 5.1 backwards compatibility
-     {<<"max">>,{function,fun max/2}},
-     {<<"min">>,{function,fun min/2}},
-     {<<"modf">>,{function,fun modf/2}},
+     {<<"ldexp">>,#erl_func{code=fun ldexp/2}},
+     {<<"log">>,#erl_func{code=fun log/2}},
+     {<<"log10">>,#erl_func{code=fun log10/2}},	%For 5.1 backwards compatibility
+     {<<"max">>,#erl_func{code=fun max/2}},
+     {<<"min">>,#erl_func{code=fun min/2}},
+     {<<"modf">>,#erl_func{code=fun modf/2}},
      {<<"pi">>,math:pi()},
-     {<<"pow">>,{function,fun pow/2}},
-     {<<"rad">>,{function,fun rad/2}},
-     {<<"random">>,{function,fun random/2}},
-     {<<"randomseed">>,{function,fun randomseed/2}},
-     {<<"sin">>,{function,fun sin/2}},
-     {<<"sinh">>,{function,fun sinh/2}},
-     {<<"sqrt">>,{function,fun sqrt/2}},
-     {<<"tan">>,{function,fun tan/2}},
-     {<<"tanh">>,{function,fun tanh/2}}
+     {<<"pow">>,#erl_func{code=fun pow/2}},
+     {<<"rad">>,#erl_func{code=fun rad/2}},
+     {<<"random">>,#erl_func{code=fun random/2}},
+     {<<"randomseed">>,#erl_func{code=fun randomseed/2}},
+     {<<"sin">>,#erl_func{code=fun sin/2}},
+     {<<"sinh">>,#erl_func{code=fun sinh/2}},
+     {<<"sqrt">>,#erl_func{code=fun sqrt/2}},
+     {<<"tan">>,#erl_func{code=fun tan/2}},
+     {<<"tanh">>,#erl_func{code=fun tanh/2}}
     ].
 
 %% abs(Args, State) -> {[Ret],State}.
@@ -208,15 +228,17 @@ rad(As, St) ->
 	_ -> badarg_error(sinh, As, St)
     end.
 
-random(As, St) ->
+random(As, #luerl{rand=S0}=St) ->
     case luerl_lib:to_ints(As) of
-	[] -> {[random:uniform()],St};		%0-1.0
-	[M] when M > 1 ->
-	    R = random:uniform(M),
-	    {[float(R)],St};
-	[M,N] when N > M ->
-	    R = random:uniform(N - M),
-	    {[float(R + M)],St};
+	[] ->					%0.0 - 1.0
+	    {R,S1} = ?RAND_UNIFORM(S0),
+	    {[R],St#luerl{rand=S1}};
+	[M] when M >= 1 ->
+	    {R,S1} = ?RAND_UNIFORM(M, S0),
+	    {[float(R)],St#luerl{rand=S1}};
+	[M,N] when N >= M ->
+	    {R,S1} = ?RAND_UNIFORM(N - M + 1, S0),
+	    {[float(R + M - 1)],St#luerl{rand=S1}};
 	_ -> badarg_error(random, As, St)
     end.
 
@@ -225,8 +247,7 @@ randomseed(As, St) ->
 	[S|_] ->
 	    %% Split float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
-	    random:seed(A1, A2, A3),
-	    {[],St};
+	    {[],St#luerl{rand=?RAND_SEED(A1, A2, A3)}};
 	_ -> badarg_error(randomseed, As, St)
     end.
 

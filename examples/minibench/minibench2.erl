@@ -30,7 +30,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Init state, and execute pre-parsed 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b'~n"),
     I2 = 10000,
-    {ok, Chunk2} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
+    {ok, Chunk2, _St2} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     
     {T2,_State21} = timer:tc(fun() -> do_loop(I2, Chunk2) end),
 
@@ -42,7 +42,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parse execute 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b', re-using same state~n"),
     I3 = 10000,
-    {ok, Chunk3} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
+    {ok, Chunk3, _St3} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     State3 = luerl:init(),
     
     {T3,_State31} = timer:tc(fun() -> do_loop_state(I3, Chunk3, State3) end),
@@ -66,7 +66,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parsed 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b', re-using state from last result~n"),
     I5 = 10000,
-    {ok, Chunk5} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
+    {ok, Chunk5, _St5} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     State5 = luerl:init(),
     
     {T5,_State51} = timer:tc(fun() -> do_loop_chain(I5, Chunk5, State5) end),

@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@
 	 get_table_keys/2,get_table_keys/3,
 	 set_table_keys/3,set_table_keys/4,
 	 get_table_key/3,set_table_key/4,
+         alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
 	 getmetatable/2,
 	 getmetamethod/3,getmetamethod/4]).
 
@@ -74,13 +75,15 @@ init() ->
     St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
     %% Initialise the frame handling.
     St2 = St1#luerl{ftab=array:new(),ffree=[],fnext=0},
+    %% Initialise the userdata handling.
+    St3 = St2#luerl{utab=?MAKE_TABLE(),ufree=[],unext=0},
     %% Allocate the _G table and initialise the environment
-    {_G,St3} = luerl_lib_basic:install(St2),	%Global environment
-    St4 = St3#luerl{g=_G},
+    {_G,St4} = luerl_lib_basic:install(St3),	%Global environment
+    St5 = St4#luerl{g=_G},
     %% Now we can start adding libraries. Package MUST be first!
-    St5 = load_lib(<<"package">>, luerl_lib_package, St4),
+    St6 = load_lib(<<"package">>, luerl_lib_package, St5),
     %% Add the other standard libraries.
-    St6 = load_libs([
+    St7 = load_libs([
 		     {<<"bit32">>,luerl_lib_bit32},
 		     {<<"io">>,luerl_lib_io},
 		     {<<"math">>,luerl_lib_math},
@@ -88,10 +91,10 @@ init() ->
 		     {<<"string">>,luerl_lib_string},
 		     {<<"table">>,luerl_lib_table},
 		     {<<"debug">>,luerl_lib_debug}
-		    ], St5),
+		    ], St6),
     %% Set _G variable to point to it and add it packages.loaded.
-    St7 = set_global_key(<<"_G">>, _G, St6),
-    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St7).
+    St8 = set_global_key(<<"_G">>, _G, St7),
+    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St8).
 
 load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
@@ -233,7 +236,7 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 			    end,
 		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		Meth when element(1, Meth) =:= function ->
+		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -252,7 +255,7 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    St#luerl{ttab=Ts1};
-		Meth when element(1, Meth) =:= function ->
+		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
 		Meth -> set_table_key(Meth, Key, Val, St)
@@ -274,7 +277,7 @@ get_table_key(#tref{}=Tref, Key, St) ->
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
     case getmetamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key}, St);
-	Meth when element(1, Meth) =:= function ->
+	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->					%Recurse down the metatable
@@ -302,12 +305,37 @@ get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
 get_table_metamethod(T, Meta, Key, Ts, St) ->
     case getmetamethod_tab(Meta, <<"__index">>, Ts) of
 	nil -> {nil,St};
-	Meth when element(1, Meth) =:= function ->
+	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [T,Key], St),
 	    {first_value(Vs),St1};
 	Meth ->				%Recurse down the metatable
 	    get_table_key(Meth, Key, St)
     end.
+%% alloc_userdata(Data, State) -> {Uref,State}.
+%% alloc_userdata(Data, Meta, State) -> {Uref,State}.
+%% set_userdata(Uref, UserData, State) -> State.
+%% get_userdata(Uref, State) -> {UserData,State}.
+
+alloc_userdata(Data, St) ->
+    alloc_userdata(Data, nil, St).
+
+alloc_userdata(Data, Meta, #luerl{utab=Us0,ufree=[N|Ns]}=St) ->
+    Us1 = ?SET_TABLE(N, #userdata{d=Data,m=Meta}, Us0),
+    {#uref{i=N},St#luerl{utab=Us1,ufree=Ns}};
+alloc_userdata(Data, Meta, #luerl{utab=Us0,ufree=[],unext=N}=St) ->
+    Us1 = ?SET_TABLE(N, #userdata{d=Data,m=Meta}, Us0),
+    {#uref{i=N},St#luerl{utab=Us1,unext=N+1}}.
+
+set_userdata(#uref{i=N}, #userdata{}=Udata, #luerl{utab=Us0}=St) ->
+    Us1 = ?SET_TABLE(N, Udata, Us0),
+    St#luerl{utab=Us1}.
+
+get_userdata(#uref{i=N}, #luerl{utab=Us}=St) ->
+    #userdata{} = Udata = ?GET_TABLE(N, Us),
+    {Udata,St}.
+
+%% make_userdata(Data) -> make_userdata(Data, nil).
+%% make_userdata(Data, Meta) -> #userdata{d=Data,m=Meta}.
 
 %% set_local_var(Depth, Index, Var, Frames) -> Frames.
 %% get_local_var(Depth, Index, Frames) -> Val.
@@ -388,11 +416,11 @@ load_function([?FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
 
 call(Func, St) -> call(Func, [], St).
 
-call(#function{}=Func, Args, St0) ->		%Already defined
+call(#lua_func{}=Func, Args, St0) ->		%Already defined
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call({function,_}=Func, Args, St0) ->		%Internal erlang function
+call(#erl_func{}=Func, Args, St0) ->		%Internal erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
@@ -685,7 +713,7 @@ do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 
@@ -694,14 +722,14 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, {function,Meta}, []);
+	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
 	{error,E} -> lua_error(E, St)
     end.
 
 %% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
 
 do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
-    {#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
+    {#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
@@ -807,10 +835,10 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#function{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
+functioncall(#lua_func{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
     functioncall(Fis, [], Stk, Env, St0);
-functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No local variables, only env variables.
     E0 = erlang:make_tuple(Esz, nil),
@@ -818,14 +846,14 @@ functioncall(#function{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Fref,St1} = alloc_frame(E1, St0),
     {Ret,St2} = functioncall(Fis, [], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall(#function{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     %% No env variables, only local variables.
     L0 = erlang:make_tuple(Lsz, nil),
     L1 = assign_local_pars(Pars, Args, L0),
     {Ret,St1} = functioncall(Fis, [L1], Stk, Env, St0),
     {Ret,St1};
-functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
+functioncall(#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
 	     Args, Stk, St0) ->
     L0 = erlang:make_tuple(Lsz, nil),
     E0 = erlang:make_tuple(Esz, nil),
@@ -833,7 +861,7 @@ functioncall(#function{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
     {Fref,St1} = alloc_frame(E1, St0),
     {Ret,St2} = functioncall(Fis, [L1], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall({function,Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
+functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
@@ -1030,7 +1058,8 @@ getmetamethod(O, E, St) ->
 
 getmetatable(#tref{i=T}, #luerl{ttab=Ts}) ->
     (?GET_TABLE(T, Ts))#table.m;
-getmetatable(#userdata{m=Meta}, _) -> Meta;
+getmetatable(#uref{i=U}, #luerl{utab=Us}) ->
+    (?GET_TABLE(U, Us))#userdata.m;
 getmetatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
 getmetatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
     Meta#meta.boolean;
@@ -1094,7 +1123,7 @@ op('/', A1, A2) ->
     numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
 op('%', A1, A2) ->
     numeric_op('%', A1, A2, <<"__mod">>,
-	       fun (N1,N2) -> N1 - round(N1/N2 - 0.5)*N2 end);
+	       fun (N1,N2) -> N1 - floor(N1/N2)*N2 end);
 op('^', A1, A2) ->
     numeric_op('^', A1, A2, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
@@ -1109,6 +1138,16 @@ op('>', A1, A2) -> lt_op('>', A2, A1);
 op('..', A1, A2) -> concat_op(A1, A2);
 %% Bad args here.
 op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
+
+%% We need a floor to do the mod in the same way as Lua. This doesn't
+%% exist before 20 so we have to do it ourselves.
+
+floor(X) ->
+    T = float(trunc(X)),
+    if X >= 0.0 -> T;
+       X =:= T -> T;
+       true -> T - 1.0
+    end.
 
 %% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
 %% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
@@ -1258,30 +1297,37 @@ multiple_value(V) -> [V].
 %%  tables and frames are then freed and their indexes added to the
 %%  free lists.
 
-gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,g=G,stk=Stk,meta=Meta}=St) ->
+-record(gct, {t,s}).				%Gc table info table, seen
+
+gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,utab=Ut0,ufree=Uf0,
+          g=G,stk=Stk,meta=Meta}=St) ->
     %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
 	    G|Stk],
     %% Mark all seen tables and frames, i.e. return them.
-    {SeenT,SeenF} = mark(Root, [], [], [], Tt0, Ft0),
-    %% io:format("gc: ~p\n", [{SeenT,SeenF}]),
+    GcT = #gct{t=Tt0,s=[]},
+    GcF = #gct{t=Ft0,s=[]},
+    GcU = #gct{t=Ut0,s=[]},
+    {SeenT,SeenF,SeenU} = mark(Root, [], GcT, GcF, GcU),
+    %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
     {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
-    St#luerl{ttab=Tt1,tfree=Tf1,ftab=Ft1,ffree=Ff1}.
+    {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
+    St#luerl{ttab=Tt1,tfree=Tf1,ftab=Ft1,ffree=Ff1,utab=Ut1,ufree=Uf1}.
 
-%% mark(ToDo, MoreTodo, SeenTabs, SeenFrames, Tabs, Frames) ->
-%%     {SeenTabs,SeenFrames}.
+%% mark(ToDo, MoreTodo, GcTabs, GcFrames, GcUserdata) ->
+%%     {SeenTabs,SeenFrames,SeenUserdata}.
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
-mark([{in_table,_}=_T|Todo], More, St, Sf, Tt, Ft) ->
+mark([{in_table,_}=_T|Todo], More, GcT, GcF, GcU) ->
     %%io:format("gc: ~p\n", [_T]),
-    mark(Todo, More, St, Sf, Tt, Ft);
-mark([#tref{i=T}|Todo], More, St0, Sf, Tt, Ft) ->
+    mark(Todo, More, GcT, GcF, GcU);
+mark([#tref{i=T}|Todo], More, #gct{s=St0,t=Tt}=GcT, GcF, GcU) ->
     case ordsets:is_element(T, St0) of
 	true ->					%Already done
-	    mark(Todo, More, St0, Sf, Tt, Ft);
+	    mark(Todo, More, GcT, GcF, GcU);
 	false ->				%Mark it and add to todo
 	    St1 = ordsets:add_element(T, St0),
 	    #table{a=Arr,d=Dict,m=Meta} = ?GET_TABLE(T, Tt),
@@ -1291,37 +1337,45 @@ mark([#tref{i=T}|Todo], More, St0, Sf, Tt, Ft) ->
 	    Aes = array:sparse_to_list(Arr),
 	    Des = ttdict:to_list(Dict),
 	    mark([Meta|Todo], [[{in_table,T}],Des,Aes,[{in_table,-T}]|More],
-		 St1, Sf, Tt, Ft)
+		 GcT#gct{s=St1}, GcF, GcU)
     end;
-mark([#fref{i=F}|Todo], More, St, Sf0, Tt, Ft) ->
+mark([#fref{i=F}|Todo], More, GcT, #gct{s=Sf0,t=Ft}=GcF, GcU) ->
     case ordsets:is_element(F, Sf0) of
 	true ->					%Already done
-	    mark(Todo, More, St, Sf0, Tt, Ft);
+	    mark(Todo, More, GcT, GcF, GcU);
 	false ->				%Mark it and add to todo
 	    Sf1 = ordsets:add_element(F, Sf0),
 	    Ses = tuple_to_list(array:get(F, Ft)),
-	    mark(Todo, [Ses|More], St, Sf1, Tt, Ft)
+	    mark(Todo, [Ses|More], GcT, GcF#gct{s=Sf1}, GcU)
     end;
-mark([#function{env=Env}|Todo], More, St, Sf, Tt, Ft) ->
-    mark(Todo, [Env|More], St, Sf, Tt, Ft);
+mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU) ->
+    case ordsets:is_element(U, Su0) of
+       true ->                                 %Already done
+           mark(Todo, More, GcT, GcF, GcU);
+       false ->
+           Su1 = ordsets:add_element(U, Su0),
+           mark(Todo, More, GcT, GcF, GcU#gct{s=Su1})
+    end;
+mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU) ->
+    mark(Todo, [Env|More], GcT, GcF, GcU);
 %% Catch these as they would match table key-value pair.
-mark([{function,_}|Todo], More, St, Sf, Tt, Ft) ->
-    mark(Todo, More, St, Sf, Tt, Ft);
-mark([#thread{}|Todo], More, St, Sf, Tt, Ft) ->
-    mark(Todo, More, St, Sf, Tt, Ft);
-mark([#userdata{m=Meta}|Todo], More, St, Sf, Tt, Ft) ->
-    mark([Meta|Todo], More, St, Sf, Tt, Ft);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, St, Sf, Tt, Ft) ->
+mark([#erl_func{}|Todo], More, GcT, GcF, GcU) ->
+    mark(Todo, More, GcT, GcF, GcU);
+mark([#thread{}|Todo], More, GcT, GcF, GcU) ->
+    mark(Todo, More, GcT, GcF, GcU);
+mark([#userdata{m=Meta}|Todo], More, GcT, GcF, GcU) ->
+    mark([Meta|Todo], More, GcT, GcF, GcU);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcF, GcU) ->
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
-    mark(Todo, More1, St, Sf, Tt, Ft);
-mark([{K,V}|Todo], More, St, Sf, Tt, Ft) ->	%Table key-value pair
+    mark(Todo, More1, GcT, GcF, GcU);
+mark([{K,V}|Todo], More, GcT, GcF, GcU) ->	%Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
-    mark([K,V|Todo], More, St, Sf, Tt, Ft);
-mark([_|Todo], More, St, Sf, Tt, Ft) ->		%Can ignore everything else
-    mark(Todo, More, St, Sf, Tt, Ft);
-mark([], [M|More], St, Sf, Tt, Ft) ->
-    mark(M, More, St, Sf, Tt, Ft);
-mark([], [], St, Sf, _, _) -> {St,Sf}.
+    mark([K,V|Todo], More, GcT, GcF, GcU);
+mark([_|Todo], More, GcT, GcF, GcU) ->		%Can ignore everything else
+    mark(Todo, More, GcT, GcF, GcU);
+mark([], [M|More], GcT, GcF, GcU) ->
+    mark(M, More, GcT, GcF, GcU);
+mark([], [], #gct{s=St}, #gct{s=Sf}, #gct{s=Su}) -> {St,Sf,Su}.
 
 %% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
 %% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
@@ -1353,3 +1407,15 @@ filter_frames(Seen, Ff0, Ft0) ->
 				   end
 			   end, Ft0),
     {Ff1,Ft1}.
+
+filter_userdata(Seen, Uf0, Ut0) ->
+    %% Update the free list.
+    Uf1 = ?FOLD_TABLES(fun (K, _, Free) ->
+                              case ordsets:is_element(K, Seen) of
+                                  true -> Free;
+                                  false -> [K|Free]
+                              end
+                      end, Uf0, Ut0),
+    %% Reclaim free table slots.
+    Ut1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ut0),
+    {Uf1,Ut1}.

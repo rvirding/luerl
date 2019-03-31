@@ -18,6 +18,8 @@
 
 -module(luerl_lib_os).
 
+-include("luerl.hrl").
+
 -export([install/1]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
@@ -26,11 +28,11 @@ install(St) ->
     luerl_emul:alloc_table(table(), St).
 
 table() ->
-    [{<<"clock">>,{function,fun clock/2}},
-     {<<"date">>,{function,fun date/2}},
-     {<<"difftime">>,{function,fun difftime/2}},
-     {<<"getenv">>,{function,fun getenv/2}},
-     {<<"time">>,{function,fun time/2}}].
+    [{<<"clock">>,#erl_func{code=fun clock/2}},
+     {<<"date">>,#erl_func{code=fun date/2}},
+     {<<"difftime">>,#erl_func{code=fun difftime/2}},
+     {<<"getenv">>,#erl_func{code=fun getenv/2}},
+     {<<"time">>,#erl_func{code=fun time/2}}].
 
 getenv([<<>>|_], St) -> {[nil],St};
 getenv([A|_], St) when is_binary(A) ; is_number(A) ->

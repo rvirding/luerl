@@ -1,4 +1,4 @@
-# Copyright (c) 2014 Robert Virding
+# Copyright (c) 2016 Robert Virding
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,41 +12,47 @@
 # See the License for the specific language governing permissions and
 #  limitations under the License.
 
-# Luerl Makefile
+# Makefile for Luerl
 # Building from .xrl, .yrl and .erl
 # Intermediaries from leex and yecc stay in ./src
 
 SRCDIR        =./src
-BEAMDIR       =./ebin
-ERL_SOURCES  := $(wildcard $(SRCDIR)/*.erl)
-XRL_SOURCES  := $(wildcard $(SRCDIR)/*.xrl)
-YRL_SOURCES  := $(wildcard $(SRCDIR)/*.yrl)
-ERL_MODULES  := $(ERL_SOURCES:$(SRCDIR)/%.erl=%)
-XRL_MODULES  := $(XRL_SOURCES:$(SRCDIR)/%.xrl=%)
-YRL_MODULES  := $(YRL_SOURCES:$(SRCDIR)/%.yrl=%)
-XRL_INTERM   := $(XRL_MODULES:%=$(SRCDIR)/%.erl)
-YRL_INTERM   := $(YRL_MODULES:%=$(SRCDIR)/%.erl)
-MODULES      := $(XRL_MODULES) $(YRL_MODULES) $(ERL_MODULES)
-OBJECTS      := $(MODULES:%=$(BEAMDIR)/%.beam)
+EBINDIR       =./ebin
 
-all: $(OBJECTS)
+ESRCS  := $(notdir $(wildcard $(SRCDIR)/*.erl))
+XSRCS  := $(notdir $(wildcard $(SRCDIR)/*.xrl))
+YSRCS  := $(notdir $(wildcard $(SRCDIR)/*.yrl))
+EBINS = $(ESRCS:.erl=.beam) $(XSRCS:.xrl=.beam) $(YSRCS:.yrl=.beam)
 
-$(BEAMDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl
-	@ mkdir -p $(BEAMDIR) 
-	erlc $(ERLCFLAGS) -o $(BEAMDIR) $<
+ERLCFLAGS = -W1
+ERLC = erlc
+
+all: compile
+
+.PHONY: compile clean echo examples
+
+compile: comp_opts.mk $(addprefix $(EBINDIR)/, $(EBINS))
+
+$(EBINDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl comp_opts.mk
+	@ mkdir -p $(EBINDIR)
+	$(ERLC) $(ERLCFLAGS) -o $(EBINDIR) $(COMP_OPTS) $(ERLCFLAGS) $<
 
 %.erl: %.xrl
-	erlc -o $(SRCDIR) $<
+	$(ERLC) -o $(SRCDIR) $<
 
 %.erl: %.yrl
-	erlc -o $(SRCDIR) $<
+	$(ERLC) -o $(SRCDIR) $<
+
+comp_opts.mk:
+	escript get_comp_opts.escript
+
+-include comp_opts.mk
 
 clean:
-	@ rm -rf $(BEAMDIR)
+	@ rm -f $(EBINDIR)/*.beam
 	@ rm -f *.beam
 	@ rm -f erl_crash.dump
-	@ rm -f $(XRL_INTERM)
-	@ rm -f $(YRL_INTERM)
+	@ rm comp_opts.mk
 	$(MAKE) -C examples clean
 
 echo: 
@@ -61,4 +67,4 @@ debug:
 .PHONY: all examples clean
 
 # this protects the intermediate .erl files from make's auto deletion
-.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
+#.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)

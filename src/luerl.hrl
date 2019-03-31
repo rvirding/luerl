@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -23,16 +23,19 @@
 
 -record(luerl, {ttab,tfree,tnext,		%Table table, free, next
 		ftab,ffree,fnext,		%Frame table, free, next
+                utab,ufree,unext,               %Userdata table, free, next
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
 		%%
 		meta=[],			%Data type metatables
+		rand,				%Random state
 		tag				%Unique tag
 	       }).
 
 -record(heap, {ttab,tfree,tnext,
-	       ftab,ffree,fnext}).
+	       ftab,ffree,fnext,
+               utab,ufree,unext}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
 %% -record(eenv, {env=[]}).			%Environment
@@ -49,18 +52,21 @@
 
 -record(tref, {i}).				%Table reference, index
 -record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
+-record(uref, {i}).                             %Userdata reference, index
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
-%% There are two function types, this the Lua one, and an Erlang one
-%% with the same name. So no type for it.
--record(function,{lsz,				%Local var size
+%% There are two function types, the Lua one, and the Erlang one.
+-record(lua_func,{lsz,				%Local var size
 		  esz,				%Env var size
 		  env,				%Environment
 		  pars,				%Parameters
 		  b}).				%Code block
+-record(erl_func,{code}).			%Erlang code (fun)
 
 -record(fref, {i}).				%Frame reference, index
 
+%% Test if it a function, of either sort.
+-define(IS_FUNCTION(F), (is_record(F, lua_func) orelse is_record(F, erl_func))).
 
 -define(IS_INTEGER(N), (float(round(N)) =:= N)).
 -define(IS_INTEGER(N,I), (float(I=round(N)) =:= N)).
@@ -71,8 +77,23 @@
 %% methods. This is inefficient with ETS tables where it would
 %% probably be better to use bags and acces with match/select.
 
-%% Set which table store to use.
+%% Set which table store to use. We check if we have full maps before
+%% we use them just to protect ourselves.
+-ifdef(HAS_FULL_KEYS).
+-define(TS_USE_MAPS, true).
+-else.
 -define(TS_USE_ARRAY, true).
+-endif.
+
+-ifdef(TS_USE_MAPS).
+-define(MAKE_TABLE(), maps:new()).
+-define(GET_TABLE(N, Ts), maps:get(N, Ts)).
+-define(SET_TABLE(N, T, Ts), maps:put(N, T, Ts)).
+-define(UPD_TABLE(N, Upd, Ts), maps:update_with(N, Upd, Ts)).
+-define(DEL_TABLE(N, Ts), maps:remove(N, Ts)).
+-define(FILTER_TABLES(Pred, Ts), maps:filter(Pred, Ts)).
+-define(FOLD_TABLES(Fun, Acc, Ts), maps:fold(Fun, Acc, Ts)).
+-endif.
 
 -ifdef(TS_USE_ORDDICT).
 %% Using orddict to handle tables.

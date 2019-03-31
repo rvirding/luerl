@@ -1,4 +1,4 @@
-%% Copyright (c) 2015 Robert Virding
+%% Copyright (c) 2015-2018 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@
 %% The basic entry point to set up the function table.
 -export([install/1]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
 
 install(St) ->
     luerl_emul:alloc_table(table(), St).
@@ -34,10 +34,10 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"getmetatable">>,{function,fun getmetatable/2}},
-     {<<"getuservalue">>,{function,fun getuservalue/2}},
-     {<<"setmetatable">>,{function,fun setmetatable/2}},
-     {<<"setuservalue">>,{function,fun setuservalue/2}}
+    [{<<"getmetatable">>,#erl_func{code=fun getmetatable/2}},
+     {<<"getuservalue">>,#erl_func{code=fun getuservalue/2}},
+     {<<"setmetatable">>,#erl_func{code=fun setmetatable/2}},
+     {<<"setuservalue">>,#erl_func{code=fun setuservalue/2}}
     ].
 
 %% getmetatable([Value|_], State) -> {[Table],State}.
@@ -52,7 +52,8 @@ getmetatable(As, St) -> badarg_error(getmetatable, As, St).
 
 do_getmetatable(#tref{i=T}, #luerl{ttab=Ts}) ->
     (?GET_TABLE(T, Ts))#table.m;
-do_getmetatable(#userdata{m=Meta}, _) -> Meta;
+do_getmetatable(#uref{i=U}, #luerl{utab=Us}) ->
+    (?GET_TABLE(U, Us))#table.m;
 do_getmetatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
 do_getmetatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
     Meta#meta.boolean;
@@ -69,8 +70,9 @@ setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 do_setmetatable(#tref{i=N}=T, M, #luerl{ttab=Ts0}=St) ->
     Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, Ts0),
     {[T],St#luerl{ttab=Ts1}};
-do_setmetatable(#userdata{}=U, M, St) ->
-    {[U#userdata{m=M}],St};
+do_setmetatable(#uref{i=N}=U, M, #luerl{utab=Us0}=St) ->
+    Us1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, Us0),
+    {[U],St#luerl{utab=Us1}};
 do_setmetatable(nil, M, #luerl{meta=Meta0}=St) ->
     Meta1 = Meta0#meta{nil=M},
     {[nil],St#luerl{meta=Meta1}};
