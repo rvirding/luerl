@@ -334,7 +334,13 @@ decode(nil, _, _) -> nil;
 decode(false, _, _) -> false;
 decode(true, _, _) -> true;
 decode(B, _, _) when is_binary(B) -> B;
-decode(N, _, _) when is_number(N) -> N;
+decode(N, _, _) when is_number(N) ->
+    if
+        is_float(N) andalso N == trunc(N) ->
+            trunc(N);
+        true ->
+            N
+    end;
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
 decode(#uref{i=N}, St, _) ->
