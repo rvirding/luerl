@@ -309,8 +309,8 @@ tostring(N) when is_number(N) ->
     %% 	end,
     iolist_to_binary(io_lib:write(N));
 tostring(S) when is_binary(S) -> S;
-tostring(#tref{i=I}) -> iolist_to_binary(["table: ",io_lib:write(I)]);
-tostring(#uref{}) -> <<"userdata">>;
+tostring(#tref{i=I}) -> iolist_to_binary(["table: ",integer_to_list(I)]);
+tostring(#uref{i=I}) -> iolist_to_binary(["userdata: ",integer_to_list(I)]);
 tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
 tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;

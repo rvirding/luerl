@@ -75,7 +75,8 @@ table() ->
      {<<"sinh">>,#erl_func{code=fun sinh/2}},
      {<<"sqrt">>,#erl_func{code=fun sqrt/2}},
      {<<"tan">>,#erl_func{code=fun tan/2}},
-     {<<"tanh">>,#erl_func{code=fun tanh/2}}
+     {<<"tanh">>,#erl_func{code=fun tanh/2}},
+     {<<"type">>,#erl_func{code=fun type/2}}
     ].
 
 %% abs(Args, State) -> {[Ret],State}.
@@ -279,4 +280,11 @@ tanh(As, St) ->
     case luerl_lib:tonumbers(As) of
 	[N|_] -> {[math:tanh(N)],St};
 	_ -> badarg_error(tanh, As, St)
+    end.
+
+type(As, St) ->
+    case luerl_lib:tonumbers(As) of
+	[N|_] when is_integer(N) -> {[<<"integer">>],St};
+	[N|_] when is_float(N) -> {[<<"float">>],St};
+	nil -> {[nil],St}
     end.
