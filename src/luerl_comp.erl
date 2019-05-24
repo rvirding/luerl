@@ -40,11 +40,7 @@
 -record(comp, {base="",				%Base name
 	       odir=".",			%Output directory
 	       lfile="",			%Lua file
-	       bfile="",			%Beam file
-	       cfile="",			%Core file
 	       opts=[],				%User options
-	       mod=[],				%Module name
-	       ret=file,			%What is returned [Val] | []
 	       code=none,			%Code after last pass.
 	       errors=[],
 	       warnings=[]
@@ -70,13 +66,9 @@ filenames(File, St) ->
     Dir = filename:dirname(File),
     Base = filename:basename(File, ".lua"),
     Lfile = filename:join(Dir, Base ++ ".lua"),
-    Bfile = Base ++ ".beam",
-    Cfile = Base ++ ".core",
     St#comp{base=Base,
 	    lfile=Lfile,
-	    odir=Odir,
-	    bfile=filename:join(Odir, Bfile),
-	    cfile=filename:join(Odir, Cfile)}.
+	    odir=Odir}.
 
 string(Str) -> string(Str, [verbose,report]).
 
@@ -103,11 +95,7 @@ compile(Ps, St0) ->
 %% file_passes() -> [Pass].
 %% list_passes() -> [Pass].
 %% forms_passes() -> [Pass].
-%% do_passes(Passes, State) -> {ok,State} | {error,Reason}.
-%%  {when_flag,Flag,Cmd}
-%%  {unless_flag,Flag,Cmd}
-%%  {do,Fun}
-%%  {done,PrintFun,Ext}
+%%  Build list of passes.
 
 file_passes() ->				%Reading from file
     [{do,fun do_read_file/1},
@@ -128,6 +116,16 @@ forms_passes() ->				%Doing the forms
      {when_flag,to_env,{done,fun(St) -> {ok,St} end}},
      {do,fun do_code_gen/1},
      {unless_flag,no_iopt,{do,fun do_peep_op/1}}].
+
+%% do_passes(Passes, State) -> {ok,State} | {error,Reason}.
+%%  Interpret the list of commands in a pass.
+%%
+%%  Commands can be one of:
+%%
+%%  {when_flag,Flag,Cmd}
+%%  {unless_flag,Flag,Cmd}
+%%  {do,Fun}
+%%  {done,PrintFun,Ext}
 
 do_passes([{do,Fun}|Ps], St0) ->
     case Fun(St0) of
@@ -154,7 +152,7 @@ do_passes([], St) -> {ok,St}.
 %% do_pass_1(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#comp{lfile=Name}=St) ->
+do_read_file(#comp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
     case file:open(Name, [read]) of
 	{ok,F} ->
@@ -167,7 +165,9 @@ do_read_file(#comp{lfile=Name}=St) ->
 	    end,
 	    %% Now read the file.
 	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
-		      {ok,Ts,_} -> {ok,St#comp{code=Ts}};
+		      {ok,Ts,_} ->
+			  debug_print(Opts, "scan: ~p\n", [Ts]),
+			  {ok,St#comp{code=Ts}};
 		      {error,E,L} -> {error,St#comp{errors=[{L,io,E}]}}
 		  end,
 	    file:close(F),
@@ -175,15 +175,19 @@ do_read_file(#comp{lfile=Name}=St) ->
 	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#comp{code=Str}=St) ->
+do_scan(#comp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
-	{ok,Ts,_} -> {ok,St#comp{code=Ts}}; 
+	{ok,Ts,_} ->
+	    debug_print(Opts, "scan: ~p\n", [Ts]),
+	    {ok,St#comp{code=Ts}};
 	{error,E,_} -> {error,St#comp{errors=[E]}}
     end.
 
-do_parse(#comp{code=Ts}=St) ->
+do_parse(#comp{code=Ts,opts=Opts}=St) ->
     case luerl_parse:chunk(Ts) of
-	{ok,Chunk} -> {ok,St#comp{code=Chunk}};
+	{ok,Chunk} ->
+	    debug_print(Opts, "parse: ~p\n", [Chunk]),
+	    {ok,St#comp{code=Chunk}};
 	{error,E} -> {error,St#comp{errors=[E]}}
     end.
 
