@@ -22,7 +22,10 @@
 	      }).
 
 %% Compiler state passed between passes.
--record(cst, {}).				%Nothing yet
+%%  This includes necessary things from the compiler state.
+-record(cst, {opts=[],				%Keep the options here as well
+	      lfile=""				%The lua file name
+	     }).
 
 %% Variable data.
 -record(vars, {local=[],free=[],		%Local, free variables
@@ -33,6 +36,8 @@
 %% Define internal data macros.
 
 %% Statements.
+%%  The line number here, 'l', can be a line number or annotation list.
+
 -record(assign_stmt, {l,vs,es}).
 
 -record(call_stmt, {l,call}).
@@ -41,7 +46,8 @@
 
 -record(break_stmt, {l}).
 
--record(block_stmt, {l,ss=[],			%Block statement
+-record(block_stmt, {l,
+		     ss=[],			%Block statements
 		     vars=none,			%Variable info
 		     lsz=none,			%Local frame size
 		     lf=[],			%Local frame
@@ -66,7 +72,8 @@
 
 -record(expr_stmt, {l,exp}).			%Pseudo stmt for expressions
 
--record(block, {l,ss=[],			%Sub-blocks
+-record(block, {l,
+		ss=[],				%Sub-blocks
 		vars=none,			%Variable info
 		lsz=none,			%Local frame size
 		lf=[],				%Local frame
@@ -75,7 +82,11 @@
 		locf=false}).
 
 %% Expressions.
--record(fdef, {l,ps=[],ss=[],
+%%  The line number here, 'l', can be a line number or annotation list.
+
+-record(fdef, {l,
+	       ps=[],				%Parameters
+	       ss=[],				%Statements
 	       vars=none,			%Variable info
 	       lsz=none,			%Local frame size
 	       lf=[],
