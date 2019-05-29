@@ -200,7 +200,7 @@ do_parse(#comp{code=Ts,opts=Opts}=St) ->
 do_init_comp(#comp{}=St) ->
     %% Initialise the compiler state.
     Cst = #cst{opts=St#comp.opts,
-	       lfile=St#comp.lfile},
+	       lfile=list_to_binary(St#comp.lfile)},
     %% The code now includes compiler state.
     C1 = #code{code=St#comp.code,cst=Cst},
     {ok,St#comp{code=C1}}.

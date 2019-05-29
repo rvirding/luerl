@@ -27,10 +27,11 @@
 
 %% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
 
-chunk(#code{code=Code0,cst=Cst}, Opts) ->
-    {Code1,nil} = functiondef(Code0, nil),	%This is local!
-    luerl_comp:debug_print(Opts, "c: ~p\n", [Code1]),
-    {ok,#code{code=Code1,cst=Cst}}.
+chunk(#code{code=Code0,cst=Cst0}, Opts) ->
+    %% The chunk is a function.
+    {Code1,Cst1} = functiondef(Code0, Cst0),
+    luerl_comp:debug_print(Opts, "cn: ~p\n", [Code1]),
+    {ok,#code{code=Code1,cst=Cst1}}.
 
 %% stmts([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
 %%     %% Need to split this to handle recursive definitions.
@@ -115,7 +116,8 @@ var_last({key_field,L,Exp}, St0) ->
 
 call_stmt(Line, Exp, St0) ->
     {Ce,St1} = exp(Exp, St0),
-    {#call_stmt{l=Line,call=Ce},St1}.
+    Anno = line_file_anno(Line, St1#cst.lfile),
+    {#call_stmt{l=Anno,call=Ce},St1}.
 
 %% return_stmt(Line, Exps, State) -> {Return,State}.
 
@@ -191,26 +193,30 @@ fdef_stmt(Line, Fname, Ps, B, St0) ->
 %% functiondef(FunctionDef, State) -> {CFunc,State}.
 %% functiondef(Line, Pars, Block, State) -> {CFunc,State}.
 %% functiondef(Line, Name, Pars, Block, State) -> {Var,CFunc,State}.
-%%  Have to handle the case where the function is a "method". All this
-%%  really means is that the function has an extra parameter 'self'
-%%  prepended to the paramter list.
+%%  Have to specially handle the case where the function is a
+%%  "method". All this really means is that the function has an extra
+%%  parameter 'self' prepended to the parameter list.
 
 functiondef({functiondef,L,Ps,B}, St) ->
     functiondef(L, Ps, B, St).
 
 functiondef(L, Ps, Stmts, St0) ->
     {Cp,Cb,St1} = function_block(Ps, Stmts, St0),
-    {#fdef{l=L,ps=Cp,ss=Cb},St1}.
+    Anno = line_file_anno(L, St1#cst.lfile),
+    {#fdef{l=Anno,ps=Cp,ss=Cb},St1}.
 
 functiondef(L, Name0, Ps0, B, St0) ->
-    %% Check if method and transform method to 'NAME'.
+    %% Check if method and transform method to 'NAME' and add self to vars.
     case is_method(Name0) of			%Export Name1 and Ps1
 	{yes,Name1} -> Ps1 = [{'NAME',L,self}|Ps0];
 	no -> Name1 = Name0, Ps1 = Ps0
     end,
     {Var,St1} = funcname(Name1, St0),
-    {F,St2} = functiondef(L, Ps1, B, St1),
-    {Var,F,St2}.
+    {F0,St2} = functiondef(L, Ps1, B, St1),
+    %% Add the function name to the annotations.
+    Anno = luerl_anno:set(name, flat_funcname(Name1), F0#fdef.l),
+    F1 = F0#fdef{l=Anno},
+    {Var,F1,St2}.
 
 is_method({'NAME',_,_}) -> no;
 is_method({'.',L,N,Rest0}) ->
@@ -219,6 +225,13 @@ is_method({'.',L,N,Rest0}) ->
         no -> no                                %No change
     end;
 is_method({method,_,{'NAME',_,_}=N}) -> {yes,N}.
+
+flat_funcname(Name) ->
+    list_to_binary(flat_funcname(Name, [])).
+
+flat_funcname({'NAME',_,N}, Rest) -> [N|Rest];
+flat_funcname({'.',_,L,R}, Rest) ->
+    flat_funcname(L, [<<".">>|flat_funcname(R, Rest)]).
 
 %% funcname(FuncNameExp, State) -> {CFuncNameExp,State}.
 
@@ -328,7 +341,8 @@ prefixexp_element({key_field,L,Exp}, St0) ->
     {#key{l=L,k=Ce},St1};
 prefixexp_element({functioncall,L,Args}, St0) ->
     {Cas,St1} = explist(Args, St0),
-    {#fcall{l=L,as=Cas},St1};
+    Anno = line_file_anno(L, St1#cst.lfile),
+    {#fcall{l=Anno,as=Cas},St1};
 prefixexp_element({methodcall,Lm,{'NAME',Ln,N},Args}, St0) ->
     {Args1,St1} = explist(Args, St0),
     {#mcall{l=Lm,m=lit_name(Ln, N),as=Args1},St1}.
@@ -370,12 +384,20 @@ tableconstructor(Fs, St0) ->
     {Cfs,St1} = lists:mapfoldl(Fun, St0, Fs),
     {Cfs,St1}.
 
-%% name_string(Name) -> String.
 %% var_name(Line, Name) -> #var{}.
 %% lit_name(Line, Name) -> #lit{}.
 
-name_string(Name) -> atom_to_binary(Name, latin1).
+lit_name(L, N) -> #lit{l=L,v=N}.
 
-lit_name(L, N) -> #lit{l=L,v=name_string(N)}.
+var_name(L, N) -> #var{l=L,n=N}.
 
-var_name(L, N) -> #var{l=L,n=name_string(N)}.
+%% line_file_anno(Line, File) -> Anno.
+%% set_anno(KeyList, Anno) -> Anno.
+
+line_file_anno(L, F) ->
+    Anno = luerl_anno:new(L),
+    luerl_anno:set(file, F, Anno).
+
+set_anno(Ps, Anno) ->
+    lists:foldl(fun ({Key,Val}, A) -> luerl_anno:set(Key, Val, A) end,
+		Anno, Ps).

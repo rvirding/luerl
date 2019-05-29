@@ -144,14 +144,17 @@ Erlang code.
 %% Build a name from list of legal characters, else error.
 
 name_token(Cs, L) ->
-    case catch {ok,list_to_atom(Cs)} of
+    case catch {ok,list_to_binary(Cs)} of
 	{ok,Name} ->
 	    case is_keyword(Name) of
-		true -> {token,{Name,L}};
+		true -> {token,{name_string(Name),L}};
 		false -> {token,{'NAME',L,Name}}
 	    end;
 	_ -> {error,"illegal name"}
     end.
+
+name_string(Name) ->
+    binary_to_atom(Name, latin1).		%Only latin1 in Lua
 
 %% hex_float(Mantissa, Exponent) -> {token,{'NUMERAL',Line,Float}} | {error,E}.
 %% hex_mantissa(Chars) -> Float.
@@ -260,26 +263,26 @@ long_bracket(Line, Cs) ->
 %% is_keyword(Name) -> boolean().
 %% Test if the name is a keyword.
 
-is_keyword('and') -> true;
-is_keyword('break') -> true;
-is_keyword('do') -> true;
-is_keyword('else') -> true;
-is_keyword('elseif') -> true;
-is_keyword('end') -> true;
-is_keyword('false') -> true;
-is_keyword('for') -> true;
-is_keyword('function') -> true;
-is_keyword('goto') -> true;
-is_keyword('if') -> true;
-is_keyword('in') -> true;
-is_keyword('local') -> true;
-is_keyword('nil') -> true;
-is_keyword('not') -> true;
-is_keyword('or') -> true;
-is_keyword('repeat') -> true;
-is_keyword('return') -> true;
-is_keyword('then') -> true;
-is_keyword('true') -> true;
-is_keyword('until') -> true;
-is_keyword('while') -> true;
+is_keyword(<<"and">>) -> true;
+is_keyword(<<"break">>) -> true;
+is_keyword(<<"do">>) -> true;
+is_keyword(<<"else">>) -> true;
+is_keyword(<<"elseif">>) -> true;
+is_keyword(<<"end">>) -> true;
+is_keyword(<<"false">>) -> true;
+is_keyword(<<"for">>) -> true;
+is_keyword(<<"function">>) -> true;
+is_keyword(<<"goto">>) -> true;
+is_keyword(<<"if">>) -> true;
+is_keyword(<<"in">>) -> true;
+is_keyword(<<"local">>) -> true;
+is_keyword(<<"nil">>) -> true;
+is_keyword(<<"not">>) -> true;
+is_keyword(<<"or">>) -> true;
+is_keyword(<<"repeat">>) -> true;
+is_keyword(<<"return">>) -> true;
+is_keyword(<<"then">>) -> true;
+is_keyword(<<"true">>) -> true;
+is_keyword(<<"until">>) -> true;
+is_keyword(<<"while">>) -> true;
 is_keyword(_) -> false.
