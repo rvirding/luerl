@@ -414,7 +414,7 @@ load_chunk(#code{code=Code}, Env, St) ->
 
 load_function(F, St) -> load_function(F, [], St).
 
-load_function([?FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
+load_function([?PUSH_FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
     do_fdef(Lsz, Esz, Pars, Is, Env, St).
 
 %% call(Function, State) -> {Return,State}.
@@ -447,20 +447,24 @@ emul(Is, St) ->
 
 emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
+		   io:fwrite("-> ~p\n", [I]),
 		   io:fwrite("~p\n", [{Lvs,Env}]),
-		   stack_print(Stk),
-		   io:fwrite("-> ~p\n", [I])
+		   io:fwrite("St: "),
+		   stack_print(Stk)
 	       end),
     emul_1(Is, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
+		   io:fwrite("-> []\n"),
 		   io:fwrite("~p\n", [{Lvs,Env}]),
-		   stack_print(Stk),
-		   io:fwrite("-> []\n")
+		   io:fwrite("St: "),
+		   stack_print(Stk)
 	       end),
     emul_1([], Lvs, Stk, Env, St).
 
-stack_print([#call_frame{}|_]) -> io:fwrite(" ...\n");
+stack_print([#call_frame{}|St]) ->
+    io:fwrite(" ...\n"),
+    stack_print(St);
 stack_print([E|St]) ->
     io:fwrite(" ~p", [E]),
     stack_print(St);
@@ -548,7 +552,7 @@ emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
     do_op1(Is, Lvs, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
     do_op2(Is, Lvs, Stk, Env, St, Op);
-emul_1([?FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
+emul_1([?PUSH_FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
     {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
     emul(Is, Lvs, [Func|Stk], Env, St1);
 %% Control instructions.
