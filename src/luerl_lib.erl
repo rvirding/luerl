@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2018 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ to_lists(As, Acc) ->
 
 to_int(N) when is_number(N) -> round(N);
 to_int(B) when is_binary(B) ->
-    case bin_to_float(B) of
+    case bin_to_number(B) of
 	{ok,N} -> round(N);
 	error -> nil
     end;
@@ -119,13 +119,13 @@ to_ints(As) -> to_ints(As, []).
 to_ints(As, Acc) ->
     to_loop(As, fun to_int/1, Acc).
 
-%% bin_to_float(Binary) -> {ok,Number} | error.
-%% str_to_float(String) -> {ok,Number} | error.
+%% bin_to_number(Binary) -> {ok,Number} | error.
+%% str_to_number(String) -> {ok,Number} | error.
 %%  Use the scanner to process all allowed number syntaxes.
 
-bin_to_float(B) -> str_to_float(binary_to_list(B)).
+bin_to_number(B) -> str_to_number(binary_to_list(B)).
 
-str_to_float(S) ->
+str_to_number(S) ->
     case luerl_scan:string(S) of
 	{ok,[{'NUMERAL',_,N}],_} -> {ok,N};
 	{ok,[{'+',_},{'NUMERAL',_,N}],_} -> {ok,N};
@@ -146,7 +146,7 @@ number_to_list(N) ->
 
 tonumber(N) when is_number(N) -> N;
 tonumber(B) when is_binary(B) ->
-    case bin_to_float(B) of
+    case bin_to_number(B) of
 	{ok,N} -> N;
 	error -> nil
     end;

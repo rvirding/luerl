@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2018 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -92,7 +92,7 @@ init() ->
 		     {<<"table">>,luerl_lib_table},
 		     {<<"debug">>,luerl_lib_debug}
 		    ], St6),
-    %% Set _G variable to point to it and add it packages.loaded.
+    %% Set _G variable to point to it and add it to packages.loaded.
     St8 = set_global_key(<<"_G">>, _G, St7),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St8).
 
@@ -437,7 +437,7 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(call_frame, {lvs,env}).			%Save these for the GC
+-record(call_frame, {anno=[],lvs,env}).		%Save these for the GC
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
@@ -447,7 +447,7 @@ emul(Is, St) ->
 
 emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
-		   io:fwrite("-> ~p\n", [I]),
+		   io:fwrite("I: ~p\n", [I]),
 		   io:fwrite("~p\n", [{Lvs,Env}]),
 		   io:fwrite("St: "),
 		   stack_print(Stk)
@@ -455,15 +455,15 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
     emul_1(Is, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
-		   io:fwrite("-> []\n"),
+		   io:fwrite("I: []\n"),
 		   io:fwrite("~p\n", [{Lvs,Env}]),
 		   io:fwrite("St: "),
 		   stack_print(Stk)
 	       end),
     emul_1([], Lvs, Stk, Env, St).
 
-stack_print([#call_frame{}|St]) ->
-    io:fwrite(" ...\n"),
+stack_print([#call_frame{}=E|St]) ->
+    io:fwrite(" ~p\n", [E]),
     stack_print(St);
 stack_print([E|St]) ->
     io:fwrite(" ~p", [E]),
@@ -1191,16 +1191,11 @@ op('..', A1, A2) -> concat_op(A1, A2);
 op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
 
 -ifndef(HAS_FLOOR).
-%% We need a floor to do the mod in the same way as Lua. This doesn't
-%% exist before 20 so we have to do it ourselves.
-
 %% floor(Number) -> integer().
-floor(X) ->
-    T = trunc(X),
-    if X >= 0 -> T;
-       X == T -> T;
-       true -> T - 1
-    end.
+%%  Floor does not exist before 20 so we need to do it ourselves.
+
+floor(N) when is_integer(N) -> N;
+floor(N) when is_float(N) -> round(N - 0.5).
 -endif.
 
 %% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.

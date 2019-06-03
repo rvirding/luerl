@@ -14,7 +14,8 @@
 -define(FULL_KEYS_OPT, "-DHAS_FULL_KEYS=true").
 -define(NEW_REC_OPT, "-DNEW_REC_CORE=true").
 -define(NEW_RAND_OPT, "-DNEW_RAND=true").
--define(HAS_FLOOT_OPT, "-DHAS_FLOOR=true").
+-define(HAS_FLOOR_OPT, "-DHAS_FLOOR=true").
+-define(HAS_CEIL_OPT, "-DHAS_CEIL=true").
 
 main(_) ->
     Version = otp_release(),
@@ -28,7 +29,9 @@ comp_opts(Version) ->
     Copts3 = ?IF(Version >= "19",
                  Copts2 ++ append_copts([?NEW_REC_OPT,?NEW_RAND_OPT]),
                  Copts2),
-    Copts4 = ?IF(Version >= "20", Copts3 ++ " " ++ ?HAS_FLOOT_OPT, Copts3),
+    Copts4 = ?IF(Version >= "20",
+                 Copts3 ++ append_copts([?HAS_FLOOR_OPT,?HAS_CEIL_OPT]),
+                 Copts3),
     Copts4.
 
 append_copts([Copt|Copts]) ->

@@ -43,7 +43,7 @@ $(EBINDIR)/%.beam: $(SRCDIR)/%.erl $(SRCDIR)/luerl.hrl comp_opts.mk
 %.erl: %.yrl
 	$(ERLC) -o $(SRCDIR) $<
 
-comp_opts.mk:
+comp_opts.mk: get_comp_opts.escript
 	escript get_comp_opts.escript
 
 -include comp_opts.mk

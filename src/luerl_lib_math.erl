@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -15,6 +15,14 @@
 %% File    : luerl_lib_math.erl
 %% Author  : Robert Virding
 %% Purpose : The math library for Luerl.
+
+%% We try to mirror the handling of arguments which occurs in the Lua
+%% math module. Many functions allow extra arguments but only look at
+%% the first required ones of the right type and completely ignore the
+%% rest.
+%%
+%% We keep atan2, cosh, sinh tanh, pow, frexp and ldexp even though
+%% have been deprecated.
 
 -module(luerl_lib_math).
 
@@ -76,105 +84,124 @@ table() ->
      {<<"sqrt">>,#erl_func{code=fun sqrt/2}},
      {<<"tan">>,#erl_func{code=fun tan/2}},
      {<<"tanh">>,#erl_func{code=fun tanh/2}},
+     {<<"tointeger">>,#erl_func{code=fun tointeger/2}},
      {<<"type">>,#erl_func{code=fun type/2}}
     ].
 
 %% abs(Args, State) -> {[Ret],State}.
 
 abs(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[abs(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[abs(N)],St};
 	_ -> badarg_error(abs, As, St)
     end.
 
 acos(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:acos(N)],St};
-	nil -> badarg_error(acos, As, St)
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:acos(N)],St};
+	_ -> badarg_error(acos, As, St)
     end.
 
 asin(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:asin(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:asin(N)],St};
 	_ -> badarg_error(asin, As, St)
     end.
 
 atan(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:atan(N)],St};
+    case get_number_args(As) of
+	[N1,N2|_] when is_number(N1), is_number(N2) ->
+	    {[math:atan2(N1, N2)],St};
+	[N|_] when is_number(N) -> {[math:atan(N)],St};
 	_ -> badarg_error(atan, As, St)
     end.
 
 atan2(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N1,N2|_] -> {[math:atan2(N1, N2)],St};
+    case get_number_args(As) of
+	[N1,N2|_] when is_number(N1), is_number(N2) ->
+	    {[math:atan2(N1, N2)],St};
 	_ -> badarg_error(atan2, As, St)
     end.
 
 ceil(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] when round(N) == N -> {[N],St};
-	[N|_] -> {[float(round(N + 0.5))],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[ceil(N)],St};
 	_ -> badarg_error(ceil, As, St)
     end.
 
+-ifndef(HAS_CEIL).
+%% ceil(Number) -> integer().
+%%  Ceil does not exist before 20 so we need to do it ourselves.
+
+ceil(N) when is_integer(N) -> N;
+ceil(N) when is_float(N) -> round(N + 0.5).
+-endif.
+
 cos(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:cos(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:cos(N)],St};
 	_ -> badarg_error(cos, As, St)
     end.
 
 cosh(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:cosh(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:cosh(N)],St};
 	_ -> badarg_error(cosh, As, St)
     end.
 
 deg(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[180.0*N/math:pi()],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[180.0*N/math:pi()],St};
 	_ -> badarg_error(deg, As, St)
     end.
 
 exp(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:exp(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:exp(N)],St};
 	_ -> badarg_error(exp, As, St)
     end.
 
 floor(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] when round(N) == N -> {[N],St};
-	[N|_] -> {[float(round(N - 0.5))],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[floor(N)],St};
 	_ -> badarg_error(floor, As, St)
     end.
 
+-ifndef(HAS_FLOOR).
+%% floor(Number) -> integer().
+%%  Floor does not exist before 20 so we need to do it ourselves.
+
+floor(N) when is_integer(N) -> N;
+floor(N) when is_float(N) -> round(N - 0.5).
+-endif.
+
 fmod(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[X,Y|_] ->
-	    Div = float(trunc(X/Y)),
+    case get_number_args(As) of
+	[X,Y|_] when is_number(X), is_number(Y) ->
+	    Div = trunc(X/Y),
 	    Rem = X - Div*Y,
 	    {[Rem],St};
 	_ -> badarg_error(fmod, As, St)
     end.
 
 frexp(As, St) ->				%M,E such that X = M*2^E
-    case luerl_lib:tonumbers(As) of
-	[X|_] ->
-	    <<_:1,E0:11,M0:52>> = <<X/float>>,	%The sneaky bit!
+    case get_number_args(As) of
+	[X|_] when is_number(X)  ->
+	    %% The sneaky bit!
+	    <<_:1,E0:11,M0:52>> = <<(X+0.0)/float>>,
 	    Two52 = 1 bsl 52,
 	    M1 = (M0 bor Two52)/Two52,
 	    if M1 >= 1.0 -> M2 = M1/2, E1 = E0 - 1022; %Export M2, E1
 	       M1 < 0.5 -> M2 = M1*2.0, E1 = E0 - 1024;
 	       true -> M2 = M1, E1 = E0 - 1023
 	    end,
-	    {[float(M2),float(E1)],St};
+	    {[float(M2),E1],St};
 	_ -> badarg_error(frexp, As, St)
     end.
 
 ldexp(As, St) ->
-    case luerl_lib:conv_list(As, [lua_number,lua_integer]) of
-	[M,E] ->
+    case get_number_args(As) of
+	[M,E|_] when is_float(M), is_integer(E) ->
 	    {[M*math:pow(2, E)],St};
 %% 	    <<X/float>> = <<0:1,E:11,M:52>>,
 %% 	    {[X],St};
@@ -182,18 +209,21 @@ ldexp(As, St) ->
     end.
 
 log(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N] -> {[math:log(N)],St};
-	[N,10.0|_] -> {[math:log10(N)],St};	%Seeing it is builtin
-	[N1,N2|_] ->
+    case get_number_args(As) of
+	[N1,N2|_] when is_number(N1), N2 == 10 ->
+	    {[math:log10(N1)],St};		%Seeing it is builtin
+	[N1,N2|_] when is_number(N1), is_number(N2) ->
 	    {[math:log(N1)/math:log(N2)],St};
+	[N|_] when is_number(N) ->
+	    {[math:log(N)],St};
 	_ -> badarg_error(log, As, St)
     end.
 
 log10(As, St) ->				%For 5.1 backwards compatibility
-    case luerl_lib:tonumbers(As) of
-	[0.0|_] -> {[-500.0],St};		%Bit hacky
-	[N|_] -> {[math:log10(N)],St};
+    case get_number_args(As) of
+	[N|_] when N == 0 -> {[-500.0],St};	%Bit hacky
+	[N|_] when is_number(N) ->
+	    {[math:log10(N)],St};
 	_ -> badarg_error(log10, As, St)
     end.
 
@@ -210,22 +240,24 @@ min(As, St) ->
     end.
 
 modf(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] ->
-	    I = float(trunc(N)),		%Integral part
-	    {[I,N-I],St};
+    case get_number_args(As) of
+	[N|_] when is_integer(N) -> {[N,0.0],St};
+	[N|_] when is_float(N) ->
+	    I = trunc(N),			%Integral part
+	    {[I,float(N-I)],St};
 	_ -> badarg_error(modf, As, St)
     end.
 
 pow(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N1,N2|_] -> {[math:pow(N1, N2)],St};
+    case get_number_args(As) of
+	[N1,N2|_] when is_number(N1) and is_number(N2) ->
+	    {[math:pow(N1, N2)],St};
 	_ -> badarg_error(pow, As, St)
     end.
 
 rad(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:pi()*N/180.0],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:pi()*N/180.0],St};
 	_ -> badarg_error(sinh, As, St)
     end.
 
@@ -236,55 +268,84 @@ random(As, #luerl{rand=S0}=St) ->
 	    {[R],St#luerl{rand=S1}};
 	[M] when M >= 1 ->
 	    {R,S1} = ?RAND_UNIFORM(M, S0),
-	    {[float(R)],St#luerl{rand=S1}};
+	    {[R],St#luerl{rand=S1}};
 	[M,N] when N >= M ->
 	    {R,S1} = ?RAND_UNIFORM(N - M + 1, S0),
-	    {[float(R + M - 1)],St#luerl{rand=S1}};
+	    {[R + M - 1],St#luerl{rand=S1}};
 	_ -> badarg_error(random, As, St)
     end.
 
 randomseed(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[S|_] ->
-	    %% Split float-64 into three integers.
+    case get_number_args(As) of
+	[S|_] when is_number(S) ->
+	    %% Split integer or float-64 into three integers.
 	    <<A1:24,A2:24,A3:16>> = <<S/float>>,
 	    {[],St#luerl{rand=?RAND_SEED(A1, A2, A3)}};
 	_ -> badarg_error(randomseed, As, St)
     end.
 
 sin(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:sin(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:sin(N)],St};
 	_ -> badarg_error(sin, As, St)
     end.
 
 sinh(As, St) ->
-    case luerl_lib:tonumbers(As) of
+    case get_number_args(As) of
 	[N|_] -> {[math:sinh(N)],St};
 	_ -> badarg_error(sinh, As, St)
     end.
 
 sqrt(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:sqrt(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:sqrt(N)],St};
 	_ -> badarg_error(sqrt, As, St)
     end.
 
 tan(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:tan(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:tan(N)],St};
 	_ -> badarg_error(tan, As, St)
     end.
 
 tanh(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[N|_] -> {[math:tanh(N)],St};
+    case get_number_args(As) of
+	[N|_] when is_number(N) -> {[math:tanh(N)],St};
 	_ -> badarg_error(tanh, As, St)
     end.
 
+tointeger(As, St) ->
+    case get_number_args(As) of
+	[N|_] when is_integer(N) -> {[N],St};
+	[N|_] when is_float(N) ->
+	    case trunc(N) of
+		I when I == N -> {[I],St};
+		_ -> {[nil], St}
+	    end;
+	[_|_] -> {[nil],St};
+	[] -> badarg_error(tointeger, As, St)
+    end.
+
 type(As, St) ->
-    case luerl_lib:tonumbers(As) of
+    %% No conversion here.
+    case As of
 	[N|_] when is_integer(N) -> {[<<"integer">>],St};
 	[N|_] when is_float(N) -> {[<<"float">>],St};
-	nil -> {[nil],St}
+	[_|_] -> {[nil],St};			%Not a number
+	[] -> badarg_error(type, As, St)
     end.
+
+%% get_number_args(Args) -> [Number].
+%%  Convert args to numbers inserting nil when not possible. This
+%%  allows us to disting between no numbers and an empty list.
+
+get_number_args(As) ->
+    lists:map(fun luerl_lib:tonumber/1, As).
+
+%% get_number_args([A|As]) ->
+%%     case luerl_lib:tonumber(A) of
+%% 	N when is_number(N) ->
+%% 	    [N|get_number_args(As)];
+%% 	nil -> []
+%%     end;
+%% get_number_args([]) -> [].

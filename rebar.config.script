@@ -50,6 +50,7 @@ FullOpt = {d,'HAS_FULL_KEYS',true},
 RecOpt = {d,'NEW_REC_CORE',true},
 RandOpt = {d,'NEW_RAND',true},
 HasFloor = {d,'HAS_FLOOR',true},
+HasCeil = {d,'HAS_CEIL',true},
 
 Copts0 = [{d,'ERLANG_VERSION',Version}],
 Copts1 = if Version >= "17" -> Copts0 ++ [HasOpt];
@@ -61,7 +62,7 @@ Copts2 = if Version >= "18" -> Copts1 ++ [FullOpt];
 Copts3 = if Version >= "19" -> Copts2 ++ [RecOpt,RandOpt];
             true -> Copts2
          end,
-Copts4 = if Version >= "20" -> Copts3 ++ [HasFloor];
+Copts4 = if Version >= "20" -> Copts3 ++ [HasFloor,HasCeil];
             true -> Copts3
          end,
 Copts = Copts4,                                 %This is it
