@@ -320,7 +320,7 @@ unpack_arr(Arr, N, J) ->
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
 length(#tref{}=T, St0) ->
-    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St0),
+    Meta = luerl_emul:get_metamethod(T, <<"__len">>, St0),
     if ?IS_TRUE(Meta) ->
 	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
 	    {luerl_lib:first_value(Ret),St1};
@@ -381,7 +381,7 @@ do_sort(Comp, St0, N) ->
 lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St0) ->
-    case luerl_emul:getmetamethod(O1, O2, <<"__lt">>, St0) of
+    case luerl_emul:get_metamethod(O1, O2, <<"__lt">>, St0) of
 	nil -> lua_error({illegal_comp,sort}, St0);
 	Meta ->
 	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),

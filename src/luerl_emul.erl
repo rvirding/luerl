@@ -47,8 +47,8 @@
 	 set_table_keys/3,set_table_keys/4,
 	 get_table_key/3,set_table_key/4,
          alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
-	 getmetatable/2,
-	 getmetamethod/3,getmetamethod/4]).
+         get_metatable/2, set_metatable/3,
+         get_metamethod/3,get_metamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
 -export([set_global_name/3,set_global_key/3,
@@ -232,7 +232,7 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 	    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 	    St#luerl{ttab=Ts1};
 	error ->				%Key does not exist
-	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
+	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    %% Only add non-nil value.
 		    Dict1 = if Val =:= nil -> Dict0;
@@ -251,7 +251,7 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
     #table{a=Arr0,m=Meta}=T = ?GET_TABLE(N, Ts0),	%Get the table
     case array:get(I, Arr0) of
 	nil ->					%Key does not exist
-	    case getmetamethod_tab(Meta, <<"__newindex">>, Ts0) of
+	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    %% Only add non-nil value, slightly faster (?)
 		    Arr1 = if Val =:= nil -> Arr0;
@@ -281,7 +281,7 @@ get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
 get_table_key(Tab, Key, St) ->			%Just find the metamethod
-    case getmetamethod(Tab, <<"__index">>, St) of
+    case get_metamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key}, St);
 	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
@@ -309,7 +309,7 @@ get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
     end.
 
 get_table_metamethod(T, Meta, Key, Ts, St) ->
-    case getmetamethod_tab(Meta, <<"__index">>, Ts) of
+    case get_metamethod_tab(Meta, <<"__index">>, Ts) of
 	nil -> {nil,St};
 	Meth when ?IS_FUNCTION(Meth) ->
 	    {Vs,St1} = functioncall(Meth, [T,Key], St),
@@ -332,8 +332,8 @@ alloc_userdata(Data, Meta, #luerl{utab=Us0,ufree=[],unext=N}=St) ->
     Us1 = ?SET_TABLE(N, #userdata{d=Data,m=Meta}, Us0),
     {#uref{i=N},St#luerl{utab=Us1,unext=N+1}}.
 
-set_userdata(#uref{i=N}, #userdata{}=Udata, #luerl{utab=Us0}=St) ->
-    Us1 = ?SET_TABLE(N, Udata, Us0),
+set_userdata(#uref{i=N}, Data, #luerl{utab=Us0}=St) ->
+    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{d=Data} end, Us0),
     St#luerl{utab=Us1}.
 
 get_userdata(#uref{i=N}, #luerl{utab=Us}=St) ->
@@ -876,7 +876,7 @@ functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
 functioncall(Func, Args, Stk, St) ->
-    case getmetamethod(Func, <<"__call">>, St) of
+    case get_metamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St);
 	Meta -> functioncall(Meta, [Func|Args], Stk, St)
     end.
@@ -1052,40 +1052,61 @@ genfor_loop(Func, Tab, Val, Fis, Lvs0, Stk, Env, St0) ->
 	false -> {Lvs0,St1}
     end.
 
-%% getmetamethod(Object1, Object2, Event, State) -> Metod | nil.
-%% getmetamethod(Object, Event, State) -> Method | nil.
+%% get_metamethod(Object1, Object2, Event, State) -> Metod | nil.
+%% get_metamethod(Object, Event, State) -> Method | nil.
 %% Get the metamethod for object(s).
 
-getmetamethod(O1, O2, E, St) ->
-    case getmetamethod(O1, E, St) of
-	nil -> getmetamethod(O2, E, St);
+get_metamethod(O1, O2, E, St) ->
+    case get_metamethod(O1, E, St) of
+	nil -> get_metamethod(O2, E, St);
 	M -> M
     end.
 
-getmetamethod(O, E, St) ->
-    Meta = getmetatable(O, St),			%Can be nil
-    getmetamethod_tab(Meta, E, St#luerl.ttab).
+get_metamethod(O, E, St) ->
+    Meta = get_metatable(O, St),			%Can be nil
+    get_metamethod_tab(Meta, E, St#luerl.ttab).
 
-getmetatable(#tref{i=T}, #luerl{ttab=Ts}) ->
-    (?GET_TABLE(T, Ts))#table.m;
-getmetatable(#uref{i=U}, #luerl{utab=Us}) ->
-    (?GET_TABLE(U, Us))#userdata.m;
-getmetatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
-getmetatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
-    Meta#meta.boolean;
-getmetatable(N, #luerl{meta=Meta}) when is_number(N) ->
-    Meta#meta.number;
-getmetatable(S, #luerl{meta=Meta}) when is_binary(S) ->
-    Meta#meta.string;
-getmetatable(_, _) -> nil.			%Other types have no metatables
-
-getmetamethod_tab(#tref{i=M}, E, Ts) ->
+get_metamethod_tab(#tref{i=M}, E, Ts) ->
     #table{d=Mdict} = ?GET_TABLE(M, Ts),
     case ttdict:find(E, Mdict) of
 	{ok,Mm} -> Mm;
 	error -> nil
     end;
-getmetamethod_tab(_, _, _) -> nil.		%Other types have no metatables
+get_metamethod_tab(_, _, _) -> nil.		%Other types have no metatables
+
+get_metatable(#tref{i=T}, #luerl{ttab=Ts}) ->
+    (?GET_TABLE(T, Ts))#table.m;
+get_metatable(#uref{i=U}, #luerl{utab=Us}) ->
+    (?GET_TABLE(U, Us))#userdata.m;
+get_metatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
+get_metatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
+    Meta#meta.boolean;
+get_metatable(N, #luerl{meta=Meta}) when is_number(N) ->
+    Meta#meta.number;
+get_metatable(S, #luerl{meta=Meta}) when is_binary(S) ->
+    Meta#meta.string;
+get_metatable(_, _) -> nil.			%Other types have no metatables
+
+set_metatable(#tref{i=N}, M, #luerl{ttab=Ts0}=St) ->
+    Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, Ts0),
+    St#luerl{ttab=Ts1};
+set_metatable(#uref{i=N}, M, #luerl{utab=Us0}=St) ->
+    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{m=M} end, Us0),
+    St#luerl{utab=Us1};
+set_metatable(nil, M, #luerl{meta=Meta0}=St) ->
+    Meta1 = Meta0#meta{nil=M},
+    St#luerl{meta=Meta1};
+set_metatable(B, M, #luerl{meta=Meta0}=St) when is_boolean(B) ->
+    Meta1 = Meta0#meta{boolean=M},
+    St#luerl{meta=Meta1};
+set_metatable(N, M, #luerl{meta=Meta0}=St) when is_number(N) ->
+    Meta1 = Meta0#meta{number=M},
+    St#luerl{meta=Meta1};
+set_metatable(B, M, #luerl{meta=Meta0}=St) when is_binary(B) ->
+    Meta1 = Meta0#meta{string=M},
+    St#luerl{meta=Meta1};
+set_metatable(_, _, St) ->			%Do nothing for the rest
+    St.
 
 %% build_tab(FieldCount, Index, Stack, State) -> {TableRef,Stack,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is
@@ -1243,7 +1264,7 @@ integer_op(Op, A1, A2, E, Raw) ->
     end.
 
 numeric_meta(Op, A, E, St0) ->
-    case getmetamethod(A, E, St0) of
+    case get_metamethod(A, E, St0) of
 	nil -> badarg_error(Op, [A], St0);	%No meta method
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A], St0),
@@ -1251,7 +1272,7 @@ numeric_meta(Op, A, E, St0) ->
     end.
 
 numeric_meta(Op, A1, A2, E, St0) ->
-    case getmetamethod(A1, A2, E, St0) of
+    case get_metamethod(A1, A2, E, St0) of
 	nil -> badarg_error(Op, [A1,A2], St0);	%No meta methods
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
@@ -1271,10 +1292,10 @@ neq_op(_Op, A1, A2) ->
 
 eq_meta(A1, A2, St0) ->
     %% Must have "same" metamethod here. How do we test?
-    case getmetamethod(A1, <<"__eq">>, St0) of
+    case get_metamethod(A1, <<"__eq">>, St0) of
 	nil -> {false,St0};			%Tweren't no method
 	Meta ->
-	    case getmetamethod(A2, <<"__eq">>, St0) of
+	    case get_metamethod(A2, <<"__eq">>, St0) of
 		Meta ->				%Must be the same method
 		    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 		    {boolean_value(Ret),St1};
@@ -1288,7 +1309,7 @@ lt_op(Op, A1, A2) ->
     {meta,fun (_, St) -> lt_meta(Op, A1, A2, St) end}.
 
 lt_meta(Op, A1, A2, St0) ->
-    case getmetamethod(A1, A2, <<"__lt">>, St0) of
+    case get_metamethod(A1, A2, <<"__lt">>, St0) of
 	nil -> badarg_error(Op, [A1,A2], St0);
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
@@ -1302,10 +1323,10 @@ le_op(Op, A1, A2) ->
 
 le_meta(Op, A1, A2, St0) ->
     %% Must check for first __le then __lt metamethods.
-    case getmetamethod(A1, A2, <<"__le">>, St0) of
+    case get_metamethod(A1, A2, <<"__le">>, St0) of
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
-	    case getmetamethod(A1, A2, <<"__lt">>, St0) of
+	    case get_metamethod(A1, A2, <<"__lt">>, St0) of
 		nil -> badarg_error(Op, [A1,A2], St0);
 		Meta ->
 		    {Ret,St1} = functioncall(Meta, [A2,A1], St0),
@@ -1330,7 +1351,7 @@ concat_op(A1, A2) ->
     end.
 
 concat_meta(A1, A2, St0) ->
-    case getmetamethod(A1, A2, <<"__concat">>, St0) of
+    case get_metamethod(A1, A2, <<"__concat">>, St0) of
 	nil -> badarg_error('..', [A1,A2], St0);
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),

@@ -92,7 +92,7 @@ eprint(Args, St) ->
 -spec error(_, _) -> no_return().
 
 error([{tref, _}=T|_], St0) ->
-    case luerl_emul:getmetamethod(T, <<"__tostring">>, St0) of
+    case luerl_emul:get_metamethod(T, <<"__tostring">>, St0) of
         nil -> lua_error({error_call, T}, St0);
         Meta ->
             {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
@@ -106,7 +106,7 @@ error(As, St) -> badarg_error(error, As, St).
 %%  key-value pairs of integer keys.
 
 ipairs([#tref{}=Tref|_], St) ->
-    case luerl_emul:getmetamethod(Tref, <<"__ipairs">>, St) of
+    case luerl_emul:get_metamethod(Tref, <<"__ipairs">>, St) of
 	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
@@ -125,7 +125,7 @@ ipairs_next([#tref{i=T},K|_], St) ->
 %%  Return a function to step over all the key-value pairs in a table.
 
 pairs([#tref{}=Tref|_], St) ->
-    case luerl_emul:getmetamethod(Tref, <<"__pairs">>, St) of
+    case luerl_emul:get_metamethod(Tref, <<"__pairs">>, St) of
 	nil -> {[#erl_func{code=fun next/2},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
@@ -291,7 +291,7 @@ tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St};
 tonumber(As, St) -> badarg_error(tonumber, As, St).
 
 tostring([Arg|_], St) ->
-    case luerl_emul:getmetamethod(Arg, <<"__tostring">>, St) of
+    case luerl_emul:get_metamethod(Arg, <<"__tostring">>, St) of
 	nil -> {[tostring(Arg)],St};
 	M when ?IS_FUNCTION(M) ->
 	    luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
@@ -336,7 +336,7 @@ type(_) -> <<"unknown">>.
 %%  else the metatable for the type.
 
 getmetatable([O|_], St) ->
-    case luerl_emul:getmetatable(O, St) of
+    case luerl_emul:get_metatable(O, St) of
 	#tref{i=N}=Meta ->
 	    #table{d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
 	    case ttdict:find(<<"__metatable">>, Dict) of
@@ -353,7 +353,7 @@ setmetatable([#tref{}=T,nil|_], St) ->
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
 do_setmetatable(#tref{i=N}=T, M, St) ->
-    case luerl_emul:getmetamethod(T, <<"__metatable">>, St) of
+    case luerl_emul:get_metamethod(T, <<"__metatable">>, St) of
 	nil ->
 	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, St#luerl.ttab),
 	    {[T],St#luerl{ttab=Ts}};
