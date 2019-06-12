@@ -49,19 +49,29 @@ execute([<<>>], St) -> {127,St};
 execute([A], St) ->
     case A of
         S when is_binary(S) ->
-            P = open_port({spawn,S}, [hide,in,eof,exit_status,use_stdio,
-                                      stderr_to_stdout]),
-            {[execute_handle(P)],St};
-        false ->{[nil],St}
+            Opts = [{args,["-c", S]},hide,in,eof,exit_status,use_stdio,
+                    stderr_to_stdout],
+            P = open_port({spawn_executable,"/bin/sh"}, Opts),
+            %% Print stdout/stderr like Lua does.
+            {N,So} = execute_handle(P),
+            io:format(So),
+            O = case N of
+                    0 -> true;
+                    _ -> nil
+                end,
+            {[O],St};
+        false -> {[nil],St}
     end.
 
-execute_handle(P) ->
+execute_handle(P) -> execute_handle(P, []).
+
+execute_handle(P, D) ->
     receive
-        {P,{data,_}} -> execute_handle(P);
+        {P,{data,D1}} -> execute_handle(P,[D1|D]);
         {P, eof} ->
             port_close(P),
             receive
-                {P,{exit_status,N}} -> N
+                {P,{exit_status,N}} -> {N,D}
             end
     end.
 
@@ -69,16 +79,16 @@ execute_handle(P) ->
 
 clock(As, St) ->
     Type = case As of				%Choose which we want
-	       [<<"runtime">>|_] -> runtime;
-	       _ -> wall_clock
-	   end,
+               [<<"runtime">>|_] -> runtime;
+               _ -> wall_clock
+           end,
     {Tot,_} = erlang:statistics(Type),		%Milliseconds
     {[Tot*1.0e-3],St}.
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
     Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
-			[Ye,Mo,Da,Ho,Mi,Sec]),
+                        [Ye,Mo,Da,Ho,Mi,Sec]),
     {[iolist_to_binary(Str)],St}.
 
 difftime([A1,A2|_], St) ->
