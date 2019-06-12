@@ -31,6 +31,7 @@ table() ->
     [{<<"clock">>,#erl_func{code=fun clock/2}},
      {<<"date">>,#erl_func{code=fun date/2}},
      {<<"difftime">>,#erl_func{code=fun difftime/2}},
+     {<<"execute">>,#erl_func{code=fun execute/2}},
      {<<"getenv">>,#erl_func{code=fun getenv/2}},
      {<<"time">>,#erl_func{code=fun time/2}}].
 
@@ -42,6 +43,27 @@ getenv([A|_], St) when is_binary(A) ; is_number(A) ->
 	false -> {[nil],St}
     end;
 getenv(As, St) -> badarg_error(getenv, As, St).
+
+%% Execute a command and get the return code.
+execute([<<>>], St) -> {127,St};
+execute([A], St) ->
+    case A of
+        S when is_binary(S) ->
+            P = open_port({spawn,S}, [hide,in,eof,exit_status,use_stdio,
+                                      stderr_to_stdout]),
+            {[execute_handle(P)],St};
+        false ->{[nil],St}
+    end.
+
+execute_handle(P) ->
+    receive
+        {P,{data,_}} -> execute_handle(P);
+        {P, eof} ->
+            port_close(P),
+            receive
+                {P,{exit_status,N}} -> N
+            end
+    end.
 
 %% Time functions.
 
