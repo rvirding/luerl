@@ -31,6 +31,7 @@ table() ->
     [{<<"clock">>,#erl_func{code=fun clock/2}},
      {<<"date">>,#erl_func{code=fun date/2}},
      {<<"difftime">>,#erl_func{code=fun difftime/2}},
+     {<<"execute">>,#erl_func{code=fun execute/2}},
      {<<"getenv">>,#erl_func{code=fun getenv/2}},
      {<<"time">>,#erl_func{code=fun time/2}}].
 
@@ -43,20 +44,51 @@ getenv([A|_], St) when is_binary(A) ; is_number(A) ->
     end;
 getenv(As, St) -> badarg_error(getenv, As, St).
 
+%% Execute a command and get the return code.
+execute([<<>>], St) -> {127,St};
+execute([A], St) ->
+    case A of
+        S when is_binary(S) ->
+            Opts = [{args,["-c", S]},hide,in,eof,exit_status,use_stdio,
+                    stderr_to_stdout],
+            P = open_port({spawn_executable,"/bin/sh"}, Opts),
+            %% Print stdout/stderr like Lua does.
+            {N,So} = execute_handle(P),
+            io:format(So),
+            O = case N of
+                    0 -> true;
+                    _ -> nil
+                end,
+            {[O],St};
+        false -> {[nil],St}
+    end.
+
+execute_handle(P) -> execute_handle(P, []).
+
+execute_handle(P, D) ->
+    receive
+        {P,{data,D1}} -> execute_handle(P,[D1|D]);
+        {P, eof} ->
+            port_close(P),
+            receive
+                {P,{exit_status,N}} -> {N,D}
+            end
+    end.
+
 %% Time functions.
 
 clock(As, St) ->
     Type = case As of				%Choose which we want
-	       [<<"runtime">>|_] -> runtime;
-	       _ -> wall_clock
-	   end,
+               [<<"runtime">>|_] -> runtime;
+               _ -> wall_clock
+           end,
     {Tot,_} = erlang:statistics(Type),		%Milliseconds
     {[Tot*1.0e-3],St}.
 
 date(_, St) ->
     {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
     Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
-			[Ye,Mo,Da,Ho,Mi,Sec]),
+                        [Ye,Mo,Da,Ho,Mi,Sec]),
     {[iolist_to_binary(Str)],St}.
 
 difftime([A1,A2|_], St) ->
