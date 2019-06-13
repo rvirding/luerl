@@ -44,34 +44,37 @@ getenv([A|_], St) when is_binary(A) ; is_number(A) ->
     end;
 getenv(As, St) -> badarg_error(getenv, As, St).
 
-%% Execute a command and get the return code.
-execute([<<>>], St) -> {127,St};
-execute([A], St) ->
-    case A of
+%% execute([Command|_], State) -> {[Ret,Type,Stat],State}.
+%%  Execute a command and get the return code. We cannot yet properly
+%%  handle if our command terminated with a signal.
+
+execute([], St) -> {true,St};                   %We have a shell
+execute([A|_], St) ->
+    case luerl_lib:tostring(A) of
         S when is_binary(S) ->
-            Opts = [{args,["-c", S]},hide,in,eof,exit_status,use_stdio,
-                    stderr_to_stdout],
+            Opts = [{arg0,"sh"},{args,["-c", S]},
+                    hide,in,eof,exit_status,use_stdio,stderr_to_stdout],
             P = open_port({spawn_executable,"/bin/sh"}, Opts),
-            %% Print stdout/stderr like Lua does.
-            {N,So} = execute_handle(P),
-            io:format(So),
-            O = case N of
-                    0 -> true;
-                    _ -> nil
-                end,
-            {[O],St};
-        false -> {[nil],St}
+            N = execute_handle(P),
+            Ret = if N =:= 0 -> true;           %Success
+                     true -> nil                %Error
+                  end,
+            {[Ret,<<"exit">>,N],St};
+        nil -> badarg_error(execute, [A], St)
     end.
 
-execute_handle(P) -> execute_handle(P, []).
-
-execute_handle(P, D) ->
+execute_handle(P) ->
     receive
-        {P,{data,D1}} -> execute_handle(P,[D1|D]);
-        {P, eof} ->
-            port_close(P),
+        {P,{data,D}} ->
+            %% Print stdout/stderr like Lua does.
+            io:put_chars(D),
+            execute_handle(P);
+        {P, {exit_status,N}} ->
+            %% Wait for the eof then close the port.
             receive
-                {P,{exit_status,N}} -> {N,D}
+                {P, eof} ->
+                    port_close(P),
+                    N
             end
     end.
 
