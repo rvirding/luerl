@@ -77,4 +77,10 @@ Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
                 Conf0 ++ [{erl_opts,Copts}]
         end,
 
-Conf1.
+TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
+
+Aliases = [{alias, [
+    {test, [eunit, {ct, "--cover"}, cover]}
+]}],
+
+Conf1 ++ TestConfig ++ Aliases.
