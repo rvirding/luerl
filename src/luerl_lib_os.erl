@@ -119,7 +119,10 @@ lua_exit([Co0|_], St) -> %% lua_exit([Co0,Cl0], St) ->
 
 %% tmpname([], State)
 %% Faithfully recreates `tmpnam'(3) in lack of a NIF.
-tmpname([_], St) ->
+tmpname([_|_], St) ->
+    %% Discard extra arguments.
+    tmpname([], St);
+tmpname([], St) ->
     Out = tmpname_try(randchar(6, []), 0),
     %% We make an empty file the programmer will have to close themselves.
     %% This is done for security reasons.
@@ -153,8 +156,8 @@ rename([S,D|_], St) ->
             case file:rename(S1,D1) of
                 ok -> {[true],St};
                 {error,R} ->
-                    [{errno,En},
-                     {str,Er}] = luerl_util:errname_info(R),
+                    #{errno := En,
+                      errstr := Er} = luerl_util:errname_info(R),
                     {[nil,Er,En],St}
             end;
 
@@ -200,8 +203,8 @@ remove([A|_], St) ->
 %% Utility function to get a preformatted list to return from `remove/2'.
 remove_geterr(R, F) ->
     F1 = binary_to_list(F),
-    [{errno,En},
-     {str,Er}] = luerl_util:errname_info(R),
+    #{errno := En,
+      errstr := Er} = luerl_util:errname_info(R),
     [nil, list_to_binary(F1 ++ ": " ++ Er), En].
 
 %% Time functions.
