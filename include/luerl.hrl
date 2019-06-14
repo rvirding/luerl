@@ -153,3 +153,7 @@
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
+
+%% For `tmpname/2' in `luerl_lib_os'.
+-define(TMPNAM_MAXTRIES, 100).
+-define(TMPNAM_TEMPLATE(S), "/tmp/lua_" ++ S).
