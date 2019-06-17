@@ -27,6 +27,10 @@
 %% For `remove/2'.
 -include_lib("kernel/include/file.hrl").
 
+%% For `tmpname/2' in `luerl_lib_os'.
+-define(TMPNAM_MAXTRIES, 100).
+-define(TMPNAM_TEMPLATE(S), "/tmp/lua_" ++ S).
+
 install(St) ->
     luerl_emul:alloc_table(table(), St).
 
