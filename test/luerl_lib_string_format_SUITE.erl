@@ -58,6 +58,8 @@ format_same_result_with_native_lua(Config) ->
     , 1  % counter_ffs
     , nil % banana
     , nil % Lua after 8
+    , 20
+    , <<"Param is not a string">>
 
   ],
   Tests = [ {"format.lua", Results} ],
@@ -86,7 +88,7 @@ format_different_result_from_native_lua(Config) ->
     , 7, 9 % string.find, Lua
     , 13.0, 13.0  % string.find, -5
 
-    
+
 
 ],
   Tests = [ {"format_different_result_from_native_lua.lua", Results} ],

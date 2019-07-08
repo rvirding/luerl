@@ -8,6 +8,13 @@ func_from_string = loadstring("counter_ffs = counter_ffs + 1")
 func_from_string()
 
 
+function detect_param_type (Param)
+    if type(Param) ~= "string" then
+            return "Param is not a string"
+    end
+    return "Param is a string"
+end
+
 return    string_and_quoted()
         , string.format("%c%c%c", 76, 117, 97)
         , string.format("%f", math.pi)
@@ -31,3 +38,5 @@ return    string_and_quoted()
         , counter_ffs
         , string.find("Hello Lua user", "banana")
         , string.find("Hello Lua user", "Lua", 8)
+        , load("local a = 10; return a * 2")()
+        , detect_param_type(42)
