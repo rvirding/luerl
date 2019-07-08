@@ -3,8 +3,11 @@ function string_and_quoted()
     return string.format("%s %q", "Hello", "Lua user!")
 end
 
-function format_char()
-end
+counter_ffs = 0
+func_from_string = loadstring("counter_ffs = counter_ffs + 1")
+func_from_string()
+
+
 return    string_and_quoted()
         , string.format("%c%c%c", 76, 117, 97)
         , string.format("%f", math.pi)
@@ -22,4 +25,9 @@ return    string_and_quoted()
         , string.format ("%x", 86543) --> 1520f
         , string.format ("%X", 86543) --> 1520F
 
-
+        , string.byte("ABCDE",100)
+        , string.char(65, 66, 67)
+        , string.char()
+        , counter_ffs
+        , string.find("Hello Lua user", "banana")
+        , string.find("Hello Lua user", "Lua", 8)

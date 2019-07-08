@@ -52,6 +52,13 @@ format_same_result_with_native_lua(Config) ->
     , <<"123">>
     , <<"1520f">>
     , <<"1520F">>
+    , nil  %ABCDE, 100. element is missing
+    , <<"ABC">>
+    , <<"">>
+    , 1  % counter_ffs
+    , nil % banana
+    , nil % Lua after 8
+
   ],
   Tests = [ {"format.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
@@ -71,6 +78,16 @@ format_different_result_from_native_lua(Config) ->
     , <<"Some different radices: 100 64 144 0x64 0144">>
     , <<"15.656">>
     , <<"4.">>
+
+    , 65  % string.byte("ABCDE")
+    , 66
+    , 67, 68  % two return value from string.byte("ABCDE",3,4)
+    , 68
+    , 7, 9 % string.find, Lua
+    , 13.0, 13.0  % string.find, -5
+
+    
+
 ],
   Tests = [ {"format_different_result_from_native_lua.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
