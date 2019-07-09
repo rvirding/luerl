@@ -16,4 +16,8 @@ return string.format("%e, %e", math.pi, math.pi)
 , string.find("Hello Lua user", "Lua")
 
 , string.find("Hello Lua user", "e", -5)
+, string.format("%#o", 15) --> in native lua: 017, in Luerl: 17
 
+, string.format ("%x", 86543) --> 0x1520f
+, string.format ("%X", 86543) --> 0X1520F
+, string.format("\\ %i", "6") -- missing \ char in Luerl.

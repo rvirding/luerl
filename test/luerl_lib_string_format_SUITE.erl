@@ -60,6 +60,14 @@ format_same_result_with_native_lua(Config) ->
     , nil % Lua after 8
     , 20
     , <<"Param is not a string">>
+    , <<"14">> % octal formatting
+    , <<" 01">> % integer formatting with precision
+    , <<"02">> % integer with string param
+    , <<"  3">> % integer without precision
+    , <<" +04">> % flag + positive num
+    , <<" -04">> % flag + negative num
+    , <<"  +05">> % space flag
+    , <<"0">> % 0 converted to octal is 0
 
   ],
   Tests = [ {"format.lua", Results} ],
@@ -87,6 +95,10 @@ format_different_result_from_native_lua(Config) ->
     , 68
     , 7, 9 % string.find, Lua
     , 13.0, 13.0  % string.find, -5
+    , <<"017">> % convert to octal
+    , <<"0x1520f">> % 0x is missing from Luerl answer
+    , <<"0X1520F">> % 0X is missing...
+    , <<"\\ 6">>
 
 
 
