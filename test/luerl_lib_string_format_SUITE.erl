@@ -19,6 +19,8 @@
 -export([all/0, groups/0]).
 -export([
   format_different_result_from_native_lua/1,
+  format_different_result_from_native_lua2/1,
+  format_multiple_results/1,
   format_same_result_with_native_lua/1
 ]).
 
@@ -28,6 +30,8 @@ groups() ->
   [
     {lib_string_format, [parallel], [
       format_different_result_from_native_lua,
+      format_different_result_from_native_lua2,
+      format_multiple_results,
       format_same_result_with_native_lua
     ]}
   ].
@@ -68,17 +72,36 @@ format_same_result_with_native_lua(Config) ->
     , <<" -04">> % flag + negative num
     , <<"  +05">> % space flag
     , <<"0">> % 0 converted to octal is 0
-
+    , <<"ApplE">>
+    , <<"-100, -100">> % luerl: badarg format
   ],
   Tests = [ {"format.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
+
+format_different_result_from_native_lua2(Config) ->
+  Results = [
+      <<"\\ backslash not displayed">>
+    , <<"\\ 6">>
+    , <<"0x1520f">> % 0x is missing from Luerl answer
+    , <<"0X1520F">> % 0X is missing...
+    , <<"017">> % convert to octal, luerl: 17, lua: 017
+  ],
+  Tests = [ {"format_different_from_native_lua2.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+
+format_multiple_results(Config) ->
+  % LUERL return: [7.0,13.0,13.0],
+  % sooner or later Robert is going to fix .0 at the end of integers,
+  % to [7.0, 13.0, 13.0] -> [7, 13, 13]
+  Results = [ 7, 13, 13],
+  Tests = [ {"format_multiple_results.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+
 
 format_different_result_from_native_lua(Config) ->
   Results = [
       <<"3.141593e+000, 3.141593E+000">>
     , <<"3.14159, 1e+09">> % luerl: <<"3.14159, 1.00000e+9">>
-    , <<"-100, -100, 18446744073709551516">> % luerl: badarg format
-    , <<"ApplE">>, 1  % luerl: 1.0, Lua: 1 in return value
 
     % Lua:
     % > string.format("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100)
@@ -91,16 +114,8 @@ format_different_result_from_native_lua(Config) ->
 
     , 65  % string.byte("ABCDE")
     , 66
-    , 67, 68  % two return value from string.byte("ABCDE",3,4)
+    , 67
     , 68
-    , 7, 9 % string.find, Lua
-    , 13.0, 13.0  % string.find, -5
-    , <<"017">> % convert to octal
-    , <<"0x1520f">> % 0x is missing from Luerl answer
-    , <<"0X1520F">> % 0X is missing...
-    , <<"\\ 6">>
-
-
 
 ],
   Tests = [ {"format_different_result_from_native_lua.lua", Results} ],
