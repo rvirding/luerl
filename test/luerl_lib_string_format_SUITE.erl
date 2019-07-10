@@ -21,7 +21,10 @@
   format_different_result_from_native_lua/1,
   format_different_result_from_native_lua2/1,
   format_multiple_results/1,
-  format_same_result_with_native_lua/1
+  format_same_result_with_native_lua/1,
+  format_unicode_usage/1,
+  unicode_why_string_length_different_eval_vs_dofile/1
+
 ]).
 
 all() -> [ {group, lib_string_format} ].
@@ -32,7 +35,9 @@ groups() ->
       format_different_result_from_native_lua,
       format_different_result_from_native_lua2,
       format_multiple_results,
-      format_same_result_with_native_lua
+      format_same_result_with_native_lua,
+      format_unicode_usage,
+      unicode_why_string_length_different_eval_vs_dofile
     ]}
   ].
 
@@ -42,6 +47,7 @@ format_same_result_with_native_lua(Config) ->
   Results = [
     <<"Hello \"Lua user!\"">>
     , <<"Lua">>
+    , <<"?">> % char should be between 0-255, now it's bigger than 255
     , <<"3.141593">>
     , <<"\"a string with \\\"quotes\\\" and \\\n new line\"">>
     , <<"Preceding with blanks:       1977">>
@@ -110,14 +116,46 @@ format_different_result_from_native_lua(Config) ->
     % Some different radices: 100 64 144 64 144
     , <<"Some different radices: 100 64 144 0x64 0144">>
     , <<"15.656">>
+    , <<"15.656">>
+    , <<"string.format('%F', 3.3) doesn't work in native Lua.">>
     , <<"4.">>
+    , <<"6.E+00">>
 
     , 65  % string.byte("ABCDE")
     , 66
     , 67
     , 68
 
-],
+  ],
   Tests = [ {"format_different_result_from_native_lua.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+
+
+format_unicode_usage(Config) ->
+  Results = [
+      22.0
+    , 31.0
+    , <<"arvizturo tukorfurog_p">>
+    , 15.0
+    , <<"alom">>
+    , true
+    , <<"no_more_test">>
+
+  ],
+  Tests = [ {"format_unicode_usage.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+
+
+% FIXME: Luerl give back 2 different values for the same lua code
+% after the parsing of .lua file, the return value is 31.0
+% with luerl:eval return value == 22.
+% WHY ARE THEY DIFFERENT?? 31 vs 22 ???
+% eval should give back the same value than file parsing/executing
+unicode_why_string_length_different_eval_vs_dofile(Config)->
+  {ok, [TxtLenEval]} = luerl:eval(<<"return string.len('árvíztűrő tükörfúrógép')">>),
+  % TxtLenEval == 22 here
+
+  Results = [ TxtLenEval ],
+  Tests = [ {"unicode_why_string_length_different.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
 

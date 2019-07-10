@@ -17,6 +17,7 @@ end
 
 return    string_and_quoted()
         , string.format("%c%c%c", 76, 117, 97)
+        , string.format("%c", 999) -- char is bigger than 255
         , string.format("%f", math.pi)
         , string.format('%q', 'a string with "quotes" and \n new line')
         , string.format("Preceding with blanks: %10d", 1977)
