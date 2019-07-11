@@ -73,6 +73,7 @@ format_float(Config) ->
     , <<"floats: +1.230000 -4.560000">>   % if ?ANY_BITS(Fl, ?FL_M)
     , <<"1.2346">>
     , <<"000001.235">>
+    , <<" 1.235">>   % signed float/space flag? ?ALL_BITS(Fl, ?FL_S) -> " ";
   ],
   Tests = [ {"format_float.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
