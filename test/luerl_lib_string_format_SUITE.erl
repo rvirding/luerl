@@ -130,8 +130,8 @@ format_multiple_results(Config) ->
 
 format_different_result_from_native_lua(Config) ->
   Results = [
-      <<"3.141593e+000, 3.141593E+000">>
-    , <<"3.14159, 1e+09">> % luerl: <<"3.14159, 1.00000e+9">>
+      <<"3.141593e+000, 3.1416e+000">>   % e_float_precision(P) -> P+1
+    , <<"3.14159, 3.14">> % g_float_precision(P) -> P
 
     % Lua:
     % > string.format("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100)

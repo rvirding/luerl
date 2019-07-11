@@ -1,8 +1,9 @@
 -- source: http://lua-users.org/wiki/StringLibraryTutorial,
 StringABC = "ABCDE"
 
-return string.format("%e, %e", math.pi, math.pi)
-    , string.format("%g, %g", math.pi, 10^9)
+return
+      string.format("%e, %.4e", math.pi, math.pi)
+    , string.format("%g, %.3g", math.pi, math.pi)
 
     , string.format("Some different radices: %d %x %o %#x %#o", 100, 100, 100, 100, 100)
     , string.format ("%g", 15.656)
