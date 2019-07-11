@@ -20,6 +20,8 @@
 -export([
   format_different_result_from_native_lua/1,
   format_different_result_from_native_lua2/1,
+  format_float/1,
+  format_integer/1,
   format_multiple_results/1,
   format_same_result_with_native_lua/1,
   format_unicode_usage/1,
@@ -32,14 +34,49 @@ all() -> [ {group, lib_string_format} ].
 groups() ->
   [
     {lib_string_format, [parallel], [
-      format_different_result_from_native_lua,
-      format_different_result_from_native_lua2,
-      format_multiple_results,
-      format_same_result_with_native_lua,
-      format_unicode_usage,
-      unicode_why_string_length_different_eval_vs_dofile
+        format_different_result_from_native_lua
+      , format_different_result_from_native_lua2
+      , format_multiple_results
+      , format_same_result_with_native_lua
+      , format_unicode_usage
+      , unicode_why_string_length_different_eval_vs_dofile
+
+      , format_integer
+      , format_float
+
     ]}
   ].
+
+format_integer(Config) ->
+  Results = [
+      <<"Preceding with blanks:       1977">>
+
+    , <<"Preceding with zeros: 0000001977">>           % % ?ANY_BITS(Fl, ?FL_Z), F =/= none
+
+    , <<"To wield the %s you need to be level %i">>
+    , <<"123">>
+    , <<" 01">> % integer formatting with precision
+    , <<"02">> % integer with string param
+    , <<"  3">> % integer without precision
+    , <<" +04">> % flag + positive num
+    , <<" -04">> % flag + negative num
+    , <<"  +05">> % space flag
+    , <<"-100, -100">>
+    , <<"+100, -100">>                                % ?ANY_BITS(Fl, ?FL_M)
+  ],
+  Tests = [ {"format_integer.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+
+format_float(Config) ->
+  Results = [
+      <<"3.141593">>
+    , <<"floats: +1.230000 -4.560000">>   % if ?ANY_BITS(Fl, ?FL_M)
+    , <<"1.2346">>
+    , <<"000001.235">>
+  ],
+  Tests = [ {"format_float.lua", Results} ],
+  luerl_test_common:run_tests(Config, Tests).
+  %ok.
 
 % source: http://lua-users.org/wiki/StringLibraryTutorial,
 % string.format() part
@@ -48,18 +85,11 @@ format_same_result_with_native_lua(Config) ->
     <<"Hello \"Lua user!\"">>
     , <<"Lua">>
     , <<"?">> % char should be between 0-255, now it's bigger than 255
-    , <<"3.141593">>
     , <<"\"a string with \\\"quotes\\\" and \\\n new line\"">>
-    , <<"Preceding with blanks:       1977">>
-    , <<"Preceding with zeros: 0000001977">>
     , <<"parameter">>
-    , <<"floats: +1.230000 -4.560000">>
-    , <<"1.2346">>
     , <<"abcd">>
     , <<"###x    ###">>
-    , <<"To wield the %s you need to be level %i">>
     , <<"A">>
-    , <<"123">>
     , <<"1520f">>
     , <<"1520F">>
     , nil  %ABCDE, 100. element is missing
@@ -71,15 +101,9 @@ format_same_result_with_native_lua(Config) ->
     , 20
     , <<"Param is not a string">>
     , <<"14">> % octal formatting
-    , <<" 01">> % integer formatting with precision
-    , <<"02">> % integer with string param
-    , <<"  3">> % integer without precision
-    , <<" +04">> % flag + positive num
-    , <<" -04">> % flag + negative num
-    , <<"  +05">> % space flag
     , <<"0">> % 0 converted to octal is 0
     , <<"ApplE">>
-    , <<"-100, -100">> % luerl: badarg format
+    , <<"no_more_test_sign_because_lua_multiple_result_return">>
   ],
   Tests = [ {"format.lua", Results} ],
   luerl_test_common:run_tests(Config, Tests).
