@@ -89,7 +89,7 @@ do_byte_ij(S, Len, I, J) when I < 1 -> do_byte_ij(S, Len, 1, J);
 do_byte_ij(S, Len, I, J) when J > Len -> do_byte_ij(S, Len, I, Len);
 do_byte_ij(_, _, I, J) when I > J -> [nil];
 do_byte_ij(S, _, I, J) ->
-    [ float(N) || N <- binary_to_list(S, I, J) ].
+    [ N || N <- binary_to_list(S, I, J) ].
 
 %% char(...) -> String
 %%  Return string of the numerical arguments.
@@ -138,7 +138,7 @@ do_find(S, L, Pat, I, Pl) when I < 0 -> do_find(S, L, Pat, L+I+1, Pl);
 do_find(S, L, Pat, 0, Pl) ->  do_find(S, L, Pat, 1, Pl);
 do_find(S, L, Pat, I, true) ->			%Plain text search string
     case binary:match(S, Pat, [{scope,{I-1,L-I+1}}]) of
-	{Fs,Fl} -> [float(Fs+1),float(Fs+Fl)];
+	{Fs,Fl} -> [Fs+1,Fs+Fl];
 	nomatch -> [nil]
     end;
 do_find(S, L, Pat0, I, false) ->		%Pattern search string
@@ -149,7 +149,7 @@ do_find(S, L, Pat0, I, false) ->		%Pattern search string
 	    case match_loop(S1, L1, Pat1, 1) of
 		[{_,P,Len}|Cas] ->		%Matches
 		    P1 = P + I - 1,		%Position in original string
-		    [float(P1),float(P1+Len-1)|match_caps(Cas, S, I)];
+		    [P1,P1+Len-1|match_caps(Cas, S, I)];
 		[] -> [nil]			%No match
 	    end;
 	{error,E} -> throw({error,E})
@@ -204,7 +204,7 @@ do_gsub(S, L, Pat0, R, N, St0) ->
 	{ok,{Pat1,_},_} ->
 	    Fs = gsub_match_loop(S, L, Pat1, 1, 1, N),
 	    {Ps,St1} = gsub_repl_loop(Fs, S, 1, L, R, St0),
-	    {[iolist_to_binary(Ps),float(length(Fs))],St1};
+	    {[iolist_to_binary(Ps),length(Fs)],St1};
 	{error,E} -> throw({error,E})
     end.
 
@@ -289,7 +289,7 @@ gsub_repl_val(S, Val, Ca) ->
 
 %% len(String) -> Length.
 
-len([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
+len([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
 len([A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
 len(As, St) -> badarg_error(len, As, St).
@@ -366,7 +366,7 @@ match_loop(S0, L, Pat, I) ->
 match_cap(Ca, S) -> match_cap(Ca, S, 1).
 
 match_cap({_,P,Len}, _, I) when Len < 0 ->	%Capture position
-    float(P+I-1);
+    P+I-1;
 match_cap({_,P,Len}, S, I) ->			%Capture
     binary_part(S, P+I-2, Len).			%Binaries count from 0
 
