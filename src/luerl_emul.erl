@@ -89,6 +89,7 @@ init() ->
 		     {<<"math">>,luerl_lib_math},
 		     {<<"os">>,luerl_lib_os},
 		     {<<"string">>,luerl_lib_string},
+		     {<<"utf8">>,luerl_lib_utf8},
 		     {<<"table">>,luerl_lib_table},
 		     {<<"debug">>,luerl_lib_debug}
 		    ], St6),
