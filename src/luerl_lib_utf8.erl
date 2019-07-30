@@ -42,11 +42,11 @@ table() ->
 %%  concatenation of all these sequences.
 
 utf8_char(As, St) ->
-    case luerl_lib:tointegers(As) of
+    case luerl_lib:args_to_exact_integers(As) of
 	Is when is_list(Is) ->
 	    Ss = << <<I/utf8>> || I <- Is >>,
 	    {[Ss],St};
-	_ -> badarg_error(char, As, St)
+	error -> badarg_error(char, As, St)
     end.
 
 %% len(...) -> Integer.
@@ -110,7 +110,7 @@ bin_codepoint(Bin0, Last, Cps) ->
 
 codes(As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
-	nil -> badarg_error(codes, As, St);
+	error -> badarg_error(codes, As, St);
 	[Str|_] -> {[#erl_func{code=fun codes_next/2},Str,0],St}
     end.
 
@@ -124,10 +124,9 @@ codes_next([Str,P|_], St) when is_binary(Str) ->
 %% offset(String, N, ...) -> Integer.
 
 offset(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]) of
-	nil -> badarg_error(offset, As, St);
-	_ -> lua_error({'NYI',offset}, St)
-    end.
+    _ = string_args(As, offset, St),
+    %% We don't do anything yet.
+    lua_error({'NYI',offset}, St).
 
 %% string_args(Args, Op, St) -> {String,I,J}.
 %%  Return the string, i and j values from the arguments. Generate a
@@ -135,12 +134,13 @@ offset(As, St) ->
 
 string_args(As, Op, St) ->
     %% Get the args.
-    Args = luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]),
+    Args = luerl_lib:conv_list(As, [lua_string,
+				    lua_exact_integer,lua_exact_integer]),
     case Args of			%Cunning here, export A1,A2,A3
 	[A1,A2,A3|_] -> ok;
 	[A1,A2] -> A3 = byte_size(A1);
 	[A1] -> A2 = 1, A3 = byte_size(A1);
-	nil -> A1 = A2 = A3 = ok, badarg_error(Op, As, St)
+	error -> A1 = A2 = A3 = ok, badarg_error(Op, As, St)
     end,
     StrLen = byte_size(A1),
     %% Check args and return Str, I, J.

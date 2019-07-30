@@ -40,7 +40,7 @@ table() ->
      {<<"collectgarbage">>,#erl_func{code=fun collectgarbage/2}},
      {<<"dofile">>,#erl_func{code=fun dofile/2}},
      {<<"eprint">>,#erl_func{code=fun eprint/2}},
-     {<<"error">>,#erl_func{code=fun error/2}},
+     {<<"error">>,#erl_func{code=fun basic_error/2}},
      {<<"getmetatable">>,#erl_func{code=fun getmetatable/2}},
      {<<"ipairs">>,#erl_func{code=fun ipairs/2}},
      {<<"load">>,#erl_func{code=fun load/2}},
@@ -89,17 +89,17 @@ eprint(Args, St) ->
     io:nl(),
     {[],St}.
 
--spec error(_, _) -> no_return().
+-spec basic_error(_, _) -> no_return().
 
-error([{tref, _}=T|_], St0) ->
+basic_error([{tref, _}=T|_], St0) ->
     case luerl_emul:get_metamethod(T, <<"__tostring">>, St0) of
         nil -> lua_error({error_call, T}, St0);
         Meta ->
             {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
             lua_error({error_call, Ret}, St1)
     end;
-error([M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
-error(As, St) -> badarg_error(error, As, St).
+basic_error([M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
+basic_error(As, St) -> badarg_error(error, As, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
 %%  Return a function which on successive calls returns successive
@@ -271,7 +271,7 @@ select([<<$#>>|As], St) -> {[float(length(As))],St};
 select([A|As], St) ->
     %%io:fwrite("sel:~p\n", [[A|As]]),
     Len = length(As),
-    case luerl_lib:to_int(A) of
+    case luerl_lib:arg_to_integer(A) of
 	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
 	N when is_integer(N), N < 0 -> {select_back(-N, As, Len),St};
 	_ -> badarg_error(select, [A|As], St)
@@ -286,9 +286,12 @@ select_back(N, As, Len) when N =< Len ->
     lists:nthtail(Len-N, As);
 select_back(_, As, _) -> As.
 
-tonumber([Arg], St) -> {[luerl_lib:tonumber(Arg)],St};
-tonumber([Arg,B|_], St) -> {[luerl_lib:tonumber(Arg, B)],St};
+tonumber([Arg], St) -> {[tonumber(luerl_lib:arg_to_number(Arg))],St};
+tonumber([Arg,B|_], St) -> {[tonumber(luerl_lib:arg_to_number(Arg, B))],St};
 tonumber(As, St) -> badarg_error(tonumber, As, St).
+
+tonumber(Num) when is_number(Num) -> Num;
+tonumber(_) -> nil.
 
 tostring([Arg|_], St) ->
     case luerl_emul:get_metamethod(Arg, <<"__tostring">>, St) of
@@ -363,7 +366,7 @@ do_setmetatable(#tref{i=N}=T, M, St) ->
 %% Do files.
 
 dofile(As, St) ->
-    case luerl_lib:conv_list(As, [string]) of
+    case luerl_lib:conv_list(As, [erl_string]) of
 	[File] ->
 	    Ret = luerl_comp:file(File),	%Compile the file
 	    dofile_ret(Ret, As, St);
@@ -379,27 +382,27 @@ dofile_ret({error,_,_}, As, St) ->
 %% Load string and files.
 
 load(As, St) ->
-    case luerl_lib:conv_list(As, [string,lua_string,lua_string,lua_any]) of
+    case luerl_lib:conv_list(As, [erl_string,lua_string,lua_string,lua_any]) of
 	[S|_] ->
 	    Ret = luerl_comp:string(S),		%Compile the string
 	    load_ret(Ret, St);
-	nil -> badarg_error(load, As, St)
+	error -> badarg_error(load, As, St)
     end.
 
 loadfile(As, St) ->
-    case luerl_lib:conv_list(As, [string,lua_string,lua_any]) of
+    case luerl_lib:conv_list(As, [erl_string,lua_string,lua_any]) of
 	[F|_] ->
 	    Ret = luerl_comp:file(F),		%Compile the file
 	    load_ret(Ret, St);
-	nil -> badarg_error(loadfile, As, St)
+	error -> badarg_error(loadfile, As, St)
     end.
  
 loadstring(As, St) ->
-    case luerl_lib:conv_list(As, [string]) of
+    case luerl_lib:conv_list(As, [erl_string]) of
 	[S] ->
 	    Ret = luerl_comp:string(S),		%Compile the string
 	    load_ret(Ret, St);
-	nil -> badarg_error(loadstring, As, St)
+	error -> badarg_error(loadstring, As, St)
     end.
 
 load_ret({ok,Chunk}, St0) ->

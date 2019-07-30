@@ -48,7 +48,7 @@ table() ->
 
 getenv([<<>>|_], St) -> {[nil],St};
 getenv([A|_], St) when is_binary(A) ; is_number(A) ->
-    case os:getenv(luerl_lib:to_list(A)) of
+    case os:getenv(luerl_lib:arg_to_list(A)) of
 	Env when is_list(Env) ->
 	    {[list_to_binary(Env)],St};
 	false -> {[nil],St}
@@ -61,7 +61,7 @@ getenv(As, St) -> badarg_error(getenv, As, St).
 
 execute([], St) -> {true,St};                   %We have a shell
 execute([A|_], St) ->
-    case luerl_lib:tostring(A) of
+    case luerl_lib:arg_to_string(A) of
         S when is_binary(S) ->
             Opts = [{arg0,"sh"},{args,["-c", S]},
                     hide,in,eof,exit_status,use_stdio,stderr_to_stdout],
@@ -71,8 +71,10 @@ execute([A|_], St) ->
                      true -> nil                %Error
                   end,
             {[Ret,<<"exit">>,N],St};
-        nil -> badarg_error(execute, [A], St)
-    end.
+        error -> badarg_error(execute, [A], St)
+    end;
+execute(As, St) -> badarg_error(execute, As, St).
+
 
 execute_handle(P) ->
     receive
@@ -101,13 +103,13 @@ lua_exit([], St) ->
 lua_exit([C], St) ->
     lua_exit([C,false], St);
 lua_exit([Co0|_], St) -> %% lua_exit([Co0,Cl0], St) ->
-    Co1 = case luerl_lib:tonumber(Co0) of
+    Co1 = case luerl_lib:arg_to_number(Co0) of
               X when is_integer(X) -> X;
-              nil ->
+              error ->
                   case Co0 of
                       false -> 1;
                       true -> 0;
-                      nil -> badarg_error(exit, [Co0], St)
+                      error -> badarg_error(exit, [Co0], St)
                   end
           end,
 
@@ -153,8 +155,8 @@ randchar(N, A) -> randchar(N-1, [rand:uniform(26)+96|A]).
 %%  fails, it returns `nil', plus a string describing the error code and the
 %%  error code. Otherwise, it returns `true'.
 rename([S,D|_], St) ->
-    case {luerl_lib:tostring(S),
-          luerl_lib:tostring(D)} of
+    case {luerl_lib:arg_to_string(S),
+          luerl_lib:arg_to_string(D)} of
         {S1,D1} when is_binary(S1) ,
                      is_binary(D1) ->
             case file:rename(S1,D1) of
@@ -182,7 +184,7 @@ rename([S,D|_], St) ->
 %%  function fails, it returns `nil' plus a string describing the error, and the
 %%  error code. Otherwise, it returns `true'.
 remove([A|_], St) ->
-    case luerl_lib:tostring(A) of
+    case luerl_lib:arg_to_string(A) of
         A1 when is_binary(A1) ->
             %% Emulate the underlying call to `remove(3)'.
             case file:read_file_info(A1) of
@@ -201,7 +203,7 @@ remove([A|_], St) ->
                     %% Something went wrong.
                     {remove_geterr(R, A), St}
             end;
-        nil -> badarg_error(remove, [A], St)
+        error -> badarg_error(remove, [A], St)
     end.
 
 %% Utility function to get a preformatted list to return from `remove/2'.

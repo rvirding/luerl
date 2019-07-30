@@ -23,7 +23,7 @@
 -export([format/3]).
 
 format(F, As, St0) ->
-    {Str,St1} = format_loop(luerl_lib:to_list(F), As, St0),
+    {Str,St1} = format_loop(luerl_lib:arg_to_list(F), As, St0),
     {[iolist_to_binary(Str)],St1}.
 
 format_loop(Fmt, As, St) -> format_loop(Fmt, As, St, []).
@@ -106,45 +106,45 @@ build({$s,Fl,F,P}, [A|As], St0) ->
     S1 = trim_bin(S0, P),
     {adjust_bin(S1, Fl, F),As,St1};
 build({$c,Fl,F,_}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     C = if is_number(N), N >= 0, N < 256 -> trunc(N);
 	   is_number(N) -> $?
 	end,
     {adjust_str([C], Fl, F),As,St};
 %% Integer formats.
 build({$i,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$d,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$o,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_octal(Fl, F, P, I),As,St};
 build({$x,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_hex(Fl, F, P, I),As,St};
 build({$X,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:to_int(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_HEX(Fl, F, P, I),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {e_float(Fl, F, P, N),As,St};
 build({$E,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {e_float(Fl, F, P, N),As,St};
 build({$f,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {f_float(Fl, F, P, N),As,St};
 build({$F,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {f_float(Fl, F, P, N),As,St};
 build({$g,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {g_float(Fl, F, P, N),As,St};
 build({$G,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:tonumber(A),
+    N = luerl_lib:arg_to_number(A),
     {g_float(Fl, F, P, N),As,St};
 %% Literal % format.
 build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!

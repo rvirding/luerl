@@ -56,7 +56,7 @@ return_lib_function_test() ->
     {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
     {[Fun], _State2} = luerl:call_function([test], [1], State1),
     {Res, _State3} = Fun([<<"barfooblafasel">>, <<"foo">>], State1),
-    ?assertEqual([4.0, 6.0], Res).
+    ?assertEqual([4, 6], Res).
 
 define_fun_in_lua_test() ->
     State = luerl:init(),

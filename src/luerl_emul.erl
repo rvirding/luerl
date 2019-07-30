@@ -1006,13 +1006,13 @@ do_if(Lvs, [Val|Stk], Env, St, True, False) ->
 
 do_numfor(Is, Lvs, [Step,Limit,Init|Stk], Env, St, _, Fis) ->
     %% First check if we have numbers.
-    case luerl_lib:tonumbers([Init,Limit,Step]) of
+    case luerl_lib:args_to_numbers([Init,Limit,Step]) of
 	[I,L,S] ->
 	    Do = fun (St_) ->
 			 numfor_loop(I, L, S, Fis, Lvs, Stk, Env, St_)
 		 end,
 	    loop_block(Is, Lvs, Stk, Env, St, Do);
-	nil -> badarg_error(loop, [Init,Limit,Step], St)
+	error -> badarg_error(loop, [Init,Limit,Step], St)
     end.
 
 numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
@@ -1230,35 +1230,35 @@ floor(N) when is_float(N) -> round(N - 0.5).
 %%  Together with their metas straight out of the reference manual.
 
 numeric_op(Op, A, E, Raw) ->
-    case luerl_lib:tonumber(A) of
-	nil ->					%Neither number nor string
+    case luerl_lib:arg_to_number(A) of
+	error ->				%Neither number nor string
 	    {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end}; 
 	N -> {ok,Raw(N)}
     end.
 
 numeric_op(Op, A1, A2, E, Raw) ->
-    case luerl_lib:tonumber(A1) of
-	nil -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+    case luerl_lib:arg_to_number(A1) of
+	error -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 	N1 ->
-	    case luerl_lib:tonumber(A2) of
-		nil ->
+	    case luerl_lib:arg_to_number(A2) of
+		error ->
 		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 		N2 -> {ok,Raw(N1, N2)}
 	    end
     end.
 
 integer_op(Op, A, E, Raw) ->
-    case luerl_lib:tointeger(A) of
-	nil -> {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end};
+    case luerl_lib:arg_to_exact_integer(A) of
+	error -> {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end};
 	N -> {ok,Raw(N)}
     end.
 
 integer_op(Op, A1, A2, E, Raw) ->
-    case luerl_lib:tointeger(A1) of
-	nil -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+    case luerl_lib:arg_to_exact_integer(A1) of
+	error -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 	N1 ->
-	    case luerl_lib:tointeger(A2) of
-		nil ->
+	    case luerl_lib:arg_to_exact_integer(A2) of
+		error ->
 		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 		N2 -> {ok,Raw(N1, N2)}
 	    end
@@ -1339,12 +1339,12 @@ le_meta(Op, A1, A2, St0) ->
     end.
 
 concat_op(A1, A2) ->
-    case luerl_lib:tostring(A1) of
-	nil ->
+    case luerl_lib:arg_to_string(A1) of
+	error ->
 	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
 	S1 ->
-	    case luerl_lib:tostring(A2) of
-		nil ->
+	    case luerl_lib:arg_to_string(A2) of
+		error ->
 		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
 		S2 ->
 		    {ok,<<S1/binary,S2/binary>>}

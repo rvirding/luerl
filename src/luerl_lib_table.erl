@@ -64,7 +64,7 @@ concat(As, St0) ->
 
 do_concat([#tref{i=N}|As], St) ->
     #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
-    case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
+    case luerl_lib:conv_list(concat_args(As), [lua_string,lua_integer,lua_integer]) of
 	[Sep,I] ->
 	    {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
@@ -115,8 +115,8 @@ concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
 concat_tab(Arr, Dict, N, J) ->
     case ttdict:find(N, Dict) of
 	{ok,V} ->
-	    case luerl_lib:to_list(V) of
-		nil -> throw({error,{illegal_val,concat,V}});
+	    case luerl_lib:arg_to_list(V) of
+		error -> throw({error,{illegal_val,concat,V}});
 		S -> [S|concat_tab(Arr, Dict, N+1, J)]
 	    end;
 	error -> throw({error,{illegal_val,concat,nil}})
@@ -125,8 +125,8 @@ concat_tab(Arr, Dict, N, J) ->
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
     V = array:get(N, Arr),
-    case luerl_lib:to_list(V) of
-	nil -> throw({error,{illegal_val,concat,V}});
+    case luerl_lib:arg_to_list(V) of
+	error -> throw({error,{illegal_val,concat,V}});
 	S -> [S|concat_arr(Arr, N+1, J)]
     end.
 
@@ -148,7 +148,7 @@ insert([#tref{i=N},P0,V]=As, St) ->
     Ts0 = St#luerl.ttab,
     #table{a=Arr0} = T = ?GET_TABLE(N, Ts0),
     Size = length_loop(Arr0),
-    case luerl_lib:to_int(P0) of
+    case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 >=1, P1 =< Size+1 ->
 	    Arr1 = do_insert(Arr0, P1, V),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
@@ -194,7 +194,7 @@ remove([#tref{i=N}], St) ->
 remove([#tref{i=N},P0|_]=As, St) ->
     Ts0 = St#luerl.ttab,
     #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
-    case luerl_lib:to_int(P0) of
+    case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 =/= nil ->
 	    case do_remove(Arr0, Dict0, P1) of
 		{Ret,Arr1,Dict1} ->
@@ -271,7 +271,7 @@ pack_loop([], N) -> [{<<"n">>,N}].
 
 unpack([#tref{i=N}=T|As], St) ->
     #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
-    case luerl_lib:to_ints(unpack_args(As)) of
+    case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
 	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
@@ -280,7 +280,8 @@ unpack([#tref{i=N}=T|As], St) ->
 	    Unp = do_unpack(Arr, Dict, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
-	nil -> badarg_error(unpack, [T|As], St)	%Not numbers
+	error ->				%Not numbers
+	    badarg_error(unpack, [T|As], St)
     end;
 unpack([], St) -> badarg_error(unpack, [], St).
 

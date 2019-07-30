@@ -65,7 +65,7 @@ table() ->					%String table
 %%  Return numerical codes of string between I and J.
 
 byte(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]) of
 	[S|Is] ->
 	    Bs = do_byte(S, byte_size(S), Is),
 	    {Bs,St};
@@ -96,7 +96,7 @@ do_byte_ij(S, _, I, J) ->
 
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
-    case catch list_to_binary(luerl_lib:to_ints(As)) of
+    case catch list_to_binary(luerl_lib:args_to_exact_integers(As)) of
 	{'EXIT',_} -> badarg_error(char, As, St);
 	B -> {[B],St}
     end.
@@ -122,7 +122,7 @@ find(As, St0) ->
 do_find([A1,A2], St) -> do_find([A1,A2,1.0], St);
 do_find([A1,A2,A3], St) -> do_find([A1,A2,A3,nil], St);
 do_find(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,lua_string,integer,lua_bool]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,lua_integer,lua_bool]) of
 	[S,P,I,Pl] -> {do_find(S, byte_size(S), P, I, Pl),St};
 	_ -> throw({error,{badarg,find,As},St})	%nil, [_] or []
     end.
@@ -187,7 +187,7 @@ gsub(As, St0) ->
     end.
 
 do_gsub(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,lua_any,lua_integer]) of
 	[S,P,R,N] when N > 0 ->
 	    do_gsub(S, byte_size(S), P, R, N, St);
 	[S,P,R] ->				%'all' bigger than any number
@@ -258,20 +258,20 @@ gsub_repl(Cas0, S, Repl, St0) when ?IS_FUNCTION(Repl) ->
     {Rs,St1} = luerl_emul:functioncall(Repl, Args, St0),
     {[gsub_repl_val(S, luerl_lib:first_value(Rs), Ca)],St1};
 gsub_repl(Cas, S, Repl, St) ->			%Replace string
-    case luerl_lib:to_list(Repl) of
-	nil -> {[],St};
+    case luerl_lib:arg_to_list(Repl) of
+	error -> {[],St};
 	R -> {gsub_repl_str(Cas, S, R),St}
     end.
 
 gsub_repl_str(Cas, S, [$%,$%|R]) ->
     [$%|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,$0|R]) ->
-    Cstr = luerl_lib:tostring(match_cap(hd(Cas), S)), %Force to string
+    Cstr = luerl_lib:arg_to_string(match_cap(hd(Cas), S)), %Force to string!
     [Cstr|gsub_repl_str(Cas, S, R)];
 gsub_repl_str(Cas, S, [$%,C|R]) when C >= $1, C =< $9 ->
     case lists:keysearch(C-$0, 1, Cas) of
 	{value,Ca} ->
-	    Cstr = luerl_lib:tostring(match_cap(Ca, S)), %Force to string!
+	    Cstr = luerl_lib:arg_to_string(match_cap(Ca, S)), %Force to string!
 	    [Cstr|gsub_repl_str(Cas, S, R)];
 	false -> throw({error,{illegal_index,capture,C-$0}})
     end;
@@ -282,8 +282,8 @@ gsub_repl_str(_, _, []) -> [].
 %% Return string or original match.
 
 gsub_repl_val(S, Val, Ca) ->
-    case luerl_lib:tostring(Val) of
-	nil -> match_cap(Ca, S);		%Use original match
+    case luerl_lib:arg_to_string(Val) of
+	error -> match_cap(Ca, S);		%Use original match
 	Str -> Str
     end.
 
@@ -297,7 +297,7 @@ len(As, St) -> badarg_error(len, As, St).
 %% lower(String) -> String.
 
 lower(As, St) ->
-    case luerl_lib:conv_list(As, [list]) of
+    case luerl_lib:conv_list(As, [erl_list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
 	_ -> badarg_error(lower, As, St)	%nil or []
     end.
@@ -314,7 +314,7 @@ match(As, St0) ->
 
 do_match([A1,A2], St) -> do_match([A1,A2,1.0], St);
 do_match(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,lua_string,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_string,lua_integer]) of
 	[S,P,I] -> {do_match(S, byte_size(S), P, I),St};
 	_ -> throw({error,{badarg,match,As},St})
     end.
@@ -378,13 +378,13 @@ match_caps(Cas, S, I) -> [ match_cap(Ca, S, I) || Ca <- Cas ].
 
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,integer,lua_string]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_string]) of
 	[S,I,Sep] ->
 	    if I > 0 ->
 		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
 	       true -> {[<<>>],St}
 	    end;
-	nil ->					%Error or bad values
+	error ->				%Error or bad values
 	    badarg_error(rep, As, St)
     end;
 rep(As, St) -> badarg_error(rep, As, St).
@@ -392,14 +392,14 @@ rep(As, St) -> badarg_error(rep, As, St).
 %% reverse([String], State) -> {[Res],St}.
 
 reverse([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:to_list(A),
+    S = luerl_lib:arg_to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
 reverse(As, St) -> badarg_error(reverse, As, St).
 
 %% sub([String, I [, J]], State) -> {[Res],State}.
 
 sub(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string,integer,integer]) of
+    case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]) of
 	[S,I|Js] ->
 	    Len = byte_size(S),
 	    Sub = do_sub(S, Len, I, Js),	%Just I, or both I and J
@@ -429,7 +429,7 @@ do_sub_ij(S, _, I, J) ->
     binary:part(S, I-1, J-I+1).			%Zero-based, yuch!
 
 upper([A|_], St) when is_binary(A) ; is_number(A) ->
-    S = luerl_lib:to_list(A),
+    S = luerl_lib:arg_to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
 upper(As, St) -> badarg_error(upper, As, St).
 

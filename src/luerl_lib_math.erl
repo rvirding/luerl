@@ -228,14 +228,14 @@ log10(As, St) ->				%For 5.1 backwards compatibility
     end.
 
 max(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[_|_]=Ns -> {[lists:max(Ns)],St};
+    case luerl_lib:args_to_numbers(As) of
+	[_|_]=Ns -> {[lists:max(Ns)],St};	%At least one number
 	_ -> badarg_error(max, As, St)
     end.
 
 min(As, St) ->
-    case luerl_lib:tonumbers(As) of
-	[_|_]=Ns -> {[lists:min(Ns)],St};
+    case luerl_lib:args_to_numbers(As) of
+	[_|_]=Ns -> {[lists:min(Ns)],St};	%At least one number
 	_ -> badarg_error(min, As, St)
     end.
 
@@ -262,7 +262,7 @@ rad(As, St) ->
     end.
 
 random(As, #luerl{rand=S0}=St) ->
-    case luerl_lib:to_ints(As) of
+    case luerl_lib:args_to_integers(As) of
 	[] ->					%0.0 - 1.0
 	    {R,S1} = ?RAND_UNIFORM(S0),
 	    {[R],St#luerl{rand=S1}};
@@ -340,7 +340,7 @@ type(As, St) ->
 %%  allows us to disting between no numbers and an empty list.
 
 get_number_args(As) ->
-    lists:map(fun luerl_lib:tonumber/1, As).
+    lists:map(fun luerl_lib:arg_to_number/1, As).
 
 %% get_number_args([A|As]) ->
 %%     case luerl_lib:tonumber(A) of

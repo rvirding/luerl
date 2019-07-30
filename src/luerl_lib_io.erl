@@ -39,8 +39,8 @@ table() ->
 flush(_, St) -> {[true],St}.
 
 write(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string]) of
-	nil -> badarg_error(write, As, St);
+    case luerl_lib:args_to_strings(As) of
+	error -> badarg_error(write, As, St);
 	Ss ->
 	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),
 	    {[#userdata{d=standard_io}],St}
