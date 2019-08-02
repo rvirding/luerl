@@ -17,7 +17,7 @@
 -include_lib("common_test/include/ct.hrl").
 
 -export([all/0, groups/0]).
--export([simple_return/1, fun_return/1]).
+-export([simple_return/1, fun_return/1, table_tests/1]).
 
 all() ->
   [
@@ -26,7 +26,7 @@ all() ->
 
 groups() ->
   [
-    {return, [parallel], [simple_return, fun_return]}
+    {return, [parallel], [simple_return, fun_return, table_tests]}
   ].
 
 simple_return(Config) ->
@@ -38,6 +38,9 @@ simple_return(Config) ->
 
 fun_return(Config) ->
   run_and_check(Config, "fun_return_multi.lua", [7, <<"str 1">>, 5.5, 11.0]).
+
+table_tests(Config) ->
+  run_and_check(Config, "table_indexed_table.lua", [111, 222, 333]).
 
 run_tests(Config, Tests) ->
   [run_and_check(Config, Script, Expected) || {Script, Expected} <- Tests].
