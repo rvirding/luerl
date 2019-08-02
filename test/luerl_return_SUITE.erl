@@ -16,8 +16,16 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--export([all/0, groups/0]).
--export([simple_return/1, fun_return/1]).
+-export([all/0, groups/0, init_per_suite/1, end_per_suite/1]).
+-export([simple_return/1, fun_return/1, use_lib/1]).
+
+init_per_suite(Config) ->
+  DataDir = ?config(data_dir, Config),
+  os:putenv("LUA_PATH", DataDir ++ "?.lua;" ++ DataDir ++ "?/init.lua"),
+  Config.
+
+end_per_suite(Config) ->
+  Config.
 
 all() ->
   [
@@ -26,7 +34,7 @@ all() ->
 
 groups() ->
   [
-    {return, [parallel], [simple_return, fun_return]}
+    {return, [parallel], [simple_return, fun_return, use_lib]}
   ].
 
 simple_return(Config) ->
@@ -39,11 +47,17 @@ simple_return(Config) ->
 fun_return(Config) ->
   run_and_check(Config, "fun_return_multi.lua", [7, <<"str 1">>, 5.5, 11.0]).
 
+use_lib(Config) ->
+  LuaDecimal = fun(B, E) -> [{<<"b">>, B}, {<<"e">>, E}] end,
+  Expected = [LuaDecimal(B, E) || {B, E} <- [{13, 1}, {7, 1}, {3, 3}]],
+  run_and_check(Config, "decimal_test.lua", Expected).
+
 run_tests(Config, Tests) ->
   [run_and_check(Config, Script, Expected) || {Script, Expected} <- Tests].
 
 run_and_check(Config, Script, Expected) ->
   DataDir = ?config(data_dir, Config),
   ScriptFile = DataDir ++ Script,
-  {Result, _St} = luerl:dofile(ScriptFile),
-  Expected = Result.
+  {ok, Result} = luerl:evalfile(ScriptFile),
+  {true, {expected, Expected}, {result, Result}} =
+    {Result =:= Expected, {expected, Expected}, {result, Result}}.
