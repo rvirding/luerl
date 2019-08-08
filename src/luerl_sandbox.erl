@@ -27,7 +27,12 @@
 -define(SANDBOXED_GLOBALS, [
         [?LUERL_GLOBAL, io],
         [?LUERL_GLOBAL, file],
+        [?LUERL_GLOBAL, os, execute],
+        [?LUERL_GLOBAL, os, exit],
         [?LUERL_GLOBAL, os, getenv],
+        [?LUERL_GLOBAL, os, remove],
+        [?LUERL_GLOBAL, os, rename],
+        [?LUERL_GLOBAL, os, tmpname],
         [?LUERL_GLOBAL, package],
         [?LUERL_GLOBAL, load],
         [?LUERL_GLOBAL, loadfile],
