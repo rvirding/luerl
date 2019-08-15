@@ -48,13 +48,13 @@ stmts([S0|Ss0], Vars0, St0) ->
     {[S1|Ss1],Vars2,St2};
 stmts([], Vars, St) -> {[],Vars,St}.
 
-update_vars(#vars{local=Lo,free=Fr,used=Us,fused=Fu}, New, Used, Fused) ->
+update_vars(#vars{local=Lo,free=Fr, used_in_sub_blocks =Us, used_in_sub_funcs =Fu}, New, Used, Fused) ->
     Aused = union(Used, Fused),			%All used
     Free = subtract(Aused, Lo),
     #vars{local=union(New, Lo),
 	  free=union(Free, Fr),
-	  used=union(Used, Us),
-	  fused=union(Fused, Fu)}.
+	  used_in_sub_blocks =union(Used, Us),
+	  used_in_sub_funcs =union(Fused, Fu)}.
 
 %% stmt(Stmt, LocalVars, State) -> {Stmt,NewVars,UsedVars,FusedVars,State}.
 
@@ -79,12 +79,12 @@ stmt(#expr_stmt{}=E, Loc, St) ->		%Expressions "statement"
 %% assign_stmt(Assign, LocalVars, State) ->
 %%     {Assign,NewVars,UsedVars,FusedVars,State}.
 
-assign_stmt(#assign_stmt{vs=Vs0,es=Es0}=A, Loc, St0) ->
+assign_stmt(#assign_stmt{variable_statement=Vs0,expressions=Es0}=A, Loc, St0) ->
     {Vs1,Vused,Vfused,St1} = assign_loop(Vs0, Loc, St0),
     {Es1,Eused,Efused,St2} = explist(Es0, Loc, St1),
     Used = union(Vused, Eused),
     Fused = union(Vfused, Efused),
-    {A#assign_stmt{vs=Vs1,es=Es1},[],Used,Fused,St2}.
+    {A#assign_stmt{variable_statement=Vs1,expressions=Es1},[],Used,Fused,St2}.
 
 assign_loop([V0|Vs0], Loc, St0) ->
     {V1,Vused,Vfused,St1} = var(V0, Loc, St0),
@@ -100,7 +100,7 @@ var(#dot{e=Exp0,r=Rest0}=D, Loc, St0) ->
     Used = union(Eused, Rused),
     Fused = union(Efused, Rfused),
     {D#dot{e=Exp1,r=Rest1},Used,Fused,St2};
-var(#var{n=N}=V, _, St) ->
+var(#var{name =N}=V, _, St) ->
     {V,[N],[],St}.
 
 var_rest(#dot{e=Exp0,r=Rest0}=D, Loc, St0) ->
@@ -111,9 +111,9 @@ var_rest(#dot{e=Exp0,r=Rest0}=D, Loc, St0) ->
     {D#dot{e=Exp1,r=Rest1},Used,Fused,St2};
 var_rest(Exp, Loc, St) -> var_last(Exp, Loc, St).
 
-var_last(#key{k=Exp0}=K, Loc, St0) ->
+var_last(#key{key =Exp0}=K, Loc, St0) ->
     {Exp1,Used,Fused,St1} = exp(Exp0, Loc, St0),
-    {K#key{k=Exp1},Used,Fused,St1}.
+    {K#key{key =Exp1},Used,Fused,St1}.
 
 %% call_stmt(Call, LocalVars, State) ->
 %%     {Call,NewVars,UsedVars,FusedVars,State}.
@@ -125,21 +125,21 @@ call_stmt(#call_stmt{call=Exp0}=C, Loc, St0) ->
 %% return_stmt(Return, LocalVars, State) ->
 %%     {Return,NewVars,UsedVars,FusedVars,State}.
 
-return_stmt(#return_stmt{es=Es0}=R, Loc, St0) ->
+return_stmt(#return_stmt{expressions =Es0}=R, Loc, St0) ->
     {Es1,Used,Fused,St1} = explist(Es0, Loc, St0),
-    {R#return_stmt{es=Es1},[],Used,Fused,St1}.
+    {R#return_stmt{expressions =Es1},[],Used,Fused,St1}.
 
 %% block_stmt(Block, LocalVars, State) ->
 %%     {Block,NewVars,UsedVars,FusedVars,State}.
 
-block_stmt(#block_stmt{ss=Ss0}=B, _, St0) ->
-    Vars0 = #vars{local=[],free=[],used=[],fused=[]},
+block_stmt(#block_stmt{block_statement =Ss0}=B, _, St0) ->
+    Vars0 = #vars{local=[],free=[], used_in_sub_blocks =[], used_in_sub_funcs =[]},
     {Ss1,Vars1,St1} = stmts(Ss0, Vars0, St0),
     %% Be careful what we export, adjust Used and Fused for locals.
-    #vars{local=Bloc,used=Bused,fused=Bfused} = Vars1,
+    #vars{local=Bloc, used_in_sub_blocks =Bused, used_in_sub_funcs =Bfused} = Vars1,
     Used = subtract(Bused, Bloc),
     Fused = subtract(Bfused, Bloc),
-    {B#block_stmt{ss=Ss1,vars=Vars1},[],Used,Fused,St1}.
+    {B#block_stmt{block_statement =Ss1,vars=Vars1},[],Used,Fused,St1}.
 
 %% do_block(Block, State) -> {Block,UsedVars,FusedVars,State}.
 %% do_block(Block, LocalVars, State) -> {Block,UsedVars,FusedVars,State}.
@@ -148,26 +148,26 @@ block_stmt(#block_stmt{ss=Ss0}=B, _, St0) ->
 
 do_block(B, St) -> do_block(B, [], St).
 
-do_block(#block{ss=Ss0}=B, Loc, St0) ->
-    Vars0 = #vars{local=Loc,free=[],used=[],fused=[]},
+do_block(#block{sub_blocks =Ss0}=B, Loc, St0) ->
+    Vars0 = #vars{local=Loc,free=[], used_in_sub_blocks =[], used_in_sub_funcs =[]},
     {Ss1,Vars1,St1} = stmts(Ss0, Vars0, St0),
     %% Be careful what we export, adjust Used and Fused for locals.
-    #vars{local=Bloc,used=Bused,fused=Bfused} = Vars1,
+    #vars{local=Bloc, used_in_sub_blocks =Bused, used_in_sub_funcs =Bfused} = Vars1,
     Used = subtract(Bused, Bloc),
     Fused = subtract(Bfused, Bloc),
-    {B#block{ss=Ss1,vars=Vars1},Used,Fused,St1}.
+    {B#block{sub_blocks =Ss1,vars=Vars1},Used,Fused,St1}.
 
 %% while_stmt(While, LocalVars, State) ->
 %%     {While,NewVars,UsedVars,FusedVars,State}.
 %%  While_stmt never returns external new variables.  The test
 %%  expression is done in the context of the surrounding block.
 
-while_stmt(#while_stmt{e=E0,b=B0}=W, Loc, St0) ->
+while_stmt(#while_stmt{expression =E0, block =B0}=W, Loc, St0) ->
     {E1,Eused,Efused,St1} = exp(E0, Loc, St0),
     {B1,Bused,Bfused,St2} = do_block(B0, St1),
     Used = union(Eused, Bused),
     Fused = union(Efused, Bfused),
-    {W#while_stmt{e=E1,b=B1},[],Used,Fused,St2}.
+    {W#while_stmt{expression =E1, block =B1},[],Used,Fused,St2}.
 
 %% repeat_stmt(Repeat, LocalVars, State) ->
 %%     {Repeat,NewVars,UsedVars,FusedVars,State}.
@@ -175,9 +175,9 @@ while_stmt(#while_stmt{e=E0,b=B0}=W, Loc, St0) ->
 %%  expression is done in the context of the repeat block and is
 %%  already inside the block.
 
-repeat_stmt(#repeat_stmt{b=B0}=R, _, St0) ->
+repeat_stmt(#repeat_stmt{block =B0}=R, _, St0) ->
     {B1,Used,Fused,St1} = do_block(B0, St0),
-    {R#repeat_stmt{b=B1},[],Used,Fused,St1}.
+    {R#repeat_stmt{block =B1},[],Used,Fused,St1}.
 
 %% if_stmt(If, LocalVars, State) -> {If,NewVars,FreeVars,State}.
 %%  The block info includes anything from the test expressions even
@@ -202,39 +202,39 @@ if_tests([], _, St) -> {[],[],[],St}.
 %% numfor_stmt(For, LocalVars, State) ->
 %%     {For,NewVars,UsedVars,FusedVars,State}.
 
-numfor_stmt(#nfor_stmt{v=#var{n=N},init=I0,limit=L0,step=S0,b=B0}=For,
+numfor_stmt(#nfor_stmt{v=#var{name =N},init=I0,limit=L0,step=S0, block =B0}=For,
 	    Loc, St0) ->
     {[I1,L1,S1],Esused,Esfused,St1} = explist([I0,L0,S0], Loc, St0),
     {B1,Bused,Bfused,St2} = do_block(B0, [N], St1),
     %% Be careful what we export, adjust Used and Fused for N.
     Used = union(Esused, del_element(N, Bused)),
     Fused = union(Esfused, del_element(N, Bfused)),
-    {For#nfor_stmt{init=I1,limit=L1,step=S1,b=B1},[],Used,Fused,St2}.
+    {For#nfor_stmt{init=I1,limit=L1,step=S1, block =B1},[],Used,Fused,St2}.
 
 %% genfor_stmt(For, LocalVars, State) -> {For,NewVars,FreeVars,State}.
 
-genfor_stmt(#gfor_stmt{vs=Vs,gens=Gs0,b=B0}=For, Loc, St0) ->
+genfor_stmt(#gfor_stmt{vs=Vs,gens=Gs0, block =B0}=For, Loc, St0) ->
     {Gs1,Gused,Gfused,St1} = explist(Gs0, Loc, St0),
-    Ns = lists:foldl(fun (#var{n=N}, Ns) -> add_element(N, Ns) end, [], Vs),
+    Ns = lists:foldl(fun (#var{name =N}, Ns) -> add_element(N, Ns) end, [], Vs),
     {B1,Bused,Bfused,St2} = do_block(B0, Ns, St1),
     %% Be careful what we export, adjust Used and Fused for Ns.
     Used = union(Gused, subtract(Bused, Ns)),
     Fused = union(Gfused, subtract(Bfused, Ns)),
-    {For#gfor_stmt{gens=Gs1,b=B1},[],Used,Fused,St2}.
+    {For#gfor_stmt{gens=Gs1, block =B1},[],Used,Fused,St2}.
 
 %% local_assign_stmt(Local, LocalVars, State) -> {Local,NewVars,FreeVars,State}.
 
-local_assign_stmt(#local_assign_stmt{vs=Vs,es=Es0}=L, Loc, St0) ->
+local_assign_stmt(#local_assign_stmt{vs=Vs, expressions =Es0}=L, Loc, St0) ->
     {Es1,Used,Fused,St1} = explist(Es0, Loc, St0),
-    New = lists:foldl(fun (#var{n=N}, Ns) -> add_element(N, Ns) end, [], Vs),
-    {L#local_assign_stmt{es=Es1},New,Used,Fused,St1}.
+    New = lists:foldl(fun (#var{name =N}, Ns) -> add_element(N, Ns) end, [], Vs),
+    {L#local_assign_stmt{expressions =Es1},New,Used,Fused,St1}.
 
 %% local_fdef_stmt(Local, LocalVars, State) ->
 %%     {Local,NewVars,FreeVars,UsedVars,State}.
 %%  We explicitly handle used variables here as we want the function
 %%  name to be included in Used in recursive function calls.
 
-local_fdef_stmt(#local_fdef_stmt{v=#var{n=N},f=F0}=L, _, St0) ->
+local_fdef_stmt(#local_fdef_stmt{v=#var{name =N},f=F0}=L, _, St0) ->
     {F1,Used,Fused,St1} = functiondef(F0, nul, St0),
     New = [N],
     {L#local_fdef_stmt{f=F1},New,Used,Fused,St1}.
@@ -262,12 +262,12 @@ explist([], _, St) -> {[],[],[],St}.		%No expressions at all
 
 exp(#lit{}=L, _, St) -> {L,[],[],St};		%Nothing to do
 exp(#fdef{}=F, _, St) -> functiondef(F, nul, St);
-exp(#op{as=Es0}=Op, Loc, St0) ->
+exp(#op{arguments =Es0}=Op, Loc, St0) ->
     {Es1,Used,Fused,St1} = explist(Es0, Loc, St0),
-    {Op#op{as=Es1},Used,Fused,St1};
-exp(#tc{fs=Fs0}=T, Loc, St0) ->
+    {Op#op{arguments =Es1},Used,Fused,St1};
+exp(#table_constructor{fields=Fs0}=T, Loc, St0) ->
     {Fs1,Used,Fused,St1} = tableconstructor(Fs0, Loc, St0),
-    {T#tc{fs=Fs1},Used,Fused,St1};
+    {T#table_constructor{fields=Fs1},Used,Fused,St1};
 exp(E, Loc, St) ->
     prefixexp(E, Loc, St).
 
@@ -282,7 +282,7 @@ prefixexp(Exp, Loc, St) -> prefixexp_first(Exp, Loc, St).
 prefixexp_first(#single{e=E0}=S, Loc, St0) ->
     {E1,Used,Fused,St1} = exp(E0, Loc, St0),
     {S#single{e=E1},Used,Fused,St1};
-prefixexp_first(#var{n=N}=V, _, St) ->
+prefixexp_first(#var{name =N}=V, _, St) ->
     {V,[N],[],St}.
 
 prefixexp_rest(#dot{e=Exp0,r=Rest0}=D, Loc, St0) ->
@@ -293,44 +293,44 @@ prefixexp_rest(#dot{e=Exp0,r=Rest0}=D, Loc, St0) ->
     {D#dot{e=Exp1,r=Rest1},Used,Fused,St2};
 prefixexp_rest(Exp, Loc, St) -> prefixexp_element(Exp, Loc, St).
 
-prefixexp_element(#key{k=E0}=K, Loc, St0) ->
+prefixexp_element(#key{key =E0}=K, Loc, St0) ->
     {E1,Used,Fused,St1} = exp(E0, Loc, St0),
-    {K#key{k=E1},Used,Fused,St1};
+    {K#key{key =E1},Used,Fused,St1};
 prefixexp_element(#fcall{as=As0}=F, Loc, St0) ->
     {As1,Used,Fused,St1} = explist(As0, Loc, St0),
     {F#fcall{as=As1},Used,Fused,St1};
-prefixexp_element(#mcall{m=#lit{v=N},as=As0}=M, Loc, St0) ->
+prefixexp_element(#method_call{m=#lit{v=N},as=As0}=M, Loc, St0) ->
     {As1,Used,Fused,St1} = explist(As0, Loc, St0),
-    {M#mcall{as=As1},add_element(N, Used),Fused,St1}.
+    {M#method_call{as=As1},add_element(N, Used),Fused,St1}.
 
 %% functiondef(Func, LocalVars, State) -> {Func,UsedVars,FusedVars,State}.
 %%  All the variables "used" in the function which are not local
 %%  become "fused" externally.
 
-functiondef(#fdef{ps=Ps,ss=Ss0}=F, _, St0) ->
-    Loc0 = lists:foldl(fun (#var{n=N}, Vs) -> add_element(N, Vs);
+functiondef(#fdef{func_parameters =Ps, statements =Ss0}=F, _, St0) ->
+    Loc0 = lists:foldl(fun (#var{name= VarName}, Vs) -> add_element(VarName, Vs);
 			  (_, Vs) -> Vs
 		      end, [], Ps),
-    Vars0 = #vars{local=Loc0,free=[],used=[],fused=[]},
+    Vars0 = #vars{local=Loc0,free=[], used_in_sub_blocks =[], used_in_sub_funcs =[]},
     {Ss1,Vars1,St1} = stmts(Ss0, Vars0, St0),
     %% Make all free variables "fused" in outside block.
-    {F#fdef{ss=Ss1,vars=Vars1},[],Vars1#vars.free,St1}.
+    {F#fdef{statements =Ss1,vars=Vars1},[],Vars1#vars.free,St1}.
 
 %% tableconstructor(Fields, LocalVars, State) ->
 %%     {Fields,UsedVars,FusedVars,State}.
 
-tableconstructor(Fs0, Loc, St0) ->
-    Fun = fun (#efield{v=V0}=F, {Used0,Fused0,S0}) ->
-		  {V1,Vused,Vfused,S1} = exp(V0, Loc, S0),
+tableconstructor(Fields0, LocalVars, St0) ->
+    Fun = fun (#efield{value=V0}=F, {Used0,Fused0,S0}) ->
+		  {V1,Vused,Vfused,S1} = exp(V0, LocalVars, S0),
 		  Used1 = union(Vused, Used0),
 		  Fused1 = union(Vfused, Fused0),
-		  {F#efield{v=V1},{Used1,Fused1,S1}};
-	      (#kfield{k=K0,v=V0}=F, {Used0,Fused0,S0}) ->
-		  {K1,Kused,Kfused,S1} = exp(K0, Loc, S0),
-		  {V1,Vused,Vfused,S2} = exp(V0, Loc, S1),
+		  {F#efield{value=V1},{Used1,Fused1,S1}};
+	      (#kfield{key=Key0, value=Value0}=F, {Used0,Fused0,S0}) ->
+		  {Key1,Kused,Kfused,S1} = exp(Key0, LocalVars, S0),
+		  {Value1,Vused,Vfused,S2} = exp(Value0, LocalVars, S1),
 		  Used1 = union([Kused,Vused,Used0]),
 		  Fused1 = union([Kfused,Vfused,Fused0]),
-		  {F#kfield{k=K1,v=V1},{Used1,Fused1,S2}}
+		  {F#kfield{key = Key1, value = Value1},{Used1,Fused1,S2}}
 	  end,
-    {Fs1,{Used,Fused,St1}} = lists:mapfoldl(Fun, {[],[],St0}, Fs0),
-    {Fs1,Used,Fused,St1}.
+    {Fields1,{Used,Fused,St1}} = lists:mapfoldl(Fun, {[],[],St0}, Fields0),
+    {Fields1,Used,Fused,St1}.

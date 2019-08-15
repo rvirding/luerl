@@ -29,6 +29,12 @@
 -export([file/1,file/2,string/1,string/2,forms/1,forms/2]).
 
 -export([debug_print/3]).
+-export([token_info_new/1,
+	       token_info_new/2,
+ 	       token_info_new/3,
+	       token_info_new/4,
+	       token_info_new/5,
+	       token_info_internal_created/0, token_info_internal_created/1]).
 
 -import(lists, [member/2,keysearch/3,mapfoldl/3]).
 
@@ -39,7 +45,7 @@
 
 -record(comp, {base="",				%Base name
 	       odir=".",			%Output directory
-	       lfile="",			%Lua file
+	       lua_file="",			%Lua file
 	       opts=[],				%User options
 	       code=none,			%Code after last pass.
 	       errors=[],
@@ -59,31 +65,40 @@ file(Name, Opts) ->
 
 filenames(File, St) ->
     %% Test for explicit outdir.
-    Odir = case keysearch(outdir, 1, St#comp.opts) of
+    OutputDir = case keysearch(outdir, 1, St#comp.opts) of
 	       {value,{outdir,D}} -> D;
 	       false -> "."
 	   end,
     Dir = filename:dirname(File),
     Base = filename:basename(File, ".lua"),
-    Lfile = filename:join(Dir, Base ++ ".lua"),
+    LuaFilePath = filename:join(Dir, Base ++ ".lua"),
     St#comp{base=Base,
-	    lfile=Lfile,
-	    odir=Odir}.
+	    lua_file=LuaFilePath,
+	    odir=OutputDir}.
 
 string(Str) -> string(Str, [verbose,report]).
 
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
+	luerl:log_to_file("STRING: ~p", [Str]),
     St0 = #comp{opts=Opts,code=Str},
-    St1 = filenames("-no-file-", St0),
-    compile(list_passes(), St1).
+	luerl:log_to_file("STRING: A"),
+    St1 = filenames("-no-file-but-string", St0),
+	luerl:log_to_file("STRING: B"),
+    CompileResult = compile(list_passes(), St1),
+
+	luerl:log_to_file("STRING: C"),
+
+	CompileResult.
+
+
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
     St0 = #comp{opts=Opts,code=Forms},
-    St1 = filenames("-no-file-", St0),
+    St1 = filenames("-no-file-but-forms", St0),
     compile(forms_passes(), St1).
 
 compile(Ps, St0) ->
@@ -108,7 +123,7 @@ list_passes() ->				%Scanning string
      forms_passes()].
 
 forms_passes() ->				%Doing the forms
-    [{do,fun do_init_comp/1},
+    [{do,fun do_insert_compiler_state_into_code/1},
      {do,fun do_comp_normalise/1},
      {do,fun do_comp_vars/1},
      {when_flag,to_vars,{done,fun(St) -> {ok,St} end}},
@@ -129,10 +144,13 @@ forms_passes() ->				%Doing the forms
 %%  {done,PrintFun,Ext}
 
 do_passes([{do,Fun}|Ps], St0) ->
-    case Fun(St0) of
+	luerl:log_to_file("DO PASSES"),
+	RET = case Fun(St0) of
 	{ok,St1} -> do_passes(Ps, St1); 
 	{error,St1} -> {error,St1}
-    end;
+    end,
+   luerl:log_to_file("DO PASSES RETURN VAL : ~p", [RET]),
+    RET;
 do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
     case member(Flag, St#comp.opts) of
 	true -> do_passes([Cmd|Ps], St);
@@ -150,7 +168,7 @@ do_passes([], St) -> {ok,St}.
 %% do_read_file(State) -> {ok,State} | {error,State}.
 %% do_scan(State) -> {ok,State} | {error,State}.
 %% do_parse(State) -> {ok,State} | {error,State}.
-%% do_init_comp(State) -> {ok,State} | {error,State}.
+%% do_insert_compiler_state_into_code(State) -> {ok,State} | {error,State}.
 %% do_comp_normalise(State) -> {ok,State} | {error,State}.
 %% do_comp_vars(State) -> {ok,State} | {error,State}.
 %% do_comp_env(State) -> {ok,State} | {error,State}.
@@ -158,65 +176,118 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#comp{lfile=Name,opts=Opts}=St) ->
+
+token_info_new(FileName) ->
+	token_info_new(FileName, 0).
+token_info_new(FileName, Line) ->
+  token_info_new(FileName, Line, "").
+
+token_info_new(FileName, Line, OriginalTokenDescription) ->
+	token_info_new(FileName, Line, OriginalTokenDescription, 0).
+
+token_info_new(FileName, Line, OriginalTokenDescription, TokenPositionInLine) ->
+  token_info_new(FileName, Line, OriginalTokenDescription, TokenPositionInLine,
+		"not defined").
+
+token_info_internal_created() ->
+	token_info_internal_created("-"). % it's not important to know the internal instruction here
+token_info_internal_created(InternalStatement) ->
+	token_info_new("No file - internally created instruction",
+                            -1, "internally created instruction", -1, InternalStatement).
+
+% Normally internal_statement is inserted in luerl_comp_cg:info_insert_into_statements() func,
+% but once I need an empty object from luerl_emul.erl
+token_info_new(FileName, Line, OriginalTokenDescription, TokenPositionInLine, InternalStatement) ->
+	#info_structure{
+		source_file = FileName,
+		linenum = Line,
+		token_position_in_line = TokenPositionInLine,
+		original_token_description = OriginalTokenDescription,
+		internal_statement = InternalStatement
+}.
+
+% the source file info is unavailable in luerl_scan module
+% because it's called from io:request() that doesn't receive Filename so I insert it now.
+insert_file_name_into_token({TokenName,Line,Symbol}, FileName) ->
+    {TokenName, token_info_new(FileName, Line, TokenName), Symbol};
+insert_file_name_into_token({error, E}, _FileName) ->
+    {error, E};
+insert_file_name_into_token({TokenName,Line}, FileName) ->
+	{TokenName, token_info_new(FileName, Line, TokenName)}.
+
+tokens_line_and_file_info(TokensLineInfoOnly, FileName, Opts, St) ->
+    TokensLineAndFileInfo = [ insert_file_name_into_token(Token, FileName) || Token <-TokensLineInfoOnly],
+    debug_print(Opts, "scan: ~p\n", [TokensLineAndFileInfo]),
+    {ok,St#comp{code=TokensLineAndFileInfo}}.
+
+do_read_file(#comp{lua_file=FileName,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
-    case file:open(Name, [read]) of
-	{ok,F} ->
-	    %% Check if first line a script or Windows BOM, if so skip it.
-	    case io:get_line(F, '') of
-		"#" ++ _ -> ok;			%Skip line
-		[239,187,191|_] ->
-		    file:position(F, 3);	%Skip BOM
-		_ -> file:position(F, bof)	%Get it all
-	    end,
-	    %% Now read the file.
-	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
-		      {ok,Ts,_} ->
-			  debug_print(Opts, "scan: ~p\n", [Ts]),
-			  {ok,St#comp{code=Ts}};
-		      {error,E,L} -> {error,St#comp{errors=[{L,io,E}]}}
-		  end,
-	    file:close(F),
-	    Ret;
-	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
+    case file:open(FileName, [read]) of
+  	  {ok,F} ->
+  	    %% Check if first line a script or Windows BOM, if so skip it.
+  	    case io:get_line(F, '') of
+  		"#" ++ _ -> ok;			%Skip line
+  		[239,187,191|_] ->
+  		    file:position(F, 3);	%Skip BOM
+  		_ -> file:position(F, bof)	%Get it all
+  	    end,
+  	    %% Now read the file.
+  	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
+  		      {ok, TokensLineInfoOnly,_} ->
+							tokens_line_and_file_info(TokensLineInfoOnly, FileName, Opts, St);
+  		      {error,E,L} ->
+							{error,St#comp{errors=[{L,io,E}]}}
+  		  end,
+  	    file:close(F),
+  	    Ret;
+  	  {error,E} -> {error,St#comp{errors=[{none,file,E}]}}
     end.
 
 do_scan(#comp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
-	{ok,Ts,_} ->
-	    debug_print(Opts, "scan: ~p\n", [Ts]),
-	    {ok,St#comp{code=Ts}};
+	{ok,TokensLineInfoOnly,_} ->
+		  tokens_line_and_file_info(TokensLineInfoOnly, "No File Source, Scanned Lua code: >> " ++ Str ++ " <<", Opts, St);
 	{error,E,_} -> {error,St#comp{errors=[E]}}
     end.
 
-do_parse(#comp{code=Ts,opts=Opts}=St) ->
-    case luerl_parse:chunk(Ts) of
-	{ok,Chunk} ->
-	    debug_print(Opts, "parse: ~p\n", [Chunk]),
-	    {ok,St#comp{code=Chunk}};
-	{error,E} -> {error,St#comp{errors=[E]}}
+do_parse(#comp{code=Tokens,opts=Opts}=St) ->
+
+	luerl:log_to_file("CHUNK TOKEN: ~p ", [Tokens]),
+	% here I have a yeccpars err msg so I cheat:
+  % yeccpars 1a token: {local,#{linenum => 1,original_token_description => local,
+	% source_file => "No File Source, Scanned Lua code",
+	% token_position_in_line => 0}}
+
+    case luerl_parse:chunk(Tokens) of
+      {ok, {ChunkName, ChunkLineNum, UnknownData, Body}} -> % I don't know the meaning of UnknownData from chunk()
+            Chunk = {ChunkName, token_info_new("No File Source, function def", ChunkLineNum), UnknownData, Body},
+            debug_print(Opts, "parse: ~p\n", [Chunk]),
+	          {ok,St#comp{code=Chunk}};
+      {error,E} -> {error,St#comp{errors=[E]}}
     end.
 
-do_init_comp(#comp{}=St) ->
-    %% Initialise the compiler state.
-    Cst = #cst{opts=St#comp.opts,
-	       lfile=list_to_binary(St#comp.lfile)},
+do_insert_compiler_state_into_code(#comp{}=St) ->
+    CompilerState = #cst{opts=St#comp.opts,
+	       lua_file=list_to_binary(St#comp.lua_file)},
     %% The code now includes compiler state.
-    C1 = #code{code=St#comp.code,cst=Cst},
+    C1 = #code{code=St#comp.code,cst=CompilerState},
     {ok,St#comp{code=C1}}.
 
 do_comp_normalise(#comp{code=C0,opts=Opts}=St) ->
     case luerl_comp_normalise:chunk(C0, Opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
+	{ok,C1} ->
+       Res = {ok,St#comp{code=C1}},
+       Res;
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
 do_comp_vars(St) ->
-    case luerl_comp_vars:chunk(St#comp.code, St#comp.opts) of
+    Res = case luerl_comp_vars:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
 	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    end,
+	Res.
 
 %% do_comp_locf(St) ->
 %%     case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
@@ -226,18 +297,25 @@ do_comp_vars(St) ->
 %%     end.
 
 do_comp_env(St) ->
-    case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
+    Res = case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
 	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    end,
+	Res.
 
 do_code_gen(St) ->
-    case luerl_comp_cg:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+	luerl:log_to_file("CODE GEN"),
+  ListOfInstructions = luerl_comp_cg:chunk(St#comp.code, St#comp.opts),
+	luerl:log_to_file("CODE GEN LIST: ~p ", [ListOfInstructions]),
+
+	Res = case ListOfInstructions of
+         {ok,C1} -> {ok,St#comp{code=C1}};
+         {ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
+         {error,Es} -> {error,St#comp{errors=Es}}
+        end,
+	luerl:log_to_file("CODE GEN RES: ~p ", [Res]),
+	Res.
 
 do_peep_op(St) ->
     case luerl_comp_peep:chunk(St#comp.code, St#comp.opts) of

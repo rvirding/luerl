@@ -45,7 +45,15 @@
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
 
-lua_error(E, St) -> error({lua_error,E,St}).
+% lua_error(E, St) -> error({lua_error,E,St}).
+lua_error(Error, St) ->
+	luerl:log_to_file("lua_error: ~p", [Error]),
+	case get(info_last_executed_token) of
+		undefined ->
+			error({lua_error, Error, #{last_executed_filename => "no info", last_executed_linenum => -1}, St});
+		InfoLastExecutedToken ->
+			error({lua_error, Error, InfoLastExecutedToken, St})
+	end.
 
 badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 

@@ -57,11 +57,11 @@
 -record(thread, {}).				%Thread type
 %% There are two function types, the Lua one, and the Erlang one.
 -record(lua_func,{anno=[],
-		  lsz,				%Local var size
-		  esz,				%Env var size
-		  env,				%Environment
-		  pars,				%Parameters
-		  b}).				%Code block
+	local_var_size,				%Local var size
+	environment_var_size,				%Env var size
+	environment,				%Environment
+	parameters,				%Parameters
+	code_block}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
 
 -record(fref, {i}).				%Frame reference, index
@@ -153,4 +153,9 @@
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
+
+
+-define(TOKEN_POSITION_IN_LINE_DEFAULT, -1).
+-define(TOKEN_FILE_LINE_NUM_DEFAULT, -1).
+-define(TOKEN_FILE_NAME_DEFAULT, "File_undefined").
 

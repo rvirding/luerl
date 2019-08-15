@@ -19,6 +19,8 @@
 -module(luerl).
 
 -include("luerl.hrl").
+-export([log_to_file/1, log_to_file/2, log_to_file/3, obj_to_string/1]).
+-export([coverage_stat_table_ref__initialize_default_values/0]).
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
@@ -29,7 +31,8 @@
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
 	 call_method/2,call_method/3,call_method1/3,method_list/2,
 	 init/0,stop/1,gc/1,
-	 encode/2,encode_list/2,decode/2,decode_list/2]).
+	 encode/2,encode_list/2,decode/2,decode_list/2
+   ]).
 
 %% luerl:eval(String|Binary|Form[, State]) -> Result.
 eval(Chunk) ->
@@ -55,30 +58,44 @@ evalfile(Path, St0) ->
 
 %% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
 
-do(SBC) -> do(SBC, init()).
+do(SBC) ->
+    do(SBC, init()).
 
 do(S, St0) when is_binary(S); is_list(S) ->
+    coverage_stat_table_ref__initialize_default_values(),
+
+    luerl:log_to_file("luerl do binary"),
     {ok,Func,St1} = load(S, St0),
     luerl_emul:call(Func, St1);
 do(Func, St) ->
+    coverage_stat_table_ref__initialize_default_values(),
+    luerl:log_to_file("luerl do FUNC"),
     luerl_emul:call(Func, St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
 
 dofile(Path) ->
+    coverage_stat_table_ref__initialize_default_values(),
     dofile(Path, init()).
 
 dofile(Path, St0) ->
-    {ok,Func,St1} = loadfile(Path, St0),
-    luerl_emul:call(Func, St1).
+  coverage_stat_table_ref__initialize_default_values(),
+  luerl:log_to_file("Dofile"),
+  {ok,Func,St1} = loadfile(Path, St0),
+  luerl:log_to_file("After loadfile"),
+  {Result,State} = luerl_emul:call(Func, St1),
+  log_to_file("dofile EndState: ~p", [State]),
+  {Result,State}.
 
 %% load(String|Binary) -> {ok,Function,NewState}.
 
 load(Str) -> load(Str, init()).
 
 load(Bin, St) when is_binary(Bin) ->
+  luerl:log_to_file("LOAD when is binary"),
     load(binary_to_list(Bin), St);
 load(Str, St0) when is_list(Str) ->
+  luerl:log_to_file("LOAD when is list: ~p", [Str]),
     case luerl_comp:string(Str) of
 	{ok,Chunk} ->
 	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
@@ -93,8 +110,8 @@ loadfile(Name) -> loadfile(Name, init()).
 
 loadfile(Name, St0) ->
     case luerl_comp:file(Name) of
-	{ok,Chunk} ->
-	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
+      {ok,Chunk} ->
+      {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
 	    {ok,Func,St1};
 	{error,_,_}=E -> E
     end.
@@ -167,18 +184,26 @@ call_function(Fp, As) ->
     call_function(Fp, As, init()).
 
 call_function(Fp, As, St0) ->
+  luerl:log_to_file("PE luerl:call_function()"),
     %% Encode the input arguments.
     {Lfp,St1} = encode_list(Fp, St0),
+  luerl:log_to_file("PE luerl:call_function() B"),
     {Las,St2} = encode_list(As, St1),
+  luerl:log_to_file("PE luerl:call_function() C"),
     %% Find the function definition and call function.
     {Lrs,St3} = call_function1(Lfp, Las, St2),
+  luerl:log_to_file("PE luerl:call_function() D"),
     Rs = decode_list(Lrs, St3),
+  luerl:log_to_file("PE luerl:call_function() E"),
     {Rs,St3}.
 
 call_function1(Lfp, Las, St0) when is_list(Lfp) ->
+  luerl:log_to_file("PE luerl:call_function1 is list"),
     {F,St1} = luerl_emul:get_table_keys(Lfp, St0),
+  luerl:log_to_file("PE luerl:call_function1 is list 2"),
     luerl_emul:functioncall(F, Las, St1);
 call_function1(F, Las, St) ->
+  luerl:log_to_file("PE luerl:call_function1 plain"),
     luerl_emul:functioncall(F, Las, St).
 
 %% function_list(Keys, State) -> {V,State}.
@@ -367,3 +392,31 @@ decode_table(N, St, In0) ->
 decode_userdata(N, St) ->
     #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
     {userdata,Data}.
+
+
+obj_to_string(Term)-> % I want to log complex tuples into one line so I convert them to string
+  lists:flatten(io_lib:format("~p", [Term])).
+log_to_file(Msg) ->
+  log_to_file(Msg, []).
+log_to_file(Msg, ParamList) ->
+  log_to_file("/tmp/erl_debug_down.txt", Msg, ParamList).
+log_to_file(FilePath, Msg, ParamList) ->
+  % io:format(standard_io, Msg ++ "\n", ParamList),
+  file:write_file(FilePath, io_lib:fwrite(Msg ++ "\n", ParamList), [append] ),
+  ok.
+
+coverage_stat_table_ref__initialize_default_values() ->
+  case get(coverage_data) of
+    undefined ->
+      EtsTableId = ets:new(name_not_important, [private, set, {keypos, 1}]),
+      put(coverage_data, EtsTableId),
+
+      ets:insert(EtsTableId, {filename_last_processed, ?TOKEN_FILE_NAME_DEFAULT}),
+      ets:insert(EtsTableId, {file_line_num, ?TOKEN_FILE_LINE_NUM_DEFAULT}),
+      ets:insert(EtsTableId, {token_last_used_position_in_line, ?TOKEN_POSITION_IN_LINE_DEFAULT}),
+
+      EtsTableId;
+    EtsTableIdFromProcessDic ->
+      EtsTableIdFromProcessDic
+  end.
+

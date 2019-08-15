@@ -26,3 +26,5 @@ run_and_check(Config, Script, Expected) ->
   {Result, _St} = luerl:dofile(ScriptFile),
   % ct:pal("RESULT: ~p", [Result]),
   Expected = Result.
+
+
