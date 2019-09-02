@@ -82,7 +82,7 @@ Rules.
 	string_token(TokenChars, TokenLen, TokenLine).
 \'(\\.|\\\n|[^'\\])*\' :
 	string_token(TokenChars, TokenLen, TokenLine).
-\[\[([^]]|\][^]])*\]+\] :
+\[\[([^]]|\][^]])*\]\] :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 3, TokenLen - 4),
  	long_bracket(TokenLine, Cs).
@@ -132,7 +132,7 @@ Rules.
 --\[[^[\n].* :	skip_token.
 
 %% --aa([^y]|y[^zy])*y+z
---\[\[([^]]|\][^]])*\]+\] : skip_token.
+--\[\[([^]]|\][^]])*\]\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
 
 Erlang code.
@@ -200,10 +200,12 @@ hex_fraction([], _Pow, SoFar) -> SoFar.
 %% characters. We know that the input string is correct.
 
 string_token(Cs0, Len, L) ->
-    Cs = string:substr(Cs0, 2, Len - 2),	%Strip quotes
-    case catch {ok,chars(Cs)} of
-	{ok,S} ->
-	    {token,{'LITERALSTRING',L,list_to_binary(S)}};
+    Cs1 = string:substr(Cs0, 2, Len - 2),	%Strip quotes
+    case catch {ok,chars(Cs1)} of
+	{ok,Cs2} ->
+	    %% Strings are utf8 encoded.
+	    Str = unicode:characters_to_binary(Cs2, unicode, unicode),
+	    {token,{'LITERALSTRING',L,Str}};
 	error -> {error,"illegal string"}
     end.
 
