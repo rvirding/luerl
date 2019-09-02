@@ -38,6 +38,10 @@ new(Line) -> Line.
 
 new(Key, Val) -> set(Key, Val, new()).
 
+%% set_line(Line, Anno) -> Anno.
+%% line(Anno) -> Line | undefined.
+%%  Specific functions for accessing line numbers in the anno.
+
 set_line(Line, Anno) when is_integer(Anno) -> Line;
 set_line(Line, Anno) -> set_line1(Line, Anno).
 
@@ -53,16 +57,27 @@ line1([Line|_]) when is_integer(Line) -> Line;
 line1([_|Anno]) -> line1(Anno);
 line1([]) -> undefined.
 
+%% set(Key, Value, Anno) -> Anno.
+%% get(Key, Anno) -> Value | undefined.
+%%  Generic accessing functions for the anno.
+
 set(line, Val, Anno) -> set_line(Val, Anno);
 set(Key, Val, Anno) when is_integer(Anno) ->
-    lists:keystore(Key, 1, [Anno], {Key,Val});
-set(Key, Val, Anno) -> lists:keystore(Key, 1, Anno, {Key,Val}).
+    [Anno,{Key,Val}];
+set(Key, Val, Anno) -> set1(Key, Val, Anno).
 
-get(line, Anno) -> line(Anno);			%This is untagged
-get(_Key, Anno) when is_integer(Anno) ->
+set1(Key, Val, [{Key,_Old}|Anno]) ->
+    [{Key,Val}|Anno];
+set1(Key, Val, [A|Anno]) ->
+    [A|set1(Key, Val, Anno)];
+set1(Key, Val, []) ->
+    [{Key,Val}].
+
+get(line, Anno) -> line(Anno);                  %This is untagged
+get(_Key, Anno) when is_integer(Anno) ->        %This is untagged so not Key
     undefined;
-get(Key, Anno) ->
-    case lists:keyfind(Key, 1, Anno) of
-	{Key,Val} -> Val;
-	false -> undefined
-    end.
+get(Key, Anno) -> get1(Key, Anno).
+
+get1(Key, [{Key,Val}|Anno]) -> Val;
+get1(Key, [_|Anno]) -> get1(Key, Anno);
+get1(_Key, []) -> undefined.
