@@ -292,7 +292,7 @@ sin(As, St) ->
 
 sinh(As, St) ->
     case get_number_args(As) of
-	[N|_] -> {[math:sinh(N)],St};
+	[N|_] when is_number(N) -> {[math:sinh(N)],St};
 	_ -> badarg_error(sinh, As, St)
     end.
 

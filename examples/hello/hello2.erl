@@ -122,11 +122,11 @@ run() ->
     % execute a file, get a result
     {ok,F} = luerl:evalfile("./hello2-7.lua", State04),
     {F,State05} = luerl:dofile("./hello2-7.lua", State04),
-    io:format("(28) F: ~s~n", [F]),
+    io:format("(28) F: ~ts~n", [F]),
 
     % execute a file that changes the State0, and get a value back
     {F,State06} = luerl:dofile("./hello2-7.lua", State05),
-    io:format("(29) F: ~s = ", [F]),
+    io:format("(29) F: ~ts = ", [F]),
     luerl:do("print('(30) F: ' .. a)", State06),
 
     % separately parse, then execute

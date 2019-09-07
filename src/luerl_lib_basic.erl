@@ -24,7 +24,7 @@
 -export([install/1]).
 
 %% Export some functions which can be called from elsewhere.
--export([tostring/1,tostring/2]).
+-export([print/2,tostring/1,tostring/2]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
@@ -141,7 +141,6 @@ next([#tref{i=T},K|_], St) ->
     #table{a=Arr,d=Dict} = ?GET_TABLE(T, St#luerl.ttab),	%Get the table
     if K == nil ->
 	    %% Find the first, start with the array.
-	    %% io:format("n: ~p\n", [{Arr,Dict}]),
 	    next_index(0, Arr, Dict, St);
        is_integer(K), K >= 1 ->
 	    next_index(K, Arr, Dict, St);
@@ -182,14 +181,24 @@ next_key(K, Dict, St) ->
 	error -> {[nil],St}
     end.
 
+%% print(Args, State) -> {[],State}.
+%%  Receives any number of arguments and prints their values to
+%%  stdout, using the tostring function to convert each argument to a
+%%  string. print is not intended for formatted output, but only as a
+%%  quick way to show a value, for instance for debugging.
+
 print(Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
-			      {Str,S1} = tostring([A], S0),
-			      io:format("~s ", [Str]),
+			      {[Str],S1} = tostring([A], S0),
+			      io:format("~ts ", [print_string(Str)]),
 			      S1
 		      end, St0, Args),
     io:nl(),
     {[],St1}.
+
+print_string(<<C/utf8,S/binary>>) -> [C|print_string(S)];
+print_string(<<_,S/binary>>) -> [$?|print_string(S)];
+print_string(<<>>) -> [].
 
 %% rawequal([Arg,Arg|_], State) -> {[Bool],State}.
 %% rawlen([Object|_], State) -> {[Length],State}.

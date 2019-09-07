@@ -205,7 +205,7 @@ arg_to_exact_integer(A) ->
 args_to_exact_integers(As) -> args_to_exact_integers(As, []).
 
 args_to_exact_integers(As, Acc) ->
-    to_loop(As, fun arg_to_integer/1, Acc).
+    to_loop(As, fun arg_to_exact_integer/1, Acc).
 
 arg_to_string(N) when is_number(N) -> list_to_binary(number_to_list(N));
 arg_to_string(B) when is_binary(B) -> B;

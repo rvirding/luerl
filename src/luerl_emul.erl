@@ -1138,7 +1138,7 @@ op('-', A) ->
 op('not', A) -> {ok,not ?IS_TRUE(A)};
 op('~', A) ->
     integer_op('~', A, <<"__bnot">>, fun (N) -> {ok,bnot(N)} end);
-op('#', B) when is_binary(B) -> {ok,float(byte_size(B))};
+op('#', B) when is_binary(B) -> {ok,byte_size(B)};
 op('#', #tref{}=T) ->
     {meta,fun (_, St) -> luerl_lib_table:length(T, St) end};
 op(Op, A) -> {error,{badarg,Op,[A]}}.
@@ -1227,24 +1227,32 @@ floor(N) when is_float(N) -> round(N - 0.5).
 %% lt_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
 %% le_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
 %% concat_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
-%%  Together with their metas straight out of the reference manual.
+%%  Together with their metas straight out of the reference
+%%  manual. Note that numeric_op string args are always floats.
 
 numeric_op(Op, A, E, Raw) ->
-    case luerl_lib:arg_to_number(A) of
+    case arg_to_number(A) of
 	error ->				%Neither number nor string
 	    {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end}; 
 	N -> {ok,Raw(N)}
     end.
 
 numeric_op(Op, A1, A2, E, Raw) ->
-    case luerl_lib:arg_to_number(A1) of
+    case arg_to_number(A1) of
 	error -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 	N1 ->
-	    case luerl_lib:arg_to_number(A2) of
+	    case arg_to_number(A2) of
 		error ->
 		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
 		N2 -> {ok,Raw(N1, N2)}
 	    end
+    end.
+
+arg_to_number(Arg) ->
+    case luerl_lib:arg_to_number(Arg) of
+	error -> error;
+	N when is_binary(Arg) -> float(N);	%String arg always float
+	N -> N
     end.
 
 integer_op(Op, A, E, Raw) ->

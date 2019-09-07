@@ -105,27 +105,25 @@ build({$s,Fl,F,P}, [A|As], St0) ->
     {[S0],St1} = luerl_lib_basic:tostring([A], St0),
     S1 = trim_bin(S0, P),
     {adjust_bin(S1, Fl, F),As,St1};
-build({$c,Fl,F,_}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    C = if is_number(N), N >= 0, N < 256 -> trunc(N);
-	   is_number(N) -> $?
-	end,
-    {adjust_str([C], Fl, F),As,St};
 %% Integer formats.
+build({$c,Fl,F,_}, [A|As], St) ->
+    N = luerl_lib:arg_to_exact_integer(A),
+    C = N band 255,
+    {adjust_str([C], Fl, F),As,St};
 build({$i,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
+    I = luerl_lib:arg_to_exact_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$d,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
+    I = luerl_lib:arg_to_exact_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$o,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
+    I = luerl_lib:arg_to_exact_integer(A),
     {format_octal(Fl, F, P, I),As,St};
 build({$x,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
+    I = luerl_lib:arg_to_exact_integer(A),
     {format_hex(Fl, F, P, I),As,St};
 build({$X,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
+    I = luerl_lib:arg_to_exact_integer(A),
     {format_HEX(Fl, F, P, I),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->
@@ -167,11 +165,11 @@ format_octal(Fl, F, P, N) ->
     format_integer(Fl, F, P, N, Str).
 
 format_hex(Fl, F, P, N) ->
-    Str = lists:flatten(io_lib:fwrite("~.16b", [N])),
+    Str = lists:flatten(io_lib:fwrite("~.16b", [abs(N)])),
     format_integer(Fl, F, P, N, Str).
 
 format_HEX(Fl, F, P, N) ->
-    Str = lists:flatten(io_lib:fwrite("~.16B", [N])),
+    Str = lists:flatten(io_lib:fwrite("~.16B", [abs(N)])),
     format_integer(Fl, F, P, N, Str).
 
 format_integer(Fl, F, P, N, Str0) ->
