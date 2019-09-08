@@ -71,19 +71,15 @@
 init() ->
     %% Initialise the general stuff.
     St0 = #luerl{meta=#meta{},tag=make_ref()},
-    %% Initialise the table handling.
-    St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
-    %% Initialise the frame handling.
-    St2 = St1#luerl{ftab=array:new(),ffree=[],fnext=0},
-    %% Initialise the userdata handling.
-    St3 = St2#luerl{utab=?MAKE_TABLE(),ufree=[],unext=0},
+    %% Initialise the tables.
+    St1 = init_tables(St0),
     %% Allocate the _G table and initialise the environment
-    {_G,St4} = luerl_lib_basic:install(St3),	%Global environment
-    St5 = St4#luerl{g=_G},
+    {_G,St2} = luerl_lib_basic:install(St1),	%Global environment
+    St3 = St2#luerl{g=_G},
     %% Now we can start adding libraries. Package MUST be first!
-    St6 = load_lib(<<"package">>, luerl_lib_package, St5),
+    St4 = load_lib(<<"package">>, luerl_lib_package, St3),
     %% Add the other standard libraries.
-    St7 = load_libs([
+    St5 = load_libs([
 		     {<<"bit32">>,luerl_lib_bit32},
 		     {<<"io">>,luerl_lib_io},
 		     {<<"math">>,luerl_lib_math},
@@ -92,10 +88,19 @@ init() ->
 		     {<<"utf8">>,luerl_lib_utf8},
 		     {<<"table">>,luerl_lib_table},
 		     {<<"debug">>,luerl_lib_debug}
-		    ], St6),
+		    ], St4),
     %% Set _G variable to point to it and add it to packages.loaded.
-    St8 = set_global_key(<<"_G">>, _G, St7),
-    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St8).
+    St6 = set_global_key(<<"_G">>, _G, St5),
+    set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St6).
+
+init_tables(St0) ->
+    %% Initialise the table handling.
+    St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
+    %% Initialise the frame handling.
+    St2 = St1#luerl{ftab=?MAKE_TABLE(),ffree=[],fnext=0},
+    %% Initialise the userdata handling.
+    St3 = St2#luerl{utab=?MAKE_TABLE(),ufree=[],unext=0},
+    St3.
 
 load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
@@ -131,10 +136,10 @@ get_global_key(Key, #luerl{g=G}=St) ->
 %%  Allocate the frame in the frame table and return its fref.
 
 alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[N|Ns]}=St) ->
-    Ft1 = array:set(N, Fr, Ft0),
+    Ft1 = ?SET_TABLE(N, Fr, Ft0),
     {#fref{i=N},St#luerl{ftab=Ft1,ffree=Ns}};
 alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
-    Ft1 = array:set(N, Fr, Ft0),
+    Ft1 = ?SET_TABLE(N, Fr, Ft0),
     {#fref{i=N},St#luerl{ftab=Ft1,fnext=N+1}}.
 
 %% alloc_table(State) -> {Tref,State}.
@@ -146,17 +151,17 @@ alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
 alloc_table(St) -> alloc_table([], St).
 
 alloc_table(Itab, #luerl{ttab=Ts0,tfree=[N|Ns]}=St) ->
-    T = init_table(Itab),
+    T = create_table(Itab),
     %% io:fwrite("it1: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{ttab=Ts1,tfree=Ns}};
 alloc_table(Itab, #luerl{ttab=Ts0,tfree=[],tnext=N}=St) ->
-    T = init_table(Itab),
+    T = create_table(Itab),
     %% io:fwrite("it2: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
     {#tref{i=N},St#luerl{ttab=Ts1,tnext=N+1}}.
 
-init_table(Itab) ->
+create_table(Itab) ->
     D0 = ttdict:new(),
     A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
     Init = fun ({_,nil}, {D,A}) -> {D,A};	%Ignore nil values
@@ -366,26 +371,26 @@ set_env_var(D, I, Val, Env, #luerl{ftab=Ft0}=St) ->
     St#luerl{ftab=Ft1}.
 
 set_env_var_1(1, I, V, [#fref{i=N}|_], Ft) ->
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft);
+    F = setelement(I, ?GET_TABLE(N, Ft), V),
+    ?SET_TABLE(N, F, Ft);
 set_env_var_1(2, I, V, [_,#fref{i=N}|_], Ft) ->
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft);
+    F = setelement(I, ?GET_TABLE(N, Ft), V),
+    ?SET_TABLE(N, F, Ft);
 set_env_var_1(D, I, V, Fps, Ft) ->
     #fref{i=N} = lists:nth(D, Fps),
-    F = setelement(I, array:get(N, Ft), V),
-    array:set(N, F, Ft).
+    F = setelement(I, ?GET_TABLE(N, Ft), V),
+    ?SET_TABLE(N, F, Ft).
 
 get_env_var(D, I, Env, #luerl{ftab=Ft}) ->
     get_env_var_1(D, I, Env, Ft).
 
 get_env_var_1(1, I, [#fref{i=N}|_], Ft) ->
-    element(I, array:get(N, Ft));
+    element(I, ?GET_TABLE(N, Ft));
 get_env_var_1(2, I, [_,#fref{i=N}|_], Ft) ->
-    element(I, array:get(N, Ft));
+    element(I, ?GET_TABLE(N, Ft));
 get_env_var_1(D, I, Fps, Ft) ->
     #fref{i=N} = lists:nth(D, Fps),
-    element(I, array:get(N, Ft)).
+    element(I, ?GET_TABLE(N, Ft)).
 
 %% set_global_var(Var, Val, State) -> State.
 %% get_global_var(Var, State) -> {Val,State}.
@@ -1441,7 +1446,7 @@ mark([#fref{i=F}|Todo], More, GcT, #gct{s=Sf0,t=Ft}=GcF, GcU) ->
 	    mark(Todo, More, GcT, GcF, GcU);
 	false ->				%Mark it and add to todo
 	    Sf1 = ordsets:add_element(F, Sf0),
-	    Ses = tuple_to_list(array:get(F, Ft)),
+	    Ses = tuple_to_list(?GET_TABLE(F, Ft)),
 	    mark(Todo, [Ses|More], GcT, GcF#gct{s=Sf1}, GcU)
     end;
 mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU) ->
@@ -1489,20 +1494,30 @@ filter_tables(Seen, Tf0, Tt0) ->
     {Tf1,Tt1}.
 
 filter_frames(Seen, Ff0, Ft0) ->
-    %% Unfortunately there is no array:sparse_mapfoldl.
-    Ff1 = array:sparse_foldl(fun (F, _, Free) ->
-				     case ordsets:is_element(F, Seen) of
-					 true -> Free;
-					 false -> [F|Free]
-				     end
-			     end, Ff0, Ft0),
-    Ft1 = array:sparse_map(fun (F, Fd) ->
-				   case ordsets:is_element(F, Seen) of
-				       true -> Fd;
-				       false -> undefined
-				   end
-			   end, Ft0),
+    Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
+			       case ordsets:is_element(K, Seen) of
+				   true -> Free;
+				   false -> [K|Free]
+			       end
+		       end, Ff0, Ft0),
+    Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
     {Ff1,Ft1}.
+
+%% filter_frames(Seen, Ff0, Ft0) ->
+%%     %% Unfortunately there is no array:sparse_mapfoldl.
+%%     Ff1 = array:sparse_foldl(fun (F, _, Free) ->
+%% 				     case ordsets:is_element(F, Seen) of
+%% 					 true -> Free;
+%% 					 false -> [F|Free]
+%% 				     end
+%% 			     end, Ff0, Ft0),
+%%     Ft1 = array:sparse_map(fun (F, Fd) ->
+%% 				   case ordsets:is_element(F, Seen) of
+%% 				       true -> Fd;
+%% 				       false -> undefined
+%% 				   end
+%% 			   end, Ft0),
+%%     {Ff1,Ft1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->
     %% Update the free list.
