@@ -39,7 +39,8 @@
 -record(heap, {ttab,tfree,tnext,
                ftab,ffree,fnext,
                utab,ufree,unext,
-               fntab,fnfree,fnnext}).
+               fntab,fnfree,fnnext,
+	       g}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
 %% -record(eenv, {env=[]}).			%Environment
@@ -65,7 +66,7 @@
 		  lsz,				%Local var size
 		  esz,				%Env var size
 		  env,				%Environment
-		  pars,				%Parameters
+		  pars,				%Parameter types
 		  b}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
 

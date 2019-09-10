@@ -38,7 +38,7 @@
 %% Basic interface.
 -export([init/0,gc/1]).
 -export([call/2,call/3,emul/2]).
--export([load_chunk/2,load_chunk/3,load_function/2,load_function/3]).
+-export([load_chunk/2,load_chunk/3]).
 
 %% Internal functions which can be useful "outside".
 -export([alloc_table/1,alloc_table/2,free_table/2,
@@ -100,7 +100,9 @@ init_tables(St0) ->
     St2 = St1#luerl{ftab=?MAKE_TABLE(),ffree=[],fnext=0},
     %% Initialise the userdata handling.
     St3 = St2#luerl{utab=?MAKE_TABLE(),ufree=[],unext=0},
-    St3.
+    %% Initialise the function def handling.
+    St4 = St3#luerl{fntab=?MAKE_TABLE(),fnfree=[],fnnext=0},
+    St4.
 
 load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
@@ -141,6 +143,25 @@ alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[N|Ns]}=St) ->
 alloc_frame(Fr, #luerl{ftab=Ft0,ffree=[],fnext=N}=St) ->
     Ft1 = ?SET_TABLE(N, Fr, Ft0),
     {#fref{i=N},St#luerl{ftab=Ft1,fnext=N+1}}.
+
+%% alloc_funcdef(Def, State) -> {FnRef,State}.
+%% set_funcdef(Fnref, Fdef, State) -> State.
+%% get_funcdef(Fnref, State) -> {Fdef,State}.
+
+alloc_funcdef(Func, #luerl{fntab=Ft0,fnfree=[N|Ns]}=St) ->
+    Ft1 = ?SET_TABLE(N, Func, Ft0),
+    {#fnref{i=N},St#luerl{fntab=Ft1,fnfree=Ns}};
+alloc_funcdef(Func, #luerl{fntab=Ft0,fnfree=[],fnnext=N}=St) ->
+    Ft1 = ?SET_TABLE(N, Func, Ft0),
+    {#fnref{i=N},St#luerl{fntab=Ft1,fnnext=N+1}}.
+
+set_funcdef(#fnref{i=N}, Func, #luerl{fntab=Ft0}=St) ->
+    Ft1 = ?SET_TABLE(N, Func, Ft0),
+    St#luerl{fntab=Ft1}.
+
+get_funcdef(#fnref{i=N}, #luerl{fntab=Ft}=St) ->
+    Fdef = ?GET_TABLE(N, Ft),
+    {Fdef,St}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -323,6 +344,7 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 	Meth ->				%Recurse down the metatable
 	    get_table_key(Meth, Key, St)
     end.
+
 %% alloc_userdata(Data, State) -> {Uref,State}.
 %% alloc_userdata(Data, Meta, State) -> {Uref,State}.
 %% set_userdata(Uref, UserData, State) -> State.
@@ -406,30 +428,42 @@ get_global_var(Var, #luerl{g=G}=St) ->
 
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
 %% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
-%%  Load a chunk from the compiler.
+%%  Load a chunk from the compiler which a compilefunction definition
+%%  instructions returning a callable function. Currently it does
+%%  nothing with the state.
 
 load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-load_chunk(#code{code=Code}, Env, St) ->
-    load_function(Code, Env, St).
+load_chunk(#code{code=[Code]}, Env, St0) ->
+    {?PUSH_FDEF(Fnref),St1} = load_chunk_i(Code, St0),
+    {Fdef0,St2} = get_funcdef(Fnref, St1),
+    Fdef1 = Fdef0#lua_func{env=Env},
+    St3 = set_funcdef(Fnref, Fdef1, St2),
+    {Fnref,St3}.
 
-%% load_function(FunctionDefCode, State) -> {Function,State}.
-%% load_function(FunctionDefCode, Env, State) -> {Function,State}.
-%%  Load a compilefunction definition instructions returning a callable
-%%  function. Currently it does nothing with the state.
+    %% [?PUSH_FDEF(Anno, Lsz, Esz, Pars, Is)] = Code,
+    %% do_fdef(Anno, Lsz, Esz, Pars, Is, Env, St).
 
-load_function(F, St) -> load_function(F, [], St).
+load_chunk_is([I0|Is0], St0) ->
+    {I1,St1} = load_chunk_i(I0, St0),
+    {Is1,St2} = load_chunk_is(Is0, St1),
+    {[I1|Is1],St2};
+load_chunk_is([], St) -> {[],St}.
 
-load_function([?PUSH_FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
-    do_fdef(Lsz, Esz, Pars, Is, Env, St).
+load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), St0) ->
+    {B1,St1} = load_chunk_is(B0, St0),
+    Fdef = #lua_func{anno=Anno,lsz=Lsz,esz=Esz,pars=Pars,b=B1},
+    {Fnref,St2} = alloc_funcdef(Fdef, St1),
+    {?PUSH_FDEF(Fnref),St2};
+load_chunk_i(I, St) -> {I,St}.
 
 %% call(Function, State) -> {Return,State}.
 %% call(Function, Args, State) -> {Return,State}.
 
 call(Func, St) -> call(Func, [], St).
 
-call(#lua_func{}=Func, Args, St0) ->		%Already defined
-    {Ret,St1} = functioncall(Func, Args, St0),
+call(#fnref{}=Fnref, Args, St0) ->		%Already defined
+    {Ret,St1} = functioncall(Fnref, Args, St0),
     %% Should do GC here.
     {Ret,St1};
 call(#erl_func{}=Func, Args, St0) ->		%Internal erlang function
@@ -454,7 +488,8 @@ emul(Is, St) ->
 emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("I: ~p\n", [I]),
-		   io:fwrite("~p\n", [{Lvs,Env}]),
+		   io:fwrite("Lvs: ~p\n", [Lvs]),
+		   io:fwrite("Env: ~p\n", [Env]),
 		   io:fwrite("St: "),
 		   stack_print(Stk)
 	       end),
@@ -462,7 +497,8 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("I: []\n"),
-		   io:fwrite("~p\n", [{Lvs,Env}]),
+		   io:fwrite("Lvs: ~p\n", [Lvs]),
+		   io:fwrite("Env: ~p\n", [Env]),
 		   io:fwrite("St: "),
 		   stack_print(Stk)
 	       end),
@@ -558,9 +594,15 @@ emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
     do_op1(Is, Lvs, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
     do_op2(Is, Lvs, Stk, Env, St, Op);
-emul_1([?PUSH_FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
-    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
-    emul(Is, Lvs, [Func|Stk], Env, St1);
+%% emul_1([?PUSH_FDEF(Anno, Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
+%%     {Func,St1} = do_fdef(Anno, Lsz, Esz, Pars, Fis, Env, St0),
+%%     emul(Is, Lvs, [Func|Stk], Env, St1);
+emul_1([?PUSH_FDEF(Fnref)|Is], Lvs, Stk, Env, St0) ->
+    %% Update the env field of the function definition.
+    {Fdef0,_} = get_funcdef(Fnref, St0),
+    Fdef1 = Fdef0#lua_func{env=Env},
+    St1 = set_funcdef(Fnref, Fdef1, St0),
+    emul(Is, Lvs, [Fnref|Stk], Env, St1);
 %% Control instructions.
 emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
@@ -742,10 +784,11 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{error,E} -> lua_error(E, St)
     end.
 
-%% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
+%% do_fdef(Anno, LocalSize, EnvSize, Pars, Instrs, Env, State) ->
+%%     {Function,State}.
 
-do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
-    {#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
+do_fdef(Anno, Lsz, Esz, Pars, Is, Env, St) ->
+    {#lua_func{anno=Anno,lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
@@ -851,6 +894,9 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
+functioncall(#fnref{}=Fnref, Args, Stk, St0) ->
+    {Func,St1} = get_funcdef(Fnref, St0),
+    functioncall(Func, Args, Stk, St1);
 functioncall(#lua_func{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
     functioncall(Fis, [], Stk, Env, St0);
@@ -1459,7 +1505,7 @@ mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU) ->
     end;
 mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU) ->
     mark(Todo, [Env|More], GcT, GcF, GcU);
-%% Catch these as they would match table key-value pair.
+%% Specifically catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcF, GcU) ->
     mark(Todo, More, GcT, GcF, GcU);
 mark([#thread{}|Todo], More, GcT, GcF, GcU) ->

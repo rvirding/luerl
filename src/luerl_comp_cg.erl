@@ -384,10 +384,10 @@ prefixexp_element(#mcall{m=#lit{v=K},as=As}, S, St0) ->
 %% functiondef(Func, State) -> {Func,State}.
 %%  This will return a single value which we leave on the stack.
 
-functiondef(#fdef{ps=Ps0,ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
+functiondef(#fdef{l=Anno,ps=Ps0,ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     Ps1 = func_pars(Ps0),
     {Iss,St1} = stmts(Ss, St0),
-    {[?PUSH_FDEF(Lsz,Esz,Ps1,Iss)],St1}.
+    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss)],St1}.
 
 func_pars([#evar{n= <<"...">>,i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n= <<"...">>,i=I}]) -> I;

@@ -338,6 +338,8 @@ decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
 decode(#uref{i=N}, St, _) ->
     decode_userdata(N, St);
+decode(#fnref{i=N}, St, _) ->
+    decode_funcdef(N, St);
 decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(#lua_func{}=Fun, State, _) ->
     F = fun(Args) ->
@@ -367,3 +369,6 @@ decode_table(N, St, In0) ->
 decode_userdata(N, St) ->
     #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
     {userdata,Data}.
+
+decode_funcdef(N, _St) ->
+    {lua_func}.

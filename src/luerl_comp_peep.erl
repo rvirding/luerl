@@ -61,9 +61,9 @@ instrs([?POP,?POP|Is], St) ->
     instrs([?POP2|Is], St);
 
 %% Doing sub instructions.
-instrs([?PUSH_FDEF(Lsz,Esz,Pars,Fis0)|Is], St) ->
+instrs([?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
-    [?PUSH_FDEF(Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
+    [?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
 instrs([?BLOCK(0,0,Bis)|Is], St) ->		%No need for block
     instrs(Bis ++ Is, St);
 instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->

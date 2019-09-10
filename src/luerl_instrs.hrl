@@ -45,7 +45,9 @@
 -define(MCALL(M, Ac), {mcall,M,Ac}).
 -define(TAIL_MCALL(M, Ac), {tail_mcall,M,Ac}).
 -define(OP(Op,Ac), {op,Op,Ac}).
--define(PUSH_FDEF(Lsz, Esz, Pars, Is), {push_fdef,Lsz,Esz,Pars,Is}).
+-define(PUSH_FDEF(Anno, Lsz, Esz, Pars, Is),
+	{push_fdef,Anno,Lsz,Esz,Pars,Is}).
+-define(PUSH_FDEF(FnRef), {push_fdef,FnRef}).
 
 %% Control instructions.
 
