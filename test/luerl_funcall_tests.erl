@@ -22,7 +22,6 @@
 -include_lib("eunit/include/eunit.hrl").
 
 simple_lua_func_test() ->
-  luerl:log_to_file("simple lua func test"),
 
   State = luerl:init(),
   {_, State2} = luerl:do(<<"function test() return 42 + 1 end">>, State),

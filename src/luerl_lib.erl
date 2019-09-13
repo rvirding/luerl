@@ -45,7 +45,10 @@
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
 
-% lua_error(E, St) -> error({lua_error,E,St}).
+% old Luerl error handling:
+%lua_error(E, St) -> error({lua_error,E,St}).
+
+% Display the concrete file/linenumber in error message
 lua_error(Error, St) ->
 	luerl:log_to_file("lua_error: ~p", [Error]),
 	case get(info_last_executed_token) of

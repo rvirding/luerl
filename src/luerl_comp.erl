@@ -81,16 +81,10 @@ string(Str) -> string(Str, [verbose,report]).
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
-	luerl:log_to_file("STRING: ~p", [Str]),
     St0 = #comp{opts=Opts,code=Str},
-	luerl:log_to_file("STRING: A"),
     St1 = filenames("-no-file-but-string", St0),
-	luerl:log_to_file("STRING: B"),
     CompileResult = compile(list_passes(), St1),
-
-	luerl:log_to_file("STRING: C"),
-
-	CompileResult.
+		CompileResult.
 
 
 
@@ -144,12 +138,10 @@ forms_passes() ->				%Doing the forms
 %%  {done,PrintFun,Ext}
 
 do_passes([{do,Fun}|Ps], St0) ->
-	luerl:log_to_file("DO PASSES"),
 	RET = case Fun(St0) of
-	{ok,St1} -> do_passes(Ps, St1); 
-	{error,St1} -> {error,St1}
+		{ok,St1} -> do_passes(Ps, St1);
+		{error,St1} -> {error,St1}
     end,
-   luerl:log_to_file("DO PASSES RETURN VAL : ~p", [RET]),
     RET;
 do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
     case member(Flag, St#comp.opts) of
@@ -252,7 +244,6 @@ do_scan(#comp{code=Str,opts=Opts}=St) ->
 
 do_parse(#comp{code=Tokens,opts=Opts}=St) ->
 
-	luerl:log_to_file("CHUNK TOKEN: ~p ", [Tokens]),
 	% here I have a yeccpars err msg so I cheat:
   % yeccpars 1a token: {local,#{linenum => 1,original_token_description => local,
 	% source_file => "No File Source, Scanned Lua code",
@@ -305,16 +296,13 @@ do_comp_env(St) ->
 	Res.
 
 do_code_gen(St) ->
-	luerl:log_to_file("CODE GEN"),
   ListOfInstructions = luerl_comp_cg:chunk(St#comp.code, St#comp.opts),
-	luerl:log_to_file("CODE GEN LIST: ~p ", [ListOfInstructions]),
 
 	Res = case ListOfInstructions of
          {ok,C1} -> {ok,St#comp{code=C1}};
          {ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
          {error,Es} -> {error,St#comp{errors=Es}}
         end,
-	luerl:log_to_file("CODE GEN RES: ~p ", [Res]),
 	Res.
 
 do_peep_op(St) ->

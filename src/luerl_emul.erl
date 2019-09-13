@@ -474,7 +474,7 @@ stack_print([]) -> io:nl().
 
 coverage(#info_structure{ source_file=File,
             linenum=LineNum,
-            token_position_in_line= StatementPositionInLine,
+            token_position_in_line=StatementPositionInLine,
             original_token_description=OriginalTokenDescription,
             internal_statement=InternalStatement } = Info,
          State % To Save with executed Instructions to get variables during debugging
@@ -501,11 +501,14 @@ coverage(#info_structure{ source_file=File,
       %% LOG TO FILE: DEBUGGING, you can follow the process of LUA PROGRAM WITH THIS LOG
       ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
       % File has to be the last because if Lua code comes from string, there is no filename but only a long string
-      luerl:log_to_file("coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
-        [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]),
+%      luerl:log_to_file("coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
+%        [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]),
 
       % Save statements for every executed command to get local/global variables if you want to debug
-      luerl:log_to_file(StateFile, "~p", [State])
+      %%%%% TURN ON/OFF when you need it: %%
+      % luerl:log_to_file(StateFile, "~p", [State])
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+      ok
   end,
 
   % ETS STATISTICS ABOUT COVERAGE
