@@ -524,8 +524,9 @@ coverage(#info_structure{ source_file=File,
   % coverageTable = coverage_records(coverageStatTableRef, KeyFirst),
   % luerl:log_to_file("pid: ~p COVERAGE TABLE CONTENT: ~n~p", [self(), coverageTable]),
 
-
+  LuaMap = element(2, State),
   %% TODO:  I WANT TO INSERT EXECUTING INFO INTO STATE's second element, into the MAP as a key=>LIST
+  %% todo: modify LuaMap, Then take it back into the orig tuple
   State;
 coverage(NotInfoStructure, State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
   State. % I don't want to log them now
