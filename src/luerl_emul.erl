@@ -524,225 +524,227 @@ coverage(#info_structure{ source_file=File,
   % coverageTable = coverage_records(coverageStatTableRef, KeyFirst),
   % luerl:log_to_file("pid: ~p COVERAGE TABLE CONTENT: ~n~p", [self(), coverageTable]),
 
-  ok;
-coverage(NotInfoStructure, _State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
-  ok. % I don't want to log them now
+
+  %% TODO:  I WANT TO INSERT EXECUTING INFO INTO STATE's second element, into the MAP as a key=>LIST
+  State;
+coverage(NotInfoStructure, State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
+  State. % I don't want to log them now
   %luerl:log_to_file("coverage not info structure: ~p", [NotInfoStructure]).
 
 %% Expression instructions.
 emul_1([?PUSH_LIT_INFO(L)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    emul(Is, Lvs, [L|Stk], Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [L|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_LVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     Val = get_local_var(D, I, Lvs),
-    emul(Is, Lvs, [Val|Stk], Env, St);
+    emul(Is, Lvs, [Val|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_EVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
-    Val = get_env_var(D, I, Env, St),
-    emul(Is, Lvs, [Val|Stk], Env, St);
+    Val = get_env_var(D, I, Env, StWithCoverInfo),
+    emul(Is, Lvs, [Val|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_GVAR_INFO(K)|Is], Lvs, Stk, Env, St0) ->
-    coverage(Info, St0),
-    {Val,St1} = get_global_var(K, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_global_var(K, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 
 emul_1([?PUSH_LAST_LIT_INFO(L)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    emul(Is, Lvs, [[L]|Stk], Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [[L]|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_LAST_LVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     Val = get_local_var(D, I, Lvs),
-    emul(Is, Lvs, [[Val]|Stk], Env, St);
+    emul(Is, Lvs, [[Val]|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_LAST_EVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
-    Val = get_env_var(D, I, Env, St),
-    emul(Is, Lvs, [[Val]|Stk], Env, St);
+    Val = get_env_var(D, I, Env, StWithCoverInfo),
+    emul(Is, Lvs, [[Val]|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_LAST_GVAR_INFO(K)|Is], Lvs, Stk, Env, St0) ->
-    coverage(Info, St0),
-    {Val,St1} = get_global_var(K, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_global_var(K, StWithCoverInfo),
     emul(Is, Lvs, [[Val]|Stk], Env, St1);
 emul_1([?STORE_LVAR_INFO(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
-    coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     Lvs1 = set_local_var(D, I, V, Lvs0),
-    emul(Is, Lvs1, Stk, Env, St);
+    emul(Is, Lvs1, Stk, Env, StWithCoverInfo);
 emul_1([?STORE_EVAR_INFO(D, I)|Is], Lvs, [V|Stk], Env, St0) ->
-    coverage(Info, St0),
-    St1 = set_env_var(D, I, V, Env, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_env_var(D, I, V, Env, StWithCoverInfo),
     emul(Is, Lvs, Stk, Env, St1);
 emul_1([?STORE_GVAR_INFO(K)|Is], Lvs, [V|Stk], Env, St0) ->
-    coverage(Info, St0),
-    St1 = set_global_var(K, V, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_global_var(K, V, StWithCoverInfo),
     emul(Is, Lvs, Stk, Env, St1);
 
 emul_1([?GET_KEY_INFO|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
-    coverage(Info, St0),
-    {Val,St1} = get_table_key(Tab, Key, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_table_key(Tab, Key, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 emul_1([?GET_LIT_KEY_INFO(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
-    coverage(Info, St0),
+    StWithCoverInfo=coverage(Info, St0),
     %% [?PUSH_LIT_INFO_EMPTY(K),?GET_KEY_INFO_EMPTY]
-    {Val,St1} = get_table_key(Tab, K, St0),
+    {Val,St1} = get_table_key(Tab, K, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 emul_1([?SET_KEY_INFO|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
-    coverage(Info, St0),
-    St1 = set_table_key(Tab, Key, Val, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_table_key(Tab, Key, Val, StWithCoverInfo),
     emul_1(Is, Lvs, Stk, Env, St1);
 emul_1([?SET_LIT_KEY_INFO(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
-    coverage(Info, St0),
+    StWithCoverInfo=coverage(Info, St0),
     %% [?PUSH_LIT_INFO_EMPTY(K),?SET_KEY_INFO_EMPTY]
-    St1 = set_table_key(Tab, Key, Val, St0),
+    St1 = set_table_key(Tab, Key, Val, StWithCoverInfo),
     emul_1(Is, Lvs, Stk, Env, St1);
 
 emul_1([?SINGLE_INFO|Is], Lvs, [Val|Stk], Env, St) ->
-    coverage(Info, St),
-    emul(Is, Lvs, [first_value(Val)|Stk], Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [first_value(Val)|Stk], Env, StWithCoverInfo);
 emul_1([?MULTIPLE_INFO|Is], Lvs, [Val|Stk], Env, St) ->
-    coverage(Info, St),
-    emul(Is, Lvs, [multiple_value(Val)|Stk], Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [multiple_value(Val)|Stk], Env, StWithCoverInfo);
 
 emul_1([?BUILD_TAB_INFO(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
-    coverage(Info, St0),
-    {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, StWithCoverInfo),
     emul(Is, Lvs, [Tab|Stk1], Env, St1);
 
 emul_1([?FCALL_INFO(0)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_fcall_0(Is, Lvs, Stk, Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_0(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?FCALL_INFO(1)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_fcall_1(Is, Lvs, Stk, Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_1(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?FCALL_INFO(2)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_fcall_2(Is, Lvs, Stk, Env, St);
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_2(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?FCALL_INFO(Ac)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_fcall(Is, Lvs, Stk, Env, St, Ac);
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall(Is, Lvs, Stk, Env, StWithCoverInfo, Ac);
 
 emul_1([?TAIL_FCALL_INFO(Ac)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_tail_fcall(Is, Lvs, Stk, Env, St, Ac);
+    StWithCoverInfo=coverage(Info, St),
+    do_tail_fcall(Is, Lvs, Stk, Env, StWithCoverInfo, Ac);
 
 emul_1([?MCALL_INFO(K, 0)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_mcall_0(Is, Lvs, Stk, Env, St, K);
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_0(Is, Lvs, Stk, Env, StWithCoverInfo, K);
 emul_1([?MCALL_INFO(K, 1)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_mcall_1(Is, Lvs, Stk, Env, St, K);
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_1(Is, Lvs, Stk, Env, StWithCoverInfo, K);
 emul_1([?MCALL_INFO(K, 2)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_mcall_2(Is, Lvs, Stk, Env, St, K);
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_2(Is, Lvs, Stk, Env, StWithCoverInfo, K);
 emul_1([?MCALL_INFO(K, Ac)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_mcall(Is, Lvs, Stk, Env, St, K, Ac);
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall(Is, Lvs, Stk, Env, StWithCoverInfo, K, Ac);
 
 emul_1([?OP_INFO(Op,1)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_op1(Is, Lvs, Stk, Env, St, Op);
+    StWithCoverInfo=coverage(Info, St),
+    do_op1(Is, Lvs, Stk, Env, StWithCoverInfo, Op);
 emul_1([?OP_INFO(Op,2)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_op2(Is, Lvs, Stk, Env, St, Op);
+    StWithCoverInfo=coverage(Info, St),
+    do_op2(Is, Lvs, Stk, Env, StWithCoverInfo, Op);
 
 emul_1([?PUSH_FDEF_INFO(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
-    coverage(Info, St0),
-    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
+    StWithCoverInfo=coverage(Info, St0),
+    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, StWithCoverInfo),
     emul(Is, Lvs, [Func|Stk], Env, St1);
 
 emul_1([?BLOCK_INFO(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
-    coverage(Info, St0),
-    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
+    StWithCoverInfo=coverage(Info, St0),
+    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, StWithCoverInfo, Lsz, Esz),
     emul(Is, Lvs1, Stk1, Env1, St1);
 
 emul_1([?WHILE_INFO(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_while(Is, Lvs, Stk, Env, St, Eis, Wis);
+    StWithCoverInfo=coverage(Info, St),
+    do_while(Is, Lvs, Stk, Env, StWithCoverInfo, Eis, Wis);
 emul_1([?REPEAT_INFO(Ris)|Is], Lvs, Stk, Env, St) ->
-    coverage(Info, St),
-    do_repeat(Is, Lvs, Stk, Env, St, Ris);
+    StWithCoverInfo=coverage(Info, St),
+    do_repeat(Is, Lvs, Stk, Env, StWithCoverInfo, Ris);
 emul_1([?AND_THEN_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
-    coverage(Info, St0),
+    StWithCoverInfo=coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
 	true ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
+	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
 	    emul(Is, Lvs1, Stk2, Env1, St1);
 	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
+	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
 emul_1([?OR_ELSE_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
-  coverage(Info, St0),
+  StWithCoverInfo=coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
 	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
+	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
 	false ->
-    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
+    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
 	    emul(Is, Lvs1, Stk2, Env1, St1)
     end;
 emul_1([?IF_TRUE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-  coverage(Info, St0),
+  StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
 	true ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
+	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
 	    emul(Is, Lvs1, Stk1, Env1, St1);
 	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
+	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
 emul_1([?IF_FALSE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-  coverage(Info, St0),
+  StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
 	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
+	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
 	false ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
+	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
 	    emul(Is, Lvs1, Stk1, Env1, St1)
     end;
 emul_1([?IF_INFO(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
-  coverage(Info, St0),
-    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, St0, True, False),
+    StWithCoverInfo=coverage(Info, St0),
+    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, StWithCoverInfo, True, False),
     emul(Is, Lvs1, Stk1, Env1, St1);
 emul_1([?NFOR_INFO(V, Fis)|Is], Lvs, Stk, Env, St) ->
-  coverage(Info, St),
-    do_numfor(Is, Lvs, Stk, Env, St, V, Fis);
+    StWithCoverInfo=coverage(Info, St),
+    do_numfor(Is, Lvs, Stk, Env, StWithCoverInfo, V, Fis);
 emul_1([?GFOR_INFO(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
-  coverage(Info, St),
-    do_genfor(Is, Lvs, Stk, Env, St, Vs, Fis);
+    StWithCoverInfo=coverage(Info, St),
+    do_genfor(Is, Lvs, Stk, Env, StWithCoverInfo, Vs, Fis);
 emul_1([?BREAK_INFO|_], Lvs, Stk, Env, St) ->
-  coverage(Info, St),
-    throw({break,St#luerl.tag,Lvs,Stk,Env,St});
+  StWithCoverInfo=coverage(Info, St),
+    throw({break,St#luerl.tag,Lvs,Stk,Env,StWithCoverInfo});
 emul_1([?RETURN_INFO(0)|_], _, _, _, St) ->
-  coverage(Info, St),
-    throw({return,St#luerl.tag,[],St});
+  StWithCoverInfo=coverage(Info, St),
+    throw({return,St#luerl.tag,[],StWithCoverInfo});
 emul_1([?RETURN_INFO(Ac)|_], _, Stk, _, St) ->
-  coverage(Info, St),
+  StWithCoverInfo=coverage(Info, St),
     {Ret,_} = pop_vals(Ac, Stk),
-    throw({return,St#luerl.tag,Ret,St});
+    throw({return,St#luerl.tag,Ret,StWithCoverInfo});
 %% Stack instructions
 emul_1([?POP_INFO|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
-  coverage(Info, St),
-    emul(Is, Lvs, Stk, Env, St);
+  StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?POP2_INFO|Is], Lvs, [_,_|Stk], Env, St) ->	%Just pop top 2 off stack
-  coverage(Info, St),
-    emul(Is, Lvs, Stk, Env, St);
+  StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?SWAP_INFO|Is], Lvs, [S1,S2|Stk], Env, St) ->
-  coverage(Info, St),
-    emul(Is, Lvs, [S2,S1|Stk], Env, St);
+  StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [S2,S1|Stk], Env, StWithCoverInfo);
 emul_1([?DUP_INFO|Is], Lvs, [V|_]=Stk, Env, St) ->
-  coverage(Info, St),
-    emul_1(Is, Lvs, [V|Stk], Env, St);
+  StWithCoverInfo=coverage(Info, St),
+    emul_1(Is, Lvs, [V|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_VALS_INFO(Vc)|Is], Lvs, [Vals|Stk0], Env, St) ->
-  coverage(Info, St),
+  StWithCoverInfo=coverage(Info, St),
     %% Pop list off the stack and push Vc vals from it.
     Stk1 = push_vals(Vc, Vals, Stk0),
-    emul(Is, Lvs, Stk1, Env, St);
+    emul(Is, Lvs, Stk1, Env, StWithCoverInfo);
 emul_1([?POP_VALS_INFO(Vc)|Is], Lvs, Stk0, Env, St) ->
-  coverage(Info, St),
+  StWithCoverInfo=coverage(Info, St),
     %% Pop Vc vals off the stack, put in a list and push.
     {Vals,Stk1} = pop_vals(Vc, Stk0),
-    emul(Is, Lvs, [Vals|Stk1], Env, St);
+    emul(Is, Lvs, [Vals|Stk1], Env, StWithCoverInfo);
 
 
 
