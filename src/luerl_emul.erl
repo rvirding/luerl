@@ -434,28 +434,64 @@ get_global_var(Var, #luerl{g=G}=St) ->
 
 load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-load_chunk(#code{code=[Code]}, Env, St0) ->
-    {?PUSH_FDEF(Fnref),St1} = load_chunk_i(Code, St0),
-    {Fdef0,St2} = get_funcdef(Fnref, St1),
-    Fdef1 = Fdef0#lua_func{env=Env},
-    St3 = set_funcdef(Fnref, Fdef1, St2),
-    {Fnref,St3}.
+load_chunk(#code{code=[Code]}, [], St0) ->
+    {?PUSH_FDEF(Fnref),_,St1} = load_chunk_i(Code, [], St0),
+    {Fnref,St1}.
 
-    %% [?PUSH_FDEF(Anno, Lsz, Esz, Pars, Is)] = Code,
-    %% do_fdef(Anno, Lsz, Esz, Pars, Is, Env, St).
+%% load_chunk_i(Instr, FuncRefs, Status) -> {Instr,FuncRefs,State}.
+%% load_chunk_is(Instrs, FuncRefs, Status) -> {Instrs,FuncRefs,State}.
+%%  Load chunk instructions. We keep track of the functions refs and
+%%  save the ones directly accessed in each function. This will make
+%%  gc easier as we will not have to step through the function code at
+%%  gc time.
 
-load_chunk_is([I0|Is0], St0) ->
-    {I1,St1} = load_chunk_i(I0, St0),
-    {Is1,St2} = load_chunk_is(Is0, St1),
-    {[I1|Is1],St2};
-load_chunk_is([], St) -> {[],St}.
+load_chunk_is([I0|Is0], Fnrs0, St0) ->
+    {I1,Fnrs1,St1} = load_chunk_i(I0, Fnrs0, St0),
+    {Is1,Fnrs2,St2} = load_chunk_is(Is0, Fnrs1, St1),
+    {[I1|Is1],Fnrs2,St2};
+load_chunk_is([], Fnrs, St) -> {[],Fnrs,St}.
 
-load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), St0) ->
-    {B1,St1} = load_chunk_is(B0, St0),
-    Fdef = #lua_func{anno=Anno,lsz=Lsz,esz=Esz,pars=Pars,b=B1},
+%% First the instructions with nested code.
+load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), Fnrs0, St0) ->
+    {B1,Fnrs,St1} = load_chunk_is(B0, [], St0),
+    Fdef = #lua_func{anno=Anno,fnrefs=Fnrs,lsz=Lsz,esz=Esz,pars=Pars,env=[],b=B1},
     {Fnref,St2} = alloc_funcdef(Fdef, St1),
-    {?PUSH_FDEF(Fnref),St2};
-load_chunk_i(I, St) -> {I,St}.
+    Fnrs1 = ordsets:add_element(Fnref, Fnrs0),
+    {?PUSH_FDEF(Fnref),Fnrs1,St2};
+load_chunk_i(?BLOCK(Lsz, Esz, B0), Fnrs0, St0) ->
+    {B1,Fnrs1,St1} = load_chunk_is(B0, Fnrs0, St0),
+    {?BLOCK(Lsz, Esz, B1),Fnrs1,St1};
+load_chunk_i(?REPEAT(B0), Fnrs0, St0) ->
+    {B1,Fnrs1,St1} = load_chunk_is(B0, Fnrs0, St0),
+    {?REPEAT(B1),Fnrs1,St1};
+load_chunk_i(?WHILE(E0, B0), Fnrs0, St0) ->
+    {E1,Fnrs1,St1} = load_chunk_is(E0, Fnrs0, St0),
+    {B1,Fnrs2,St2} = load_chunk_is(B0, Fnrs1, St1),
+    {?WHILE(E1, B1),Fnrs2,St2};
+load_chunk_i(?AND_THEN(T0), Fnrs0, St0) ->
+    {T1,Fnrs1,St1} = load_chunk_is(T0, Fnrs0, St0),
+    {?AND_THEN(T1),Fnrs1,St1};
+load_chunk_i(?OR_ELSE(T0), Fnrs0, St0) ->
+    {T1,Fnrs1,St1} = load_chunk_is(T0, Fnrs0, St0),
+    {?OR_ELSE(T1),Fnrs1,St1};
+load_chunk_i(?IF_TRUE(T0), Fnrs0, St0) ->
+    {T1,Fnrs1,St1} = load_chunk_is(T0, Fnrs0, St0),
+    {?IF_TRUE(T1),Fnrs1,St1};
+load_chunk_i(?IF_FALSE(T0), Fnrs0, St0) ->
+    {T1,Fnrs1,St1} = load_chunk_is(T0, Fnrs0, St0),
+    {?IF_FALSE(T1),Fnrs1,St1};
+load_chunk_i(?IF(T0, F0), Fnrs0, St0) ->
+    {T1,Fnrs1,St1} = load_chunk_is(T0, Fnrs0, St0),
+    {F1,Fnrs2,St2} = load_chunk_is(F0, Fnrs1, St1),
+    {?IF(T1, F1),Fnrs2,St2};
+load_chunk_i(?NFOR(V, B0), Fnrs0, St0) ->
+    {B1,Fnrs1,St1} = load_chunk_is(B0, Fnrs0, St0),
+    {?NFOR(V, B1),Fnrs1,St1};
+load_chunk_i(?GFOR(Vs, B0), Fnrs0, St0) ->
+    {B1,Fnrs1,St1} = load_chunk_is(B0, Fnrs0, St0),
+    {?GFOR(Vs, B1),Fnrs1,St1};
+%% Then the rest which we don't have to worry about.
+load_chunk_i(I, Fnrs, St) -> {I,Fnrs,St}.
 
 %% call(Function, State) -> {Return,State}.
 %% call(Function, Args, State) -> {Return,State}.
@@ -481,6 +517,8 @@ itrace_print(Format, Args) ->
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
+%%  The cost of checking the itrace process variable is very slight
+%%  compared to everythin else.
 
 emul(Is, St) ->
     emul(Is, {}, [], [], St).
@@ -594,15 +632,11 @@ emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
     do_op1(Is, Lvs, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
     do_op2(Is, Lvs, Stk, Env, St, Op);
-%% emul_1([?PUSH_FDEF(Anno, Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
-%%     {Func,St1} = do_fdef(Anno, Lsz, Esz, Pars, Fis, Env, St0),
-%%     emul(Is, Lvs, [Func|Stk], Env, St1);
 emul_1([?PUSH_FDEF(Fnref)|Is], Lvs, Stk, Env, St0) ->
-    %% Update the env field of the function definition.
-    {Fdef0,_} = get_funcdef(Fnref, St0),
-    Fdef1 = Fdef0#lua_func{env=Env},
-    St1 = set_funcdef(Fnref, Fdef1, St0),
-    emul(Is, Lvs, [Fnref|Stk], Env, St1);
+    %% Update the env field of the function reference with the current
+    %% environment.
+    Fnref1 = Fnref#fnref{env=Env},
+    emul(Is, Lvs, [Fnref1|Stk], Env, St0);
 %% Control instructions.
 emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
@@ -894,9 +928,10 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#fnref{}=Fnref, Args, Stk, St0) ->
+functioncall(#fnref{env=Env}=Fnref, Args, Stk, St0) ->
     {Func,St1} = get_funcdef(Fnref, St0),
-    functioncall(Func, Args, Stk, St1);
+    Func1 = Func#lua_func{env=Env},
+    functioncall(Func1, Args, Stk, St1);
 functioncall(#lua_func{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
     %% No variables at all.
     functioncall(Fis, [], Stk, Env, St0);
@@ -1069,11 +1104,11 @@ do_numfor(Is, Lvs, [Step,Limit,Init|Stk], Env, St, _, Fis) ->
 numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
     %% Leave the counter at the top of the stack for code to get.
     itrace_print("nl: ~p\n", [{N,Stk0}]),
-    if Step > 0.0, N =< Limit ->		%Keep going
+    if Step > 0, N =< Limit ->			%Keep going
 	    {Lvs1,Stk1,Env1,St1} =
 		emul(Fis, Lvs0, [N|Stk0], Env0, St0),
 	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
-       Step < 0.0, N >= Limit ->		%Keep going
+       Step < 0, N >= Limit ->			%Keep going
 	    {Lvs1,Stk1,Env1,St1} =
 		emul(Fis, Lvs0, [N|Stk0], Env0, St0),
 	    numfor_loop(N+Step, Limit, Step, Fis, Lvs1, Stk1, Env1, St1);
@@ -1172,7 +1207,7 @@ build_tab(Fc, I, [Last|Stk0], St0) ->
     {Tref,Stk1,St1}.
 
 build_tab_last(I, [V|Vs]) ->
-    [{I,V}|build_tab_last(I+1.0, Vs)];
+    [{I,V}|build_tab_last(I+1, Vs)];
 build_tab_last(_, []) -> [];
 build_tab_last(_, Last) -> error({boom,build_tab_acc,Last}).
 
@@ -1446,7 +1481,10 @@ multiple_value(V) -> [V].
 
 -record(gct, {t,s}).				%Gc table info table, seen
 
-gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,utab=Ut0,ufree=Uf0,
+gc(#luerl{ttab=Tt0,tfree=Tf0,
+	  ftab=Ft0,ffree=Ff0,
+	  utab=Ut0,ufree=Uf0,
+	  fntab=Fnt0,fnfree=Fnf0,
           g=G,stk=Stk,meta=Meta}=St) ->
     %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
@@ -1455,28 +1493,33 @@ gc(#luerl{ttab=Tt0,tfree=Tf0,ftab=Ft0,ffree=Ff0,utab=Ut0,ufree=Uf0,
     GcT = #gct{t=Tt0,s=[]},
     GcF = #gct{t=Ft0,s=[]},
     GcU = #gct{t=Ut0,s=[]},
-    {SeenT,SeenF,SeenU} = mark(Root, [], GcT, GcF, GcU),
+    GcFn = #gct{t=Fnt0,s=[]},
+    {SeenT,SeenF,SeenU,SeenFn} = mark(Root, [], GcT, GcF, GcU, GcFn),
     %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
     {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
     {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
-    St#luerl{ttab=Tt1,tfree=Tf1,ftab=Ft1,ffree=Ff1,utab=Ut1,ufree=Uf1}.
+    {Fnf1,Fnt1} = filter_funcdefs(SeenFn, Fnf0, Fnt0),
+    St#luerl{ttab=Tt1,tfree=Tf1,
+	     ftab=Ft1,ffree=Ff1,
+	     utab=Ut1,ufree=Uf1,
+	     fntab=Fnt1,fnfree=Fnf1}.
 
-%% mark(ToDo, MoreTodo, GcTabs, GcFrames, GcUserdata) ->
-%%     {SeenTabs,SeenFrames,SeenUserdata}.
+%% mark(ToDo, MoreTodo, GcTabs, GcFrames, GcUserdata, GcFuncdefs) ->
+%%     {SeenTabs,SeenFrames,SeenUserdata,SeenFuncdefs}.
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
-mark([{in_table,_}=_T|Todo], More, GcT, GcF, GcU) ->
+mark([{in_table,_}=_T|Todo], More, GcT, GcF, GcU, GcFn) ->
     %%io:format("gc: ~p\n", [_T]),
-    mark(Todo, More, GcT, GcF, GcU);
-mark([#tref{i=T}|Todo], More, #gct{s=St0,t=Tt}=GcT, GcF, GcU) ->
-    case ordsets:is_element(T, St0) of
+    mark(Todo, More, GcT, GcF, GcU, GcFn);
+mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcF, GcU, GcFn) ->
+    case ordsets:is_element(T, Ts0) of
 	true ->					%Already done
-	    mark(Todo, More, GcT, GcF, GcU);
+	    mark(Todo, More, GcT, GcF, GcU, GcFn);
 	false ->				%Mark it and add to todo
-	    St1 = ordsets:add_element(T, St0),
+	    Ts1 = ordsets:add_element(T, Ts0),
 	    #table{a=Arr,d=Dict,m=Meta} = ?GET_TABLE(T, Tt),
 	    %% Have to be careful where add Tab and Meta as Tab is
 	    %% [{Key,Val}], Arr is array and Meta is
@@ -1484,52 +1527,68 @@ mark([#tref{i=T}|Todo], More, #gct{s=St0,t=Tt}=GcT, GcF, GcU) ->
 	    Aes = array:sparse_to_list(Arr),
 	    Des = ttdict:to_list(Dict),
 	    mark([Meta|Todo], [[{in_table,T}],Des,Aes,[{in_table,-T}]|More],
-		 GcT#gct{s=St1}, GcF, GcU)
+		 GcT#gct{s=Ts1}, GcF, GcU, GcFn)
     end;
-mark([#fref{i=F}|Todo], More, GcT, #gct{s=Sf0,t=Ft}=GcF, GcU) ->
+mark([#fref{i=F}|Todo], More, GcT, #gct{s=Sf0,t=Ft}=GcF, GcU, GcFn) ->
     case ordsets:is_element(F, Sf0) of
 	true ->					%Already done
-	    mark(Todo, More, GcT, GcF, GcU);
+	    mark(Todo, More, GcT, GcF, GcU, GcFn);
 	false ->				%Mark it and add to todo
 	    Sf1 = ordsets:add_element(F, Sf0),
 	    Ses = tuple_to_list(?GET_TABLE(F, Ft)),
-	    mark(Todo, [Ses|More], GcT, GcF#gct{s=Sf1}, GcU)
+	    mark(Todo, [Ses|More], GcT, GcF#gct{s=Sf1}, GcU, GcFn)
     end;
-mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU) ->
+mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU, GcFn) ->
     case ordsets:is_element(U, Su0) of
        true ->                                 %Already done
-           mark(Todo, More, GcT, GcF, GcU);
+           mark(Todo, More, GcT, GcF, GcU, GcFn);
        false ->
            Su1 = ordsets:add_element(U, Su0),
-           mark(Todo, More, GcT, GcF, GcU#gct{s=Su1})
+           mark(Todo, More, GcT, GcF, GcU#gct{s=Su1}, GcFn)
     end;
-mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU) ->
-    mark(Todo, [Env|More], GcT, GcF, GcU);
+mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU, GcFn) ->
+    mark(Todo, [Env|More], GcT, GcF, GcU, GcFn);
+mark([#fnref{i=F}|ToDo], More, GcT, GcF, GcU,
+     #gct{t=Fnt0,s=Fns0}=GcFn) ->
+    case ordsets:is_element(F, Fns0) of
+	true ->
+	    mark(ToDo, More, GcT, GcF, GcU, GcFn);
+	false ->
+	    Fns1 = ordsets:add_element(F, Fns0),
+	    Fdef = ?GET_TABLE(F, Fnt0),
+	    Fnrefs = Fdef#lua_func.fnrefs,
+	    mark(ToDo, [Fnrefs|More], GcT, GcF, GcU, GcFn#gct{s=Fns1})
+    end;
 %% Specifically catch these as they would match table key-value pair.
-mark([#erl_func{}|Todo], More, GcT, GcF, GcU) ->
-    mark(Todo, More, GcT, GcF, GcU);
-mark([#thread{}|Todo], More, GcT, GcF, GcU) ->
-    mark(Todo, More, GcT, GcF, GcU);
-mark([#userdata{m=Meta}|Todo], More, GcT, GcF, GcU) ->
-    mark([Meta|Todo], More, GcT, GcF, GcU);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcF, GcU) ->
+mark([#erl_func{}|Todo], More, GcT, GcF, GcU, GcFn) ->
+    mark(Todo, More, GcT, GcF, GcU, GcFn);
+mark([#thread{}|Todo], More, GcT, GcF, GcU, GcFn) ->
+    mark(Todo, More, GcT, GcF, GcU, GcFn);
+mark([#userdata{m=Meta}|Todo], More, GcT, GcF, GcU, GcFn) ->
+    mark([Meta|Todo], More, GcT, GcF, GcU, GcFn);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcF, GcU, GcFn) ->
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
-    mark(Todo, More1, GcT, GcF, GcU);
-mark([{K,V}|Todo], More, GcT, GcF, GcU) ->	%Table key-value pair
+    mark(Todo, More1, GcT, GcF, GcU, GcFn);
+mark([{K,V}|Todo], More, GcT, GcF, GcU, GcFn) -> %Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
-    mark([K,V|Todo], More, GcT, GcF, GcU);
-mark([_|Todo], More, GcT, GcF, GcU) ->		%Can ignore everything else
-    mark(Todo, More, GcT, GcF, GcU);
-mark([], [M|More], GcT, GcF, GcU) ->
-    mark(M, More, GcT, GcF, GcU);
-mark([], [], #gct{s=St}, #gct{s=Sf}, #gct{s=Su}) -> {St,Sf,Su}.
+    mark([K,V|Todo], More, GcT, GcF, GcU, GcFn);
+mark([_|Todo], More, GcT, GcF, GcU, GcFn) ->
+    %% Can ignore everything else.
+    mark(Todo, More, GcT, GcF, GcU, GcFn);
+mark([], [M|More], GcT, GcF, GcU, GcFn) ->
+    mark(M, More, GcT, GcF, GcU, GcFn);
+mark([], [], #gct{s=St}, #gct{s=Sf}, #gct{s=Su}, #gct{s=Sfn}) ->
+    {St,Sf,Su,Sfn}.
 
 %% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
 %% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
-%%  Filter tables/frames and return updated free lists and
-%%  tables/frames.
+%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%%  Filter tables/frames/userdata/funcdefs and return updated free
+%%  lists and tables/frames.
 
 filter_tables(Seen, Tf0, Tt0) ->
+    %% Update the free list.
     Tf1 = ?FOLD_TABLES(fun (K, _, Free) ->
 			       case ordsets:is_element(K, Seen) of
 				   true -> Free;
@@ -1540,6 +1599,7 @@ filter_tables(Seen, Tf0, Tt0) ->
     {Tf1,Tt1}.
 
 filter_frames(Seen, Ff0, Ft0) ->
+    %% Update the free list.
     Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
 			       case ordsets:is_element(K, Seen) of
 				   true -> Free;
@@ -1548,22 +1608,6 @@ filter_frames(Seen, Ff0, Ft0) ->
 		       end, Ff0, Ft0),
     Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
     {Ff1,Ft1}.
-
-%% filter_frames(Seen, Ff0, Ft0) ->
-%%     %% Unfortunately there is no array:sparse_mapfoldl.
-%%     Ff1 = array:sparse_foldl(fun (F, _, Free) ->
-%% 				     case ordsets:is_element(F, Seen) of
-%% 					 true -> Free;
-%% 					 false -> [F|Free]
-%% 				     end
-%% 			     end, Ff0, Ft0),
-%%     Ft1 = array:sparse_map(fun (F, Fd) ->
-%% 				   case ordsets:is_element(F, Seen) of
-%% 				       true -> Fd;
-%% 				       false -> undefined
-%% 				   end
-%% 			   end, Ft0),
-%%     {Ff1,Ft1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->
     %% Update the free list.
@@ -1576,3 +1620,14 @@ filter_userdata(Seen, Uf0, Ut0) ->
     %% Reclaim free table slots.
     Ut1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ut0),
     {Uf1,Ut1}.
+
+filter_funcdefs(Seen, Fnf0, Fnt0) ->
+    %% Update the free list.
+    Fnf1 = ?FOLD_TABLES(fun (K, _, Free) ->
+				case ordsets:is_element(K, Seen) of
+				    true -> Free;
+				    false -> [K|Free]
+				end
+			end, Fnf0, Fnt0),
+    Fnt1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Fnt0),
+    {Fnf1,Fnt1}.

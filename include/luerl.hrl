@@ -21,9 +21,10 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
--record(luerl, {ttab,tfree,tnext,		%Table table, free, next
-		ftab,ffree,fnext,		%Frame table, free, next
+-record(luerl, {ttab,tfree,tnext,               %Table table, free, next
+                ftab,ffree,fnext,               %Frame table, free, next
                 utab,ufree,unext,               %Userdata table, free, next
+                fntab,fnfree,fnnext,            %Function table, free, next
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
@@ -33,9 +34,13 @@
 		tag				%Unique tag
 	       }).
 
+-record(ltab, {tab,free,next}).                 %Table structure.
+
 -record(heap, {ttab,tfree,tnext,
-	       ftab,ffree,fnext,
-               utab,ufree,unext}).
+               ftab,ffree,fnext,
+               utab,ufree,unext,
+               fntab,fnfree,fnnext,
+	       g}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
 %% -record(eenv, {env=[]}).			%Environment
@@ -56,11 +61,12 @@
 -record(userdata, {d,m=nil}).			%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 %% There are two function types, the Lua one, and the Erlang one.
+-record(fnref, {i}).				%Function reference
 -record(lua_func,{anno=[],
 		  lsz,				%Local var size
 		  esz,				%Env var size
 		  env,				%Environment
-		  pars,				%Parameters
+		  pars,				%Parameter types
 		  b}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
 
@@ -85,6 +91,7 @@
 -else.
 -define(TS_USE_ARRAY, true).
 -endif.
+%% -define(TS_USE_ARRAY, true).
 
 -ifdef(TS_USE_MAPS).
 -define(MAKE_TABLE(), maps:new()).
@@ -94,17 +101,6 @@
 -define(DEL_TABLE(N, Ts), maps:remove(N, Ts)).
 -define(FILTER_TABLES(Pred, Ts), maps:filter(Pred, Ts)).
 -define(FOLD_TABLES(Fun, Acc, Ts), maps:fold(Fun, Acc, Ts)).
--endif.
-
--ifdef(TS_USE_ORDDICT).
-%% Using orddict to handle tables.
--define(MAKE_TABLE(), orddict:new()).
--define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
--define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
--define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
--define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
--define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
--define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(TS_USE_ARRAY).
@@ -126,6 +122,17 @@
 		  array:sparse_map(___Fil, Ar)
 	  end)(array:default(Ar)))).
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
+-endif.
+
+-ifdef(TS_USE_ORDDICT).
+%% Using orddict to handle tables.
+-define(MAKE_TABLE(), orddict:new()).
+-define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
+-define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
+-define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
+-define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
+-define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
+-define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(TS_USE_PD).

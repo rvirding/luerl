@@ -338,16 +338,14 @@ decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
 decode(#uref{i=N}, St, _) ->
     decode_userdata(N, St);
-decode(#fnref{i=N}, St, _) ->
-    decode_funcdef(N, St);
-decode(#erl_func{code=Fun}, _, _) -> Fun;
-decode(#lua_func{}=Fun, State, _) ->
+decode(#fnref{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
 		decode_list(Ret, State2)
 	end,
     F;						%Just a bare fun
+decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->
@@ -369,6 +367,3 @@ decode_table(N, St, In0) ->
 decode_userdata(N, St) ->
     #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
     {userdata,Data}.
-
-decode_funcdef(N, _St) ->
-    {lua_func}.
