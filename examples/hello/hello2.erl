@@ -131,27 +131,27 @@ run() ->
 
     % separately parse, then execute
     {ok,Chunk11,_} = luerl:load("print(\"(31) Hello, \" .. a .. \"!\")", State06),
-    {ok,Chunk11,_} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>, State06),
-    luerl:eval(Chunk11,State06),
-    luerl:do(Chunk11,State06),
+    {ok,Chunk11,State07} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>, State06),
+    luerl:eval(Chunk11,State07),
+    luerl:do(Chunk11,State07),
 
     % separately parse, then execute a file. The file defines a function old()
-    {ok,Chunk12,St6} = luerl:loadfile("./hello2-8.lua", State06),
-    {ok,Result12} = luerl:eval(Chunk12, St6),
-    {Result12,State06A} = luerl:do(Chunk12,St6),
-    luerl:call_function([old],[],State06A),
+    {ok,Chunk12,St7} = luerl:loadfile("./hello2-8.lua", State07),
+    {ok,Result12} = luerl:eval(Chunk12, St7),
+    {Result12,State07A} = luerl:do(Chunk12,St7),
+    luerl:call_function([old],[],State07A),
 
     % separately parse, then execute, get a result
-    {ok,Chunk13,St7} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a", State06),
-    {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State06),
-    {ok,Result07} = luerl:eval(Chunk13, St7),
-    {Result07,State07} = luerl:do(Chunk13, St7),
+    {ok,Chunk13,St8} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a", State07),
+    {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State07),
+    {ok,Result07} = luerl:eval(Chunk13, St8),
+    {Result07,State08} = luerl:do(Chunk13, St8),
     io:format("(34) And again I said: ~s~n", [Result07]),
 
     % separately parse, then execute a file, get a result. The file defines confirm(p)
-    {ok,Chunk14,St8} = luerl:loadfile("./hello2-9.lua", State07),
-    {ok,Result14} = luerl:eval(Chunk14, St8),
-    {Result14,State14} = luerl:do(Chunk14, St8),
+    {ok,Chunk14,St9} = luerl:loadfile("./hello2-9.lua", State08),
+    {ok,Result14} = luerl:eval(Chunk14, St9),
+    {Result14,State14} = luerl:do(Chunk14, St9),
     io:format("(35) And twice: ~s~n", [Result14]),
     {Result14A,_} = luerl:call_function([confirm], [<<"Is it?">>], State14),
     io:format("(36) Well: ~s~n", [Result14A]),

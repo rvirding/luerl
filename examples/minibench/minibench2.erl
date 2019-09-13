@@ -30,9 +30,9 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Init state, and execute pre-parsed 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b'~n"),
     I2 = 10000,
-    {ok, Chunk2, _St2} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
+    {ok, Chunk2, State2} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     
-    {T2,_State21} = timer:tc(fun() -> do_loop(I2, Chunk2) end),
+    {T2,_State21} = timer:tc(fun() -> do_loop_state(I2, Chunk2, State2) end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b.~n", [T2,I2]),
     io:format("Per call: ~p microseconds.~n", [T2/I2]),
@@ -42,8 +42,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parse execute 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b', re-using same state~n"),
     I3 = 10000,
-    {ok, Chunk3, _St3} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
-    State3 = luerl:init(),
+    {ok, Chunk3, State3} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     
     {T3,_State31} = timer:tc(fun() -> do_loop_state(I3, Chunk3, State3) end),
 
@@ -66,8 +65,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Execute pre-parsed 'a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b', re-using state from last result~n"),
     I5 = 10000,
-    {ok, Chunk5, _St5} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
-    State5 = luerl:init(),
+    {ok, Chunk5, State5} = luerl:load("a = 7.33; b = 9000; c = (33 * a / b) ^ 15 * a + b; return c"),
     
     {T5,_State51} = timer:tc(fun() -> do_loop_chain(I5, Chunk5, State5) end),
 
@@ -122,11 +120,6 @@ run() ->
     done.
 
 % helper
-selffeed(State, Chunk, 0) -> State;
-selffeed(State, Chunk, I) -> 
-    {_,State1} = luerl:do(Chunk, State),
-    selffeed(State1, Chunk, I-1).
-
 do_loop(N, Chunk) when N > 0 ->
     luerl:do(Chunk),
     do_loop(N-1, Chunk);
