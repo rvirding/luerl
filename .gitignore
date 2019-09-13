@@ -8,7 +8,7 @@ _*
 *.swp
 *.swo
 .erlang.cookie
-ebin
+ebin/*.beam
 log
 erl_crash.dump
 .rebar
