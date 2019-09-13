@@ -20,7 +20,6 @@
 
 -include("luerl.hrl").
 -export([log_to_file/1, log_to_file/2, log_to_file/3, obj_to_string/1]).
--export([coverage_stat_table_ref__initialize_default_values/0]).
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
@@ -62,21 +61,17 @@ do(SBC) ->
     do(SBC, init()).
 
 do(S, St0) when is_binary(S); is_list(S) ->
-    coverage_stat_table_ref__initialize_default_values(),
     {ok,Func,St1} = load(S, St0),
     luerl_emul:call(Func, St1);
 do(Func, St) ->
-    coverage_stat_table_ref__initialize_default_values(),
     luerl_emul:call(Func, St).
 
 %% luerl:dofile(Path[, State]) -> {Result, NewState}.
 
 dofile(Path) ->
-    coverage_stat_table_ref__initialize_default_values(),
     dofile(Path, init()).
 
 dofile(Path, St0) ->
-  coverage_stat_table_ref__initialize_default_values(),
   {ok,Func,St1} = loadfile(Path, St0),
   {Result,State} = luerl_emul:call(Func, St1),
   {Result,State}.
@@ -387,21 +382,5 @@ log_to_file(Msg, ParamList) ->
 log_to_file(FilePath, Msg, ParamList) ->
   % io:format(standard_io, Msg ++ "\n", ParamList),
   file:write_file(FilePath, io_lib:fwrite(Msg ++ "\n", ParamList), [append] ),
-  ok.
-
-coverage_stat_table_ref__initialize_default_values() ->
-  % case get(coverage_data) of
-  %   undefined ->
-  %     EtsTableId = ets:new(name_not_important, [private, set, {keypos, 1}]),
-  %     put(coverage_data, EtsTableId),
-
-  %     ets:insert(EtsTableId, {filename_last_processed, ?TOKEN_FILE_NAME_DEFAULT}),
-  %     ets:insert(EtsTableId, {file_line_num, ?TOKEN_FILE_LINE_NUM_DEFAULT}),
-  %     ets:insert(EtsTableId, {token_last_used_position_in_line, ?TOKEN_POSITION_IN_LINE_DEFAULT}),
-
-  %     EtsTableId;
-  %   EtsTableIdFromProcessDic ->
-  %     EtsTableIdFromProcessDic
-  % end,
   ok.
 
