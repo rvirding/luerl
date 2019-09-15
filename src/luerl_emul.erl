@@ -480,16 +480,14 @@ coverage(#info_structure{ source_file=File,
          State % To Save with executed Instructions to get variables during debugging
     ) ->
 
-
   % save last executed line and filename for error messages
   put(info_last_executed_token, #{last_executed_filename => File, last_executed_linenum => LineNum}),
-
 
   % the debug info reduce the speed of Luerl, so turn it on only if you want to debug
   SaveDebugInfoToFile = true,
 
   case SaveDebugInfoToFile of
-    false -> ok;
+    false -> State;
     true ->
       CoverageStatementFileCounter = case get(coverage_statement_file_counter) of
                                        undefined -> 1;
@@ -498,36 +496,27 @@ coverage(#info_structure{ source_file=File,
       put(coverage_statement_file_counter, CoverageStatementFileCounter),
       StateFile = lists:flatten(io_lib:format("/tmp/statefile_~p", [CoverageStatementFileCounter])),
 
-      %% LOG TO FILE: DEBUGGING, you can follow the process of LUA PROGRAM WITH THIS LOG
-      ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
-      % File has to be the last because if Lua code comes from string, there is no filename but only a long string
-%      luerl:log_to_file("coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
-%        [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]),
 
       % Save statements for every executed command to get local/global variables if you want to debug
       %%%%% TURN ON/OFF when you need it: %%
       % luerl:log_to_file(StateFile, "~p", [State])
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-      ok
-  end,
 
-  % ETS STATISTICS ABOUT COVERAGE
-  % luerl:log_to_file("pid: ~p Lookup Info: ~p", [self(), Info]),
-  % coverageStatTableRef = get(coverage_data),
-  % [{_, ExecutedCounter}] = ets:lookup(coverageStatTableRef, Info),
-  % ets:insert(coverageStatTableRef, {Info, ExecutedCounter+1}),
+      %% LOG TO FILE: DEBUGGING, you can follow the process of LUA PROGRAM WITH THIS LOG
+      ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
+      % File has to be the last because if Lua code comes from string, there is no filename but only a long string
 
-  % the original table key is too complex to display it in file.
-  %  luerl:log_to_file("pid: ~p COVERAGE TABLE CONTENT: ~p", [self(), ets:tab2list(coverageStatTableRef)]),
 
-  % KeyFirst = ets:first(coverageStatTableRef),
-  % coverageTable = coverage_records(coverageStatTableRef, KeyFirst),
-  % luerl:log_to_file("pid: ~p COVERAGE TABLE CONTENT: ~n~p", [self(), coverageTable]),
-
-  LuaMap = element(2, State),
-  %% TODO:  I WANT TO INSERT EXECUTING INFO INTO STATE's second element, into the MAP as a key=>LIST
-  %% todo: modify LuaMap, Then take it back into the orig tuple
-  State;
+      CoverageNow = luerl:obj_to_string(
+      "coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
+        [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]
+      ),
+      [ElemFirst, LuaMap | ElemOthers ] = tuple_to_list(State),
+      CoverageInfoPrev = maps:get(coverage_info, LuaMap, []),
+      CoverageInfoUpdated = [CoverageNow | CoverageInfoPrev],
+      LuaMapUpdated=LuaMap#{coverage_info=>CoverageInfoUpdated},
+      erlang:list_to_tuple([ElemFirst, LuaMapUpdated | ElemOthers])
+  end;
 coverage(NotInfoStructure, State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
   State. % I don't want to log them now
   %luerl:log_to_file("coverage not info structure: ~p", [NotInfoStructure]).

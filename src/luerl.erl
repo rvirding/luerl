@@ -19,7 +19,7 @@
 -module(luerl).
 
 -include("luerl.hrl").
--export([log_to_file/1, log_to_file/2, log_to_file/3, obj_to_string/1]).
+-export([log_to_file/1, log_to_file/2, log_to_file/3, obj_to_string/1, obj_to_string/2]).
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
@@ -374,7 +374,10 @@ decode_userdata(N, St) ->
 
 
 obj_to_string(Term)-> % I want to log complex tuples into one line so I convert them to string
-  lists:flatten(io_lib:format("~p", [Term])).
+  obj_to_string("~p", [Term]).
+obj_to_string(Pattern, TermsList)-> % I want to log complex tuples into one line so I convert them to string
+  lists:flatten(io_lib:format(Pattern, TermsList)).
+
 log_to_file(Msg) ->
   log_to_file(Msg, []).
 log_to_file(Msg, ParamList) ->
