@@ -507,10 +507,17 @@ coverage(#info_structure{ source_file=File,
       % File has to be the last because if Lua code comes from string, there is no filename but only a long string
 
 
-      CoverageNow = luerl:obj_to_string(
-      "coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
-        [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]
-      ),
+      CoverageNow = #{
+        file=>File,
+        linenumber=>LineNum,
+        time_start=>ErlangTimestamp,
+        statement_position_in_line => StatementPositionInLine},
+      % the formatted text is TOO SLOW, you can't use this:
+      % CoverageNow = luerl:obj_to_string(
+      % "coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
+      %   [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]
+      % ),
+
       [ElemFirst, LuaMap | ElemOthers ] = tuple_to_list(State),
       CoverageInfoPrev = maps:get(coverage_info, LuaMap, []),
       CoverageInfoUpdated = [CoverageNow | CoverageInfoPrev],
