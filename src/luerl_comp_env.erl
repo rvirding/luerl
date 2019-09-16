@@ -28,34 +28,32 @@
 -import(ordsets, [is_element/2,intersection/2,subtract/2]).
 
 %% Local state.
--record(st, {lfs=[],				%Variable frames
-	     efs=[],				%Environment frames
-	     vars=none,
-	     fs=[],
-	     locv=false,			%Local variables
-	     locf				%Local frame
-	    }).
+-record(c_env, {lfs=[],				%Variable frames
+		efs=[],				%Environment frames
+		vars=none,
+		fs=[],
+		locv=false,			%Local variables
+		locf				%Local frame
+	      }).
 
 %% chunk(St0) -> {ok,St0};
 chunk(#code{code=C0}=Code, Opts) ->
-    St0 = #st{},				%Local state
+    St0 = #c_env{},				%Local state
     {C1,_} = functiondef(C0, St0),
     luerl_comp:debug_print(Opts, "ce: ~p\n", [C1]),
     {ok,Code#code{code=C1}}.
 
-%% push_frame(State) -> State.
+%% alloc_frame(State) -> State.
 %% pop_frame(State) -> State.
 %% get_frame(State) -> Frame.
 
-push_frame(#st{vars=#vars{local=Lo,fused=Fu},fs=Fs}=St) ->
-    Lsz = length(subtract(Lo, Fu)),
-    Esz = length(intersection(Lo, Fu)),
-    F = new_frame(Lsz, Esz),
-    St#st{fs=[F|Fs]}.
+alloc_frame(#c_env{vars=#vars{},fs=Fs}=St) ->
+    F = new_frame(),
+    St#c_env{fs=[F|Fs]}.
 
-pop_frame(#st{fs=[_|Fs]}=St) -> St#st{fs=Fs}.
+pop_frame(#c_env{fs=[_|Fs]}=St) -> St#c_env{fs=Fs}.
 
-get_frame(#st{fs=[F|_]}) -> F.
+get_frame(#c_env{fs=[F|_]}) -> F.
 
 %% new_frame(LocalSize, EnvSize) -> Frame.
 %%  We know frame will be tuples which we index from 1. Also Lua has
@@ -64,42 +62,35 @@ get_frame(#st{fs=[F|_]}) -> F.
 %%  them in reverse order and always pushing variable to front of
 %%  list.
 %%
-%%  The size parameters aren't the true size, they are only the number
-%%  of *different* variables. We will only use them as an indicator
-%%  whether each frame contains local and enviroment variables. The
-%%  true size we get at the end from the index value.
+%%  We get the size from the index of the last variable of each type added.
 %%
-%% {HasLocal,LocalIndex,HasEnv,EnvIndex,Vars}
+%%  NOTE: We can have empty frames here. The emulator knows about this
+%%  and can handle it.
+%%
+%% Frame :: {LocalIndex,EnvIndex,Vars}
+%% Var :: {Name,Type,Index}
 
-new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.	%Use size to indicate presence
+new_frame() -> {0,0,[]}.
 
-find_frame_var(N, {_,_,_,_,Fs}) ->
+find_frame_var(N, {_,_,Fs}) ->
     find_frame_var_1(N, Fs).
 
 find_frame_var_1(N, [{N,Type,I}|_]) -> {yes,Type,I};
 find_frame_var_1(N, [_|F]) -> find_frame_var_1(N, F);
 find_frame_var_1(_, []) -> no.
 
-frame_depth_incr({false,_,false,_,_}, Ld, Ed) -> {Ld,Ed};   %No vars at all
-frame_depth_incr({false,_,true,_,_}, Ld, Ed) -> {Ld,Ed+1};  %No local variables
-frame_depth_incr({true,_,false,_,_}, Ld, Ed) -> {Ld+1,Ed};  %No env variables
-frame_depth_incr({true,_,true,_,_}, Ld, Ed) -> {Ld+1,Ed+1}. %Both variables
+frame_local_size({Li,_,_}) -> Li.
+frame_env_size({_,Ei,_}) -> Ei.
 
-frame_local_size({_,Li,_,_,_}) -> Li.		%Use the index for the size
-frame_env_size({_,_,_,Ei,_}) -> Ei.
+add_frame_local_var(N, {Li,Ei,Fs}) ->
+    {Li+1,Ei,[{N,lvar,Li+1}|Fs]}.
 
-add_frame_local_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
-    {Lsz,Li+1,Esz,Ei,[{N,lvar,Li+1}|Fs]}.
-
-add_frame_env_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
-    {Lsz,Li,Esz,Ei+1,[{N,evar,Ei+1}|Fs]}.
+add_frame_env_var(N, {Li,Ei,Fs}) ->
+    {Li,Ei+1,[{N,evar,Ei+1}|Fs]}.
 
 %% find_fs_var(Name, FrameStack) -> {yes,Type,Depth,Index} | no.
 %%  Find a variable in the frame stack returning its depth and
-%%  index. N.B. that we DON'T increment the local or env depth for
-%%  unless their is actually any local or env variables
-%%  respectively. This ensures that there are no empty frames in the
-%%  stacks. The emulator assumes this.
+%%  index.
 
 find_fs_var(N, Fs) -> find_fs_var(N, Fs, 1, 1).
 
@@ -108,7 +99,8 @@ find_fs_var(N, [F|Fs], Ld, Ed) ->
 	{yes,lvar,Li} -> {yes,lvar,Ld,Li};
 	{yes,evar,Ei} -> {yes,evar,Ed,Ei};
 	no ->
-	    {Ld1,Ed1} = frame_depth_incr(F, Ld, Ed),
+	    Ld1 = Ld + 1,
+	    Ed1 = Ed + 1,
 	    find_fs_var(N, Fs, Ld1, Ed1)
     end;
 find_fs_var(_, [], _, _) -> no.
@@ -122,22 +114,22 @@ add_var(N, St) ->
 	env -> add_env_var(N, St)
     end.
 	    
-add_env_var(N, #st{fs=[F0|Fs]}=St) ->
+add_env_var(N, #c_env{fs=[F0|Fs]}=St) ->
     F1 = add_frame_env_var(N, F0),
-    St#st{fs=[F1|Fs]}.
+    St#c_env{fs=[F1|Fs]}.
 	    
-add_local_var(N, #st{fs=[F0|Fs]}=St) ->
+add_local_var(N, #c_env{fs=[F0|Fs]}=St) ->
     F1 = add_frame_local_var(N, F0),
-    St#st{fs=[F1|Fs]}.
+    St#c_env{fs=[F1|Fs]}.
 
-get_var(N, #st{fs=Fs}) ->
+get_var(N, #c_env{fs=Fs}) ->
     case find_fs_var(N, Fs) of
 	{yes,lvar,Ld,Li} -> #lvar{n=N,d=Ld,i=Li};
 	{yes,evar,Ed,Ei} -> #evar{n=N,d=Ed,i=Ei};
 	no -> #gvar{n=N}
     end.
 
-var_type(N, #st{vars=#vars{fused=Fused}}) ->
+var_type(N, #c_env{vars=#vars{fused=Fused}}) ->
     case is_element(N, Fused) of
 	true -> env;
 	false -> local
@@ -237,12 +229,12 @@ do_block(#block{ss=Ss0,vars=Vars}=B, St0) ->
 %%  Do a block initialising/clearing frames. We always push a local
 %%  frame even if it not used.
 
-with_block(Do, Vars, #st{vars=OldVars}=St0) ->
-    St1 = push_frame(St0#st{vars=Vars}),
+with_block(Do, Vars, #c_env{vars=OldVars}=St0) ->
+    St1 = alloc_frame(St0#c_env{vars=Vars}),
     {Ret,St2} = Do(St1),
     Fr = get_frame(St2),
     St3 = pop_frame(St2),
-    {Ret,Fr,St3#st{vars=OldVars}}.
+    {Ret,Fr,St3#c_env{vars=OldVars}}.
 
 %% while_stmt(While, State) -> {While,State}.
 

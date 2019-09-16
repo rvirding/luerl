@@ -336,9 +336,9 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;		%Integers and floats
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
-decode(#uref{i=N}, St, _) ->
+decode(#usdref{i=N}, St, _) ->
     decode_userdata(N, St);
-decode(#fnref{}=Fun, State, _) ->
+decode(#funref{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
@@ -365,5 +365,5 @@ decode_table(N, St, In0) ->
     end.
 
 decode_userdata(N, St) ->
-    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
+    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.usdtab),
     {userdata,Data}.

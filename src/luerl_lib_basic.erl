@@ -322,8 +322,8 @@ tostring(N) when is_number(N) ->
     iolist_to_binary(io_lib:write(N));
 tostring(S) when is_binary(S) -> S;
 tostring(#tref{i=I}) -> iolist_to_binary(["table: ",integer_to_list(I)]);
-tostring(#uref{i=I}) -> iolist_to_binary(["userdata: ",integer_to_list(I)]);
-tostring(#lua_func{}) -> <<"function:">>;	%Functions defined in Lua
+tostring(#usdref{i=I}) -> iolist_to_binary(["userdata: ",integer_to_list(I)]);
+tostring(#funref{}) -> <<"function:">>;	%Functions defined in Lua
 tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
 tostring(#thread{}) -> <<"thread">>;
 tostring(_) -> <<"unknown">>.
@@ -335,8 +335,8 @@ type(N) when is_number(N) -> <<"number">>;
 type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
-type(#uref{}) -> <<"userdata">>;
-type(#lua_func{}) -> <<"function">>;		%Functions defined in Lua
+type(#usdref{}) -> <<"userdata">>;
+type(#funref{}) -> <<"function">>;		%Functions defined in Lua
 type(#erl_func{}) -> <<"function">>;		%Internal functions
 type(#thread{}) -> <<"thread">>;
 type(_) -> <<"unknown">>.
@@ -367,7 +367,8 @@ setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 do_setmetatable(#tref{i=N}=T, M, St) ->
     case luerl_emul:get_metamethod(T, <<"__metatable">>, St) of
 	nil ->
-	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, St#luerl.ttab),
+	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end,
+			    St#luerl.ttab),
 	    {[T],St#luerl{ttab=Ts}};
 	_ -> badarg_error(setmetatable, [T], St)
     end.

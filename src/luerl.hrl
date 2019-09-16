@@ -22,9 +22,9 @@
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
 -record(luerl, {ttab,tfree,tnext,               %Table table, free, next
-                ftab,ffree,fnext,               %Frame table, free, next
-                utab,ufree,unext,               %Userdata table, free, next
-                fntab,fnfree,fnnext,            %Function table, free, next
+                upvtab,upvfree,upvnext,         %Upvalue table, free, next
+                usdtab,usdfree,usdnext,         %Userdata table, free, next
+                funtab,funfree,funnext,         %Function table, free, next
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
@@ -37,9 +37,9 @@
 -record(ltab, {tab,free,next}).                 %Table structure.
 
 -record(heap, {ttab,tfree,tnext,
-               ftab,ffree,fnext,
-               utab,ufree,unext,
-               fntab,fnfree,fnnext,
+               upvtab,upvfree,upvnext,
+               usdtab,usdfree,usdnext,
+               funtab,funfree,funnext,
 	       g}).
 
 %% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
@@ -56,18 +56,18 @@
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
--record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
--record(uref, {i}).                             %Userdata reference, index
--record(userdata, {d,m=nil}).			%Userdata type, data and meta
+-record(table, {a,d=[],meta=nil}).		%Table type, array, dict, meta
+-record(usdref, {i}).                           %Userdata reference, index
+-record(userdata, {d,meta=nil}).		%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 %% There are two function types, the Lua one, and the Erlang one.
 
 %% The environment with upvalues is defined when the function is
 %% referenced and can vary if the function is referenced many
 %% times. Hence it is in the reference not in the the definition.
--record(fnref, {i,env=[]}).			%Function reference
+-record(funref, {i,env=[]}).			%Function reference
 -record(lua_func,{anno=[],			%Annotation
-		  fnrefs=[],			%Functions directly referenced
+		  funrefs=[],			%Functions directly referenced
 		  lsz,				%Local var size
 		  esz,				%Env var size
 		  env=[],			%Environment (not used)
@@ -78,7 +78,7 @@
 -record(fref, {i}).				%Frame reference, index
 
 %% Test if it a function, of either sort.
--define(IS_FUNCTION(F), (is_record(F, fnref) orelse is_record(F, erl_func))).
+-define(IS_FUNCTION(F), (is_record(F, funref) orelse is_record(F, erl_func))).
 
 -define(IS_FLOAT_INT(N), (float(round(N)) =:= N)).
 -define(IS_FLOAT_INT(N,I), (float(I=round(N)) =:= N)).
