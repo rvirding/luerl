@@ -506,12 +506,14 @@ coverage(#info_structure{ source_file=File,
       ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
       % File has to be the last because if Lua code comes from string, there is no filename but only a long string
 
+      CoverageNow = LineNum,
+      % CoverageNow = #{
+      %   file=>File,
+      %   linenumber=>LineNum,
+      %   time_start=>ErlangTimestamp,
+      %   statement_position_in_line => StatementPositionInLine,
+      %   state_file => StateFile},
 
-      CoverageNow = #{
-        file=>File,
-        linenumber=>LineNum,
-        time_start=>ErlangTimestamp,
-        statement_position_in_line => StatementPositionInLine},
       % the formatted text is TOO SLOW, you can't use this:
       % CoverageNow = luerl:obj_to_string(
       % "coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
@@ -660,44 +662,44 @@ emul_1([?REPEAT_INFO(Ris)|Is], Lvs, Stk, Env, St) ->
     StWithCoverInfo=coverage(Info, St),
     do_repeat(Is, Lvs, Stk, Env, StWithCoverInfo, Ris);
 emul_1([?AND_THEN_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
-    StWithCoverInfo=coverage(Info, St0),
+    StWithCoverInfo = coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
-	true ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
-	    emul(Is, Lvs1, Stk2, Env1, St1);
-	false ->
-	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
+      true ->
+        {Lvs1, Stk2, Env1, St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
+        emul(Is, Lvs1, Stk2, Env1, St1);
+      false ->
+        emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
 emul_1([?OR_ELSE_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
-  StWithCoverInfo=coverage(Info, St0),
+    StWithCoverInfo = coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
-	false ->
-    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
-	    emul(Is, Lvs1, Stk2, Env1, St1)
+      true ->
+        emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
+      false ->
+        {Lvs1, Stk2, Env1, St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
+        emul(Is, Lvs1, Stk2, Env1, St1)
     end;
 emul_1([?IF_TRUE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-  StWithCoverInfo=coverage(Info, St0),
+    StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
-	true ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
-	    emul(Is, Lvs1, Stk1, Env1, St1);
-	false ->
-	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
+	    true ->
+	      {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
+	      emul(Is, Lvs1, Stk1, Env1, St1);
+      false ->
+	      emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
 emul_1([?IF_FALSE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-  StWithCoverInfo=coverage(Info, St0),
+    StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
-	false ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
-	    emul(Is, Lvs1, Stk1, Env1, St1)
+	    true ->
+	      emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
+	    false ->
+	      {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
+	      emul(Is, Lvs1, Stk1, Env1, St1)
     end;
 emul_1([?IF_INFO(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
     StWithCoverInfo=coverage(Info, St0),
@@ -710,97 +712,48 @@ emul_1([?GFOR_INFO(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
     StWithCoverInfo=coverage(Info, St),
     do_genfor(Is, Lvs, Stk, Env, StWithCoverInfo, Vs, Fis);
 emul_1([?BREAK_INFO|_], Lvs, Stk, Env, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     throw({break,St#luerl.tag,Lvs,Stk,Env,StWithCoverInfo});
 emul_1([?RETURN_INFO(0)|_], _, _, _, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     throw({return,St#luerl.tag,[],StWithCoverInfo});
 emul_1([?RETURN_INFO(Ac)|_], _, Stk, _, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     {Ret,_} = pop_vals(Ac, Stk),
     throw({return,St#luerl.tag,Ret,StWithCoverInfo});
 %% Stack instructions
 emul_1([?POP_INFO|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     emul(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?POP2_INFO|Is], Lvs, [_,_|Stk], Env, St) ->	%Just pop top 2 off stack
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     emul(Is, Lvs, Stk, Env, StWithCoverInfo);
 emul_1([?SWAP_INFO|Is], Lvs, [S1,S2|Stk], Env, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     emul(Is, Lvs, [S2,S1|Stk], Env, StWithCoverInfo);
 emul_1([?DUP_INFO|Is], Lvs, [V|_]=Stk, Env, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     emul_1(Is, Lvs, [V|Stk], Env, StWithCoverInfo);
 emul_1([?PUSH_VALS_INFO(Vc)|Is], Lvs, [Vals|Stk0], Env, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     %% Pop list off the stack and push Vc vals from it.
     Stk1 = push_vals(Vc, Vals, Stk0),
     emul(Is, Lvs, Stk1, Env, StWithCoverInfo);
 emul_1([?POP_VALS_INFO(Vc)|Is], Lvs, Stk0, Env, St) ->
-  StWithCoverInfo=coverage(Info, St),
+    StWithCoverInfo=coverage(Info, St),
     %% Pop Vc vals off the stack, put in a list and push.
     {Vals,Stk1} = pop_vals(Vc, Stk0),
     emul(Is, Lvs, [Vals|Stk1], Env, StWithCoverInfo);
 
-
-
-
-%%%%  THIS SOLUTION IS A HOTFIX, because I don't understand exactly   %%%%%
-%%%%  the source of the problem now                                   %%%%%
-
-%%%% THE BLOCK_INFO_EMPTY STATEMENTS come without Info block. OR_ELSE_INFO_EMPTY  for_example
-
-%%%%  Generic emul_1 without Info structure fixer                     %%%%%
-%%%%  in this case I don't know from where but Instructions come      %%%%%
-%%%%                                                                  %%%%%
-%%%%          WITHOUT Info block.                                     %%%%%
-%%%%
-%%%%  if I can catch an instruction without Info, I fix it            %%%%%
-
-%%%% example: [{push_lvar,1,4},{push_lit,0},{op,'<',2}]
-%%%% these instructions are incorrect because they don't have Info
-%%%% structure as first element
-
-
-%%%%  IMPORTANT: it has to be before the last emul_1 line !!!!!!!
-% emul_1([{}=InstructionInfoMaybeMissing|Is], Lvs0, Stk0, Env0, St0) ->
-%
-% ElemFirstOfInstruction = element(1, InstructionInfoMaybeMissing),
-%
-%   case ElemFirstOfInstruction of
-%     #{} -> we_have_to_die_because_first_elem_was_a_map_and_there_wasnt_correct__emul_1__pattern;
-%     _InstructionWithoutInfoMap ->
-%       InfoNew = info_if_missing(),
-%
-%       % FIXME: it's too slow in PRODUCTION environment, use only in dev
-%       luerl:log_to_file("MISSING INFO structure in tuple instructions: ~p", [InstructionInfoMaybeMissing]),
-%
-%       InstructionInList = erlang:tuple_to_list(InstructionInfoMaybeMissing),
-%       InstructionWithInfo = erlang:list_to_tuple([InfoNew|InstructionInList]),
-%       emul_1([InstructionWithInfo|Is], Lvs0, Stk0, Env0, St0)
-%   end;
-
-%emul_1([Instruction|Is], Lvs0, Stk0, Env0, St0) when is_atom(Instruction) ->
-%  luerl:log_to_file("MISSING INFO structure in atom instructions: ~p", [Instruction]),
-%  InfoNew = info_if_missing(),
-%  InstructionWithInfo = {InfoNew, Instruction},
-%  emul_1([InstructionWithInfo|Is], Lvs0, Stk0, Env0, St0);
-
-%%%%% HOTFIX END %%%%%%%%%
-
-
-emul_1([], Lvs, Stk, Env, St) ->
-{Lvs,Stk,Env,St}.
-
-info_if_missing() ->
-  luerl_comp:token_info_new("Unknown Source File, MISSING INFO structure in instruction",
-    -1, % -1 means: not a normal line num, because it has to be positive
-    -1,
-    "unknown token",
-    "unknown_internal_statement").
-
-
+emul_1([], Lvs, Stk, Env, State) ->
+  % If there is coverage Info in State, write it out into file
+  LuaMap = element(2, State),
+  case maps:is_key(coverage_info, LuaMap) of
+    false -> ok;
+    true -> % if LuaMap has coverage_info, write it into file
+      luerl:log_to_file("/tmp/luerl_coverage.txt", "~p~n~n", [maps:get(coverage_info, LuaMap)])
+  end,
+  {Lvs,Stk,Env, State}.
 
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
