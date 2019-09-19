@@ -391,6 +391,7 @@ log_to_file(FilePath, Msg, ParamList) ->
 % speed problems: without number->string conversion give back numbers in a range
 number_to_string_direct_map(Num) ->
   case Num of
+    0 -> "0";
     1 -> "1";
     2 -> "2";
     3 -> "3";

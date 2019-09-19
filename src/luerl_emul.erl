@@ -508,10 +508,31 @@ coverage(#info_structure{ source_file=File,
       %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
       %% LOG TO FILE: DEBUGGING, you can follow the process of LUA PROGRAM WITH THIS LOG
-      ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
+      %_ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
       % File has to be the last because if Lua code comes from string, there is no filename but only a long string
 
-      CoverageNow = "COVER>> " ++File ++ " " ++ luerl:number_to_string_direct_map(LineNum) ++ "\n",
+      % IMPORTANT: the string formatting is slow, if you want to save complex structure
+      % so now we use only strings in CoverageNow
+
+      [ElemFirst, LuaMap | ElemOthers ] = tuple_to_list(State),
+
+      % source file id numbers: the log files are huge because of the lot of filenames.
+      % With an Id, the file size is smaller faster.
+
+      FileIdNums = maps:get(source_file_id_numbers, LuaMap, #{}),
+      FileId = case maps:get(File, FileIdNums, new_file_no_id) of
+                 new_file_no_id ->
+                   Id = luerl:number_to_string_direct_map(length(maps:keys(FileIdNums))+1),
+                   FileIdNumsUpdated = FileIdNums#{File => Id},
+                   Id;
+                 StoredFileId ->
+                   FileIdNumsUpdated = FileIdNums, % No update, the file is known
+                   StoredFileId
+      end,
+
+      % file id
+      CoverageNow = "COVER>> fid:" ++ FileId ++ " " ++ luerl:number_to_string_direct_map(LineNum) ++ "\n",
+
       % CoverageNow = #{
       %   file=>File,
       %   linenumber=>LineNum,
@@ -525,10 +546,11 @@ coverage(#info_structure{ source_file=File,
       %   [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]
       % ),
 
-      [ElemFirst, LuaMap | ElemOthers ] = tuple_to_list(State),
       CoverageInfoPrev = maps:get(coverage_info, LuaMap, []),
       CoverageInfoUpdated = [CoverageNow | CoverageInfoPrev],
-      LuaMapUpdated=LuaMap#{coverage_info=>CoverageInfoUpdated},
+
+      LuaMapUpdated = LuaMap#{coverage_info=>CoverageInfoUpdated,
+                             source_file_id_numbers=>FileIdNumsUpdated},
       erlang:list_to_tuple([ElemFirst, LuaMapUpdated | ElemOthers])
   end;
 coverage(NotInfoStructure, State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
@@ -761,8 +783,14 @@ emul_1([], Lvs, Stk, Env, State) ->
                                       StatementFileCounter -> StatementFileCounter+1
                                     end,
       put(coverage_file_counter, CoverageFileCounter),
+
       FilePath = "/tmp/luerl_coverage_" ++ io_lib:fwrite("~p", [CoverageFileCounter]) ++ ".txt",
-      file:write_file(FilePath, maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n", [append] )
+
+      %% human, readable data: text
+      Data = maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n",
+      FileIdNumbersMap = maps:get(source_file_id_numbers, LuaMap, ""),
+      FileIdNumbers = io_lib:fwrite("FileIdNumbers: ~p", [FileIdNumbersMap] ),
+      file:write_file(FilePath, FileIdNumbers ++ "\n\n" ++ Data, [append] )
   end,
   {Lvs,Stk,Env, State}.
 
