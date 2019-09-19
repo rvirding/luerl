@@ -772,8 +772,13 @@ emul_1([?POP_VALS_INFO(Vc)|Is], Lvs, Stk0, Env, St) ->
     {Vals,Stk1} = pop_vals(Vc, Stk0),
     emul(Is, Lvs, [Vals|Stk1], Env, StWithCoverInfo);
 
+% TODO: -- luerl dofile("test/luerl_return_SUITE_data/simple_return_multi.lua").
+% can exit in another part of emulator so find that exit point please and
+% write out the coverage from the state
+
 emul_1([], Lvs, Stk, Env, State) ->
   % If there is coverage Info in State, write it out into file
+
   LuaMap = element(2, State),
   case maps:is_key(coverage_info, LuaMap) of
     false -> ok;

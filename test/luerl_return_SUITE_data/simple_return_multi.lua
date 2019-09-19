@@ -16,3 +16,5 @@ AddBase = 33
 if LINENUMBER < NEXTLINE then AddBase = 1 end
 --never_run()
 return add(AddBase-(11*3)), "string 2", 3.4
+
+-- luerl dofile("test/luerl_return_SUITE_data/simple_return_multi.lua").
