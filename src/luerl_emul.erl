@@ -489,12 +489,17 @@ coverage(#info_structure{ source_file=File,
   case SaveDebugInfoToFile of
     false -> State;
     true ->
-      CoverageStatementFileCounter = case get(coverage_statement_file_counter) of
-                                       undefined -> 1;
-                                       StatementFileCounter -> StatementFileCounter+1
-                                     end,
-      put(coverage_statement_file_counter, CoverageStatementFileCounter),
-      StateFile = lists:flatten(io_lib:format("/tmp/statefile_~p", [CoverageStatementFileCounter])),
+
+
+      %%%%%%%%  STATE FILE SAVE ###############################
+      % I want to save the state - but it's too slow now
+      % CoverageStatementFileCounter = case get(coverage_statement_file_counter) of
+      %                                 undefined -> 1;
+      %                                 StatementFileCounter -> StatementFileCounter+1
+      %                               end,
+      % put(coverage_statement_file_counter, CoverageStatementFileCounter),
+      % StateFile = lists:flatten(io_lib:format("/tmp/statefile_~p", [CoverageStatementFileCounter])),
+      %%%%%%%%  STATE FILE SAVE ###############################
 
 
       % Save statements for every executed command to get local/global variables if you want to debug
@@ -506,7 +511,7 @@ coverage(#info_structure{ source_file=File,
       ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
       % File has to be the last because if Lua code comes from string, there is no filename but only a long string
 
-      CoverageNow = LineNum,
+      CoverageNow = "COVER>> " ++File ++ " " ++ luerl:number_to_string_direct_map(LineNum) ++ "\n",
       % CoverageNow = #{
       %   file=>File,
       %   linenumber=>LineNum,
@@ -751,7 +756,13 @@ emul_1([], Lvs, Stk, Env, State) ->
   case maps:is_key(coverage_info, LuaMap) of
     false -> ok;
     true -> % if LuaMap has coverage_info, write it into file
-      luerl:log_to_file("/tmp/luerl_coverage.txt", "~p~n~n", [maps:get(coverage_info, LuaMap)])
+      CoverageFileCounter = case get(coverage_file_counter) of
+                                      undefined -> 1;
+                                      StatementFileCounter -> StatementFileCounter+1
+                                    end,
+      put(coverage_file_counter, CoverageFileCounter),
+      FilePath = "/tmp/luerl_coverage_" ++ io_lib:fwrite("~p", [CoverageFileCounter]) ++ ".txt",
+      file:write_file(FilePath, maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n", [append] )
   end,
   {Lvs,Stk,Env, State}.
 
