@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
 
 -export([debug_print/3]).
 
--import(lists, [member/2,keysearch/3,mapfoldl/3]).
+-import(lists, [member/2,keysearch/3,mapfoldl/3,foreach/2]).
 
 -include_lib("kernel/include/file.hrl").
 
@@ -46,6 +46,8 @@
 	       warnings=[]
 	      }).
 
+-define(NOFILE, "-no-file-").
+
 file(Name) -> file(Name, [verbose,report]).
 
 file(Name, Opts) ->
@@ -57,6 +59,7 @@ file(Name, Opts) ->
 %%  The default output dir is the current directory unless an
 %%  explicit one has been given in the options.
 
+filenames(?NOFILE, St) -> St#comp{lfile=?NOFILE};
 filenames(File, St) ->
     %% Test for explicit outdir.
     Odir = case keysearch(outdir, 1, St#comp.opts) of
@@ -76,14 +79,14 @@ string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
     St0 = #comp{opts=Opts,code=Str},
-    St1 = filenames("-no-file-", St0),
+    St1 = filenames(?NOFILE, St0),
     compile(list_passes(), St1).
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
     St0 = #comp{opts=Opts,code=Forms},
-    St1 = filenames("-no-file-", St0),
+    St1 = filenames(?NOFILE, St0),
     compile(forms_passes(), St1).
 
 compile(Ps, St0) ->
@@ -110,6 +113,8 @@ list_passes() ->				%Scanning string
 forms_passes() ->				%Doing the forms
     [{do,fun do_init_comp/1},
      {do,fun do_comp_normalise/1},
+     {when_flag,to_norm,{done,fun(St) -> {ok,St} end}},
+     {do,fun do_comp_lint/1},
      {do,fun do_comp_vars/1},
      {when_flag,to_vars,{done,fun(St) -> {ok,St} end}},
      %% {do,fun do_comp_locf/1},
@@ -152,6 +157,7 @@ do_passes([], St) -> {ok,St}.
 %% do_parse(State) -> {ok,State} | {error,State}.
 %% do_init_comp(State) -> {ok,State} | {error,State}.
 %% do_comp_normalise(State) -> {ok,State} | {error,State}.
+%% do_comp_lint(State) -> {ok,State} | {error,State}.
 %% do_comp_vars(State) -> {ok,State} | {error,State}.
 %% do_comp_env(State) -> {ok,State} | {error,State}.
 %% do_comp_cg(State) -> {ok,State} | {error,State}.
@@ -211,10 +217,15 @@ do_comp_normalise(#comp{code=C0,opts=Opts}=St) ->
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
+do_comp_lint(St) ->
+    case luerl_comp_lint:chunk(St#comp.code, St#comp.opts) of
+	{ok,Ws} -> {ok,St#comp{warnings=Ws}};
+	{error,Es,Ws} -> {error,St#comp{errors=Es,warnings=Ws}}
+    end.
+
 do_comp_vars(St) ->
     case luerl_comp_vars:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
@@ -228,31 +239,49 @@ do_comp_vars(St) ->
 do_comp_env(St) ->
     case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
 do_code_gen(St) ->
     case luerl_comp_cg:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
 do_peep_op(St) ->
     case luerl_comp_peep:chunk(St#comp.code, St#comp.opts) of
 	{ok,C1} -> {ok,St#comp{code=C1}};
-	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
 	{error,Es} -> {error,St#comp{errors=Es}}
     end.
 
-do_ok_return(#comp{code=C}) -> {ok,C}.
+do_ok_return(#comp{lfile=Lfile,opts=Opts,code=C,warnings=Ws}) ->
+    Report = lists:member(report, Opts),
+    ?IF(Report, list_warnings(Lfile, Ws), ok),
+    {ok,C}.
 
-do_error_return(#comp{errors=Es,warnings=Ws}) ->
-    {error,Es,Ws}.
+do_error_return(#comp{lfile=Lfile,opts=Opts,errors=Es,warnings=Ws}) ->
+    Report = lists:member(report, Opts),
+    Return = lists:member(return, Opts),
+    ?IF(Report, begin list_errors(Lfile, Es), list_warnings(Lfile, Ws) end, ok),
+    ?IF(Return, {error,Es,Ws}, error).
 
 debug_print(Opts, Format, Args) ->
-    case member(debug_print, Opts) of
-	true -> io:fwrite(Format, Args);
-	false -> ok
-    end.
+    ?DEBUG_PRINT(Format, Args, Opts).
+
+list_warnings(F, Ws) ->
+    foreach(fun ({Line,Mod,Warn}) ->
+                    Cs = Mod:format_error(Warn),
+                    io:format("~s:~w: Warning: ~s\n", [F,Line,Cs]);
+                ({Mod,Warn}) ->
+                    Cs = Mod:format_error(Warn),
+                    io:format("~s: Warning: ~s\n", [F,Cs])
+            end, Ws).
+
+list_errors(F, Es) ->
+    foreach(fun ({Line,Mod,Error}) ->
+                    Cs = Mod:format_error(Error),
+                    io:format("~s:~w: ~s\n", [F,Line,Cs]);
+                ({Mod,Error}) ->
+                    Cs = Mod:format_error(Error),
+                    io:format("~s: ~s\n", [F,Cs])
+            end, Es).

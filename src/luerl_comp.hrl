@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -27,8 +27,16 @@
 	      lfile=""				%The lua file name
 	     }).
 
+%% Some useful macros.
+-define(IF(Test,True,False), case Test of true -> True; false -> False end).
+-define(WHEN_OPT(Opt,Opts,Fun), ?IF(member(Opt, Opts), Fun(), ok)).
+-define(DEBUG_PRINT(Format,Args,Opts),
+        ?WHEN_OPT(debug_print, Opts,
+                  fun () -> io:fwrite(Format, Args) end)).
+
 %% Variable data.
--record(vars, {local=[],free=[],		%Local, free variables
+-record(vars, {local=[],			%Local variables
+	       free=[],				%Free variables
 	       used=[],				%Used in sub blocks
 	       fused=[]				%Used in sub-functions
 	      }).
