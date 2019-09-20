@@ -426,9 +426,28 @@ call(Func, St) ->
 call(#lua_func{}=Func, Args, St0) ->		%Already defined
     {Ret, State} = functioncall(Func, Args, St0),
 
-    % If there is coverage Info in State, write it out into file
 
-    LuaMap = element(2, State),
+  %% IMPORTANT: if you use Luerl as a Library, then you have to know
+  %% your node's cookie and type it in the debugger's console
+  %% without correct cookies the start signal of call() won't arrive into the debugger
+
+  %% if you execute simple luerl with rebar3 shell,
+  %% set the same cookie and node names in the luerl interpreter and in the debugger
+
+  % the debugger function can receive this signal from the interpreter,
+  % but I don't have now enough time to implement the code
+  % step-by-step executing and variable reading now.
+  % this is a next step
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  % send a signal to debugger: interpreter is running
+  %{ok, Hostname} = inet:gethostname(),
+  %{ok,{hostent,FullHostname,[],inet,_,[_]}} = inet:gethostbyname(Hostname),
+  %NodenameDebugger = list_to_atom("debugger@"++FullHostname),
+  %{luerl_debugger, NodenameDebugger} ! luerl_emulator_call_start,
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  % If there is coverage Info in State, write it out into file
+  LuaMap = element(2, State),
     case maps:is_key(coverage_info, LuaMap) of
       false -> ok;
       true -> % if LuaMap has coverage_info, write it into file
