@@ -1,4 +1,4 @@
-%% Copyright (c) 2019 Ferenc Boroczki
+%% Copyright (c) 2019 Ferenc Boroczki, Balazs Nyiro
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,31 +12,19 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
--module(luerl_return_SUITE).
-
+-module(luerl_test_common).
 -include_lib("common_test/include/ct.hrl").
 
--export([all/0, groups/0]).
--export([simple_return/1, fun_return/1]).
+-export([run_tests/2]).
 
-all() ->
-  [
-    {group, return}
-  ].
+run_tests(Config, Tests) ->
+  [run_and_check(Config, Script, Expected) || {Script, Expected} <- Tests].
 
-groups() ->
-  [
-    {return, [parallel], [simple_return, fun_return]}
-  ].
+run_and_check(Config, Script, Expected) ->
+  DataDir = ?config(data_dir, Config),
+  ScriptFile = DataDir ++ Script,
+  {Result, _St} = luerl:dofile(ScriptFile),
+  % ct:pal("RESULT: ~p", [Result]),
+  Expected = Result.
 
-simple_return(Config) ->
-  Tests = [
-    {"simple_return_1.lua", [1]},
-    {"simple_return_multi.lua", [1, <<"string 2">>, 3.4]}
-  ],
-  luerl_test_common:run_tests(Config, Tests).
-
-fun_return(Config) ->
-  Tests = ["fun_return_multi.lua", [7, <<"str 1">>, 5.5, 11.0]],
-  luerl_test_common:run_tests(Config, Tests).
 

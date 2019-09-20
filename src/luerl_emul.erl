@@ -212,7 +212,7 @@ set_table_keys(Tab0, [K|Ks], Val, St0) ->
 %%  Access tables, as opposed to the environment (which are also
 %%  tables). Setting a value to 'nil' will clear it from the array but
 %%  not from the table; however, we won't add a nil value.
-%%  NOTE: WE ALWAYS RETURN A SINGLE VALUE!
+%%  NOTE: WE ALWAYS RETURN A SINGLE_INFO_EMPTY VALUE!
 
 set_table_key(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
     set_table_int_key(Tref, Key, Key, Val, St);
@@ -420,20 +420,61 @@ load_chunk(#code{code=Code}, Env, St) ->
 
 load_function(F, St) -> load_function(F, [], St).
 
-load_function([?PUSH_FDEF(Lsz, Esz, Pars, Is)], Env, St) ->
+load_function([?PUSH_FDEF_INFO_NOTUSED(Lsz, Esz, Pars, Is)], Env, St) ->
     do_fdef(Lsz, Esz, Pars, Is, Env, St).
 
 %% call(Function, State) -> {Return,State}.
 %% call(Function, Args, State) -> {Return,State}.
-
-call(Func, St) -> call(Func, [], St).
+call(Func, St) ->
+  call(Func, [], St).
 
 call(#lua_func{}=Func, Args, St0) ->		%Already defined
-    {Ret,St1} = functioncall(Func, Args, St0),
-    %% Should do GC here.
-    {Ret,St1};
+    {Ret, State} = functioncall(Func, Args, St0),
+
+
+  %% IMPORTANT: if you use Luerl as a Library, then you have to know
+  %% your node's cookie and type it in the debugger's console
+  %% without correct cookies the start signal of call() won't arrive into the debugger
+
+  %% if you execute simple luerl with rebar3 shell,
+  %% set the same cookie and node names in the luerl interpreter and in the debugger
+
+  % the debugger function can receive this signal from the interpreter,
+  % but I don't have now enough time to implement the code
+  % step-by-step executing and variable reading now.
+  % this is a next step
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  % send a signal to debugger: interpreter is running
+  %{ok, Hostname} = inet:gethostname(),
+  %{ok,{hostent,FullHostname,[],inet,_,[_]}} = inet:gethostbyname(Hostname),
+  %NodenameDebugger = list_to_atom("debugger@"++FullHostname),
+  %{luerl_debugger, NodenameDebugger} ! luerl_emulator_call_start,
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+  % If there is coverage Info in State, write it out into file
+  LuaMap = element(2, State),
+    case maps:is_key(coverage_info, LuaMap) of
+      false -> ok;
+      true -> % if LuaMap has coverage_info, write it into file
+        CoverageFileCounter = case get(coverage_file_counter) of
+                                undefined -> 1;
+                                StatementFileCounter -> StatementFileCounter+1
+                              end,
+        put(coverage_file_counter, CoverageFileCounter),
+
+        FilePath = "/tmp/luerl_coverage_" ++ io_lib:fwrite("~p", [CoverageFileCounter]) ++ ".txt",
+
+        %% human, readable data: text
+        Data = maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n",
+        FileIdNumbersMap = maps:get(source_file_id_numbers, LuaMap, ""),
+        FileIdNumbers = io_lib:fwrite("FileIdNumbers: ~p", [FileIdNumbersMap] ),
+        file:write_file(FilePath, FileIdNumbers ++ "\n\n" ++ Data, [append] )
+    end,
+
+  %% Should do GC here.
+    {Ret, State};
 call(#erl_func{}=Func, Args, St0) ->		%Internal erlang function
-    {Ret,St1} = functioncall(Func, Args, St0),
+  {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1}.
 
@@ -443,22 +484,22 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(call_frame, {anno=[],lvs,env}).		%Save these for the GC
+-record(call_frame, {anno=[], local_vars,env}).		%Save these for the GC
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
 
-emul(Is, St) ->
-    emul(Is, {}, [], [], St).
+emul(Instructions, St) ->
+    emul(Instructions, {}, [], [], St).
 
-emul([I|_]=Is, Lvs, Stk, Env, St) ->
-    ?ITRACE_DO(begin
+emul([I|_]= Instructions, Lvs, Stk, Env, St) ->
+  ?ITRACE_DO(begin
 		   io:fwrite("I: ~p\n", [I]),
 		   io:fwrite("~p\n", [{Lvs,Env}]),
 		   io:fwrite("St: "),
 		   stack_print(Stk)
 	       end),
-    emul_1(Is, Lvs, Stk, Env, St);
+    emul_1(Instructions, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("I: []\n"),
@@ -476,168 +517,310 @@ stack_print([E|St]) ->
     stack_print(St);
 stack_print([]) -> io:nl().
 
+
+coverage(#info_structure{ source_file=File,
+            linenum=LineNum,
+            token_position_in_line=StatementPositionInLine,
+            original_token_description=OriginalTokenDescription,
+            internal_statement=InternalStatement } = Info,
+         State % To Save with executed Instructions to get variables during debugging
+    ) ->
+
+  % save last executed line and filename for error messages
+  put(info_last_executed_token, #{last_executed_filename => File, last_executed_linenum => LineNum}),
+
+  % the debug info reduce the speed of Luerl, so turn it on only if you want to debug
+  CoverageBuilding = true,
+
+  case CoverageBuilding of
+    false -> State;
+    true ->
+
+
+      %%%%%%%%  STATE FILE SAVE ###############################
+      % I want to save the state - but it's too slow now
+      % CoverageStatementFileCounter = case get(coverage_statement_file_counter) of
+      %                                 undefined -> 1;
+      %                                 StatementFileCounter -> StatementFileCounter+1
+      %                               end,
+      % put(coverage_statement_file_counter, CoverageStatementFileCounter),
+      % StateFile = lists:flatten(io_lib:format("/tmp/statefile_~p", [CoverageStatementFileCounter])),
+      %%%%%%%%  STATE FILE SAVE ###############################
+
+
+      % Save statements for every executed command to get local/global variables if you want to debug
+      %%%%% TURN ON/OFF when you need it: %%
+      % luerl:log_to_file(StateFile, "~p", [State])
+      %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+      %% LOG TO FILE: DEBUGGING, you can follow the process of LUA PROGRAM WITH THIS LOG
+      %_ErlangTimestamp = luerl:obj_to_string(erlang:timestamp()),
+      % File has to be the last because if Lua code comes from string, there is no filename but only a long string
+
+      % IMPORTANT: the string formatting is slow, if you want to save complex structure
+      % so now we use only strings in CoverageNow
+
+      [ElemFirst, LuaMap | ElemOthers ] = tuple_to_list(State),
+
+      % source file id numbers: the log files are huge because of the lot of filenames.
+      % With an Id, the file size is smaller faster.
+
+      FileIdNums = maps:get(source_file_id_numbers, LuaMap, #{}),
+      FileId = case maps:get(File, FileIdNums, new_file_no_id) of
+                 new_file_no_id ->
+                   Id = luerl:number_to_string_direct_map(length(maps:keys(FileIdNums))+1),
+                   FileIdNumsUpdated = FileIdNums#{File => Id},
+                   Id;
+                 StoredFileId ->
+                   FileIdNumsUpdated = FileIdNums, % No update, the file is known
+                   StoredFileId
+      end,
+
+      % file id
+      CoverageNow = "COVER>> fid:" ++ FileId ++ " " ++ luerl:number_to_string_direct_map(LineNum) ++ "\n",
+
+      % CoverageNow = #{
+      %   file=>File,
+      %   linenumber=>LineNum,
+      %   time_start=>ErlangTimestamp,
+      %   statement_position_in_line => StatementPositionInLine,
+      %   state_file => StateFile},
+
+      % the formatted text is TOO SLOW, you can't use this:
+      % CoverageNow = luerl:obj_to_string(
+      % "coverage: line: ~p  statement pos: ~p (~p  ~p) start_time: ~p, StateFile: ~p  File: ~p",
+      %   [LineNum, StatementPositionInLine, OriginalTokenDescription, InternalStatement, ErlangTimestamp, StateFile, File]
+      % ),
+
+      CoverageInfoPrev = maps:get(coverage_info, LuaMap, []),
+      CoverageInfoUpdated = [CoverageNow | CoverageInfoPrev],
+
+      LuaMapUpdated = LuaMap#{coverage_info=>CoverageInfoUpdated,
+                             source_file_id_numbers=>FileIdNumsUpdated},
+      erlang:list_to_tuple([ElemFirst, LuaMapUpdated | ElemOthers])
+  end;
+coverage(NotInfoStructure, State) -> % -no-file-but-string, no-file-but-forms chunks has not Info structs
+  State. % I don't want to log them now
+  %luerl:log_to_file("coverage not info structure: ~p", [NotInfoStructure]).
+
 %% Expression instructions.
-emul_1([?PUSH_LIT(L)|Is], Lvs, Stk, Env, St) ->
-    emul(Is, Lvs, [L|Stk], Env, St);
-emul_1([?PUSH_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+emul_1([?PUSH_LIT_INFO(L)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [L|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_LVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     Val = get_local_var(D, I, Lvs),
-    emul(Is, Lvs, [Val|Stk], Env, St);
-emul_1([?PUSH_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+    emul(Is, Lvs, [Val|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_EVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
-    Val = get_env_var(D, I, Env, St),
-    emul(Is, Lvs, [Val|Stk], Env, St);
-emul_1([?PUSH_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
-    {Val,St1} = get_global_var(K, St0),
+    Val = get_env_var(D, I, Env, StWithCoverInfo),
+    emul(Is, Lvs, [Val|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_GVAR_INFO(K)|Is], Lvs, Stk, Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_global_var(K, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 
-emul_1([?PUSH_LAST_LIT(L)|Is], Lvs, Stk, Env, St) ->
-    emul(Is, Lvs, [[L]|Stk], Env, St);
-emul_1([?PUSH_LAST_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+emul_1([?PUSH_LAST_LIT_INFO(L)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [[L]|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_LAST_LVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     Val = get_local_var(D, I, Lvs),
-    emul(Is, Lvs, [[Val]|Stk], Env, St);
-emul_1([?PUSH_LAST_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
+    emul(Is, Lvs, [[Val]|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_LAST_EVAR_INFO(D, I)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
-    Val = get_env_var(D, I, Env, St),
-    emul(Is, Lvs, [[Val]|Stk], Env, St);
-emul_1([?PUSH_LAST_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
-    {Val,St1} = get_global_var(K, St0),
+    Val = get_env_var(D, I, Env, StWithCoverInfo),
+    emul(Is, Lvs, [[Val]|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_LAST_GVAR_INFO(K)|Is], Lvs, Stk, Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_global_var(K, StWithCoverInfo),
     emul(Is, Lvs, [[Val]|Stk], Env, St1);
-
-emul_1([?STORE_LVAR(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
+emul_1([?STORE_LVAR_INFO(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     Lvs1 = set_local_var(D, I, V, Lvs0),
-    emul(Is, Lvs1, Stk, Env, St);
-emul_1([?STORE_EVAR(D, I)|Is], Lvs, [V|Stk], Env, St0) ->
-    St1 = set_env_var(D, I, V, Env, St0),
+    emul(Is, Lvs1, Stk, Env, StWithCoverInfo);
+emul_1([?STORE_EVAR_INFO(D, I)|Is], Lvs, [V|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_env_var(D, I, V, Env, StWithCoverInfo),
     emul(Is, Lvs, Stk, Env, St1);
-emul_1([?STORE_GVAR(K)|Is], Lvs, [V|Stk], Env, St0) ->
-    St1 = set_global_var(K, V, St0),
+emul_1([?STORE_GVAR_INFO(K)|Is], Lvs, [V|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_global_var(K, V, StWithCoverInfo),
     emul(Is, Lvs, Stk, Env, St1);
 
-emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
-    {Val,St1} = get_table_key(Tab, Key, St0),
+emul_1([?GET_KEY_INFO|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Val,St1} = get_table_key(Tab, Key, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
-emul_1([?GET_LIT_KEY(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
-    %% [?PUSH_LIT(K),?GET_KEY]
-    {Val,St1} = get_table_key(Tab, K, St0),
+emul_1([?GET_LIT_KEY_INFO(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    %% [?PUSH_LIT_INFO_EMPTY(K),?GET_KEY_INFO_EMPTY]
+    {Val,St1} = get_table_key(Tab, K, StWithCoverInfo),
     emul(Is, Lvs, [Val|Stk], Env, St1);
-emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
-    St1 = set_table_key(Tab, Key, Val, St0),
+emul_1([?SET_KEY_INFO|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    St1 = set_table_key(Tab, Key, Val, StWithCoverInfo),
     emul_1(Is, Lvs, Stk, Env, St1);
-emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
-    %% [?PUSH_LIT(K),?SET_KEY]
-    St1 = set_table_key(Tab, Key, Val, St0),
+emul_1([?SET_LIT_KEY_INFO(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    %% [?PUSH_LIT_INFO_EMPTY(K),?SET_KEY_INFO_EMPTY]
+    St1 = set_table_key(Tab, Key, Val, StWithCoverInfo),
     emul_1(Is, Lvs, Stk, Env, St1);
 
-emul_1([?SINGLE|Is], Lvs, [Val|Stk], Env, St) ->
-    emul(Is, Lvs, [first_value(Val)|Stk], Env, St);
-emul_1([?MULTIPLE|Is], Lvs, [Val|Stk], Env, St) ->
-    emul(Is, Lvs, [multiple_value(Val)|Stk], Env, St);
+emul_1([?SINGLE_INFO|Is], Lvs, [Val|Stk], Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [first_value(Val)|Stk], Env, StWithCoverInfo);
+emul_1([?MULTIPLE_INFO|Is], Lvs, [Val|Stk], Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [multiple_value(Val)|Stk], Env, StWithCoverInfo);
 
-emul_1([?BUILD_TAB(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
-    {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, St0),
+emul_1([?BUILD_TAB_INFO(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, StWithCoverInfo),
     emul(Is, Lvs, [Tab|Stk1], Env, St1);
-emul_1([?FCALL(0)|Is], Lvs, Stk, Env, St) ->
-    do_fcall_0(Is, Lvs, Stk, Env, St);
-emul_1([?FCALL(1)|Is], Lvs, Stk, Env, St) ->
-    do_fcall_1(Is, Lvs, Stk, Env, St);
-emul_1([?FCALL(2)|Is], Lvs, Stk, Env, St) ->
-    do_fcall_2(Is, Lvs, Stk, Env, St);
-emul_1([?FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
-    do_fcall(Is, Lvs, Stk, Env, St, Ac);
-emul_1([?TAIL_FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
-    do_tail_fcall(Is, Lvs, Stk, Env, St, Ac);
-emul_1([?MCALL(K, 0)|Is], Lvs, Stk, Env, St) ->
-    do_mcall_0(Is, Lvs, Stk, Env, St, K);
-emul_1([?MCALL(K, 1)|Is], Lvs, Stk, Env, St) ->
-    do_mcall_1(Is, Lvs, Stk, Env, St, K);
-emul_1([?MCALL(K, 2)|Is], Lvs, Stk, Env, St) ->
-    do_mcall_2(Is, Lvs, Stk, Env, St, K);
-emul_1([?MCALL(K, Ac)|Is], Lvs, Stk, Env, St) ->
-    do_mcall(Is, Lvs, Stk, Env, St, K, Ac);
-emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
-    do_op1(Is, Lvs, Stk, Env, St, Op);
-emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
-    do_op2(Is, Lvs, Stk, Env, St, Op);
-emul_1([?PUSH_FDEF(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
-    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, St0),
+
+emul_1([?FCALL_INFO(0)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_0(Is, Lvs, Stk, Env, StWithCoverInfo);
+emul_1([?FCALL_INFO(1)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_1(Is, Lvs, Stk, Env, StWithCoverInfo);
+emul_1([?FCALL_INFO(2)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall_2(Is, Lvs, Stk, Env, StWithCoverInfo);
+emul_1([?FCALL_INFO(Ac)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_fcall(Is, Lvs, Stk, Env, StWithCoverInfo, Ac);
+
+emul_1([?TAIL_FCALL_INFO(Ac)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_tail_fcall(Is, Lvs, Stk, Env, StWithCoverInfo, Ac);
+
+emul_1([?MCALL_INFO(K, 0)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_0(Is, Lvs, Stk, Env, StWithCoverInfo, K);
+emul_1([?MCALL_INFO(K, 1)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_1(Is, Lvs, Stk, Env, StWithCoverInfo, K);
+emul_1([?MCALL_INFO(K, 2)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall_2(Is, Lvs, Stk, Env, StWithCoverInfo, K);
+emul_1([?MCALL_INFO(K, Ac)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_mcall(Is, Lvs, Stk, Env, StWithCoverInfo, K, Ac);
+
+emul_1([?OP_INFO(Op,1)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_op1(Is, Lvs, Stk, Env, StWithCoverInfo, Op);
+emul_1([?OP_INFO(Op,2)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_op2(Is, Lvs, Stk, Env, StWithCoverInfo, Op);
+
+emul_1([?PUSH_FDEF_INFO(Lsz, Esz, Pars, Fis)|Is], Lvs, Stk, Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Func,St1} = do_fdef(Lsz, Esz, Pars, Fis, Env, StWithCoverInfo),
     emul(Is, Lvs, [Func|Stk], Env, St1);
-%% Control instructions.
-emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
-    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
+
+emul_1([?BLOCK_INFO(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, StWithCoverInfo, Lsz, Esz),
     emul(Is, Lvs1, Stk1, Env1, St1);
-emul_1([?WHILE(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
-    do_while(Is, Lvs, Stk, Env, St, Eis, Wis);
-emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
-    do_repeat(Is, Lvs, Stk, Env, St, Ris);
-emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+
+emul_1([?WHILE_INFO(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_while(Is, Lvs, Stk, Env, StWithCoverInfo, Eis, Wis);
+emul_1([?REPEAT_INFO(Ris)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_repeat(Is, Lvs, Stk, Env, StWithCoverInfo, Ris);
+emul_1([?AND_THEN_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    StWithCoverInfo = coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
-	true ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
-	    emul(Is, Lvs1, Stk2, Env1, St1);
-	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
+      true ->
+        {Lvs1, Stk2, Env1, St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
+        emul(Is, Lvs1, Stk2, Env1, St1);
+      false ->
+        emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
-emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+emul_1([?OR_ELSE_INFO(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+    StWithCoverInfo = coverage(Info, St0),
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
-	false ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
-	    emul(Is, Lvs1, Stk2, Env1, St1)
+      true ->
+        emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
+      false ->
+        {Lvs1, Stk2, Env1, St1} = emul(T, Lvs, Stk1, Env, StWithCoverInfo),
+        emul(Is, Lvs1, Stk2, Env1, St1)
     end;
-emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+emul_1([?IF_TRUE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
-	true ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1);
-	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
+	    true ->
+	      {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
+	      emul(Is, Lvs1, Stk1, Env1, St1);
+      false ->
+	      emul(Is, Lvs, Stk0, Env, StWithCoverInfo)
     end;
-emul_1([?IF_FALSE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+emul_1([?IF_FALSE_INFO(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
-	false ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1)
+	    true ->
+	      emul(Is, Lvs, Stk0, Env, StWithCoverInfo);
+	    false ->
+	      {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, StWithCoverInfo),
+	      emul(Is, Lvs1, Stk1, Env1, St1)
     end;
-emul_1([?IF(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
-    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, St0, True, False),
+emul_1([?IF_INFO(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
+    StWithCoverInfo=coverage(Info, St0),
+    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, StWithCoverInfo, True, False),
     emul(Is, Lvs1, Stk1, Env1, St1);
-emul_1([?NFOR(V, Fis)|Is], Lvs, Stk, Env, St) ->
-    do_numfor(Is, Lvs, Stk, Env, St, V, Fis);
-emul_1([?GFOR(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
-    do_genfor(Is, Lvs, Stk, Env, St, Vs, Fis);
-emul_1([?BREAK|_], Lvs, Stk, Env, St) ->
-    throw({break,St#luerl.tag,Lvs,Stk,Env,St});
-emul_1([?RETURN(0)|_], _, _, _, St) ->
-    throw({return,St#luerl.tag,[],St});
-emul_1([?RETURN(Ac)|_], _, Stk, _, St) ->
+emul_1([?NFOR_INFO(V, Fis)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_numfor(Is, Lvs, Stk, Env, StWithCoverInfo, V, Fis);
+emul_1([?GFOR_INFO(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    do_genfor(Is, Lvs, Stk, Env, StWithCoverInfo, Vs, Fis);
+emul_1([?BREAK_INFO|_], Lvs, Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    throw({break,St#luerl.tag,Lvs,Stk,Env,StWithCoverInfo});
+emul_1([?RETURN_INFO(0)|_], _, _, _, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    throw({return,St#luerl.tag,[],StWithCoverInfo});
+emul_1([?RETURN_INFO(Ac)|_], _, Stk, _, St) ->
+    StWithCoverInfo=coverage(Info, St),
     {Ret,_} = pop_vals(Ac, Stk),
-    throw({return,St#luerl.tag,Ret,St});
+    throw({return,St#luerl.tag,Ret,StWithCoverInfo});
 %% Stack instructions
-emul_1([?POP|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
-    emul(Is, Lvs, Stk, Env, St);
-emul_1([?POP2|Is], Lvs, [_,_|Stk], Env, St) ->	%Just pop top 2 off stack
-    emul(Is, Lvs, Stk, Env, St);
-emul_1([?SWAP|Is], Lvs, [S1,S2|Stk], Env, St) ->
-    emul(Is, Lvs, [S2,S1|Stk], Env, St);
-emul_1([?DUP|Is], Lvs, [V|_]=Stk, Env, St) ->
-    emul_1(Is, Lvs, [V|Stk], Env, St);
-emul_1([?PUSH_VALS(Vc)|Is], Lvs, [Vals|Stk0], Env, St) ->
+emul_1([?POP_INFO|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, Stk, Env, StWithCoverInfo);
+emul_1([?POP2_INFO|Is], Lvs, [_,_|Stk], Env, St) ->	%Just pop top 2 off stack
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, Stk, Env, StWithCoverInfo);
+emul_1([?SWAP_INFO|Is], Lvs, [S1,S2|Stk], Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul(Is, Lvs, [S2,S1|Stk], Env, StWithCoverInfo);
+emul_1([?DUP_INFO|Is], Lvs, [V|_]=Stk, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
+    emul_1(Is, Lvs, [V|Stk], Env, StWithCoverInfo);
+emul_1([?PUSH_VALS_INFO(Vc)|Is], Lvs, [Vals|Stk0], Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     %% Pop list off the stack and push Vc vals from it.
     Stk1 = push_vals(Vc, Vals, Stk0),
-    emul(Is, Lvs, Stk1, Env, St);
-emul_1([?POP_VALS(Vc)|Is], Lvs, Stk0, Env, St) ->
+    emul(Is, Lvs, Stk1, Env, StWithCoverInfo);
+emul_1([?POP_VALS_INFO(Vc)|Is], Lvs, Stk0, Env, St) ->
+    StWithCoverInfo=coverage(Info, St),
     %% Pop Vc vals off the stack, put in a list and push.
     {Vals,Stk1} = pop_vals(Vc, Stk0),
-    emul(Is, Lvs, [Vals|Stk1], Env, St);
-emul_1([], Lvs, Stk, Env, St) ->
-    {Lvs,Stk,Env,St}.
+    emul(Is, Lvs, [Vals|Stk1], Env, StWithCoverInfo);
+
+emul_1([], Lvs, Stk, Env, State) ->
+  {Lvs,Stk,Env, State}.
+
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
 %% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.
@@ -725,27 +908,30 @@ do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz) ->
 %% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
 do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
-    case op(Op, A) of
+  case op(Op, A) of
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
 	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
-	{error,E} -> lua_error(E, St)
+	{error,E} ->
+    lua_error(E, St)
     end.
 
 do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
-    case op(Op, A1, A2) of
+  OpResult = op(Op, A1, A2),
+    case OpResult of
 	{ok,Res} ->
 	    emul(Is, Lvs, [Res|Stk], Env, St);
 	{meta,Meta} ->
 	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
-	{error,E} -> lua_error(E, St)
+	{error,E} ->
+    lua_error(E, St)
     end.
 
 %% do_fdef(LocalSize, EnvSize, Pars, Instrs, Env, State) -> {Function,State}.
 
 do_fdef(Lsz, Esz, Pars, Is, Env, St) ->
-    {#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
+    {#lua_func{local_var_size =Lsz, environment_var_size =Esz, parameters =Pars, environment =Env, code_block =Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
@@ -772,18 +958,17 @@ do_fcall(Is, Lvs, Stk0, Env, St, Ac) ->
 %%  expects everything necessary to be in the state.
 
 functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
-    {Ret,St1} = functioncall(Func, Args, Stk, St0),
-    {Ret,St1}.
+    functioncall(Func, Args, Stk, St0).
 
 %% functioncall(Instrs, LocalVars, Stk, Env, State, Func, Args) -> <emul>
 %%  This is called from within code and continues with Instrs after
 %%  call. It must move everything into State.
 
-functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
-    Fr = #call_frame{lvs=Lvs,env=Env},
+functioncall(Instructions, LocalVars, Stk0, Env, St0, Func, Args) ->
+    Fr = #call_frame{local_vars = LocalVars,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    emul(Is, Lvs, [Ret|Stk0], Env, St1).
+    emul(Instructions, LocalVars, [Ret|Stk0], Env, St1).
 
 %% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
 %%     ReturnFromEmul.
@@ -842,7 +1027,7 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 	{nil,St1} ->				%No method
 	    lua_error({undef_method,Obj,M}, St1);
 	{Val,St1} ->
-	    Fr = #call_frame{lvs=Lvs,env=Env},
+	    Fr = #call_frame{local_vars =Lvs,env=Env},
 	    Stk1 = [Fr|Stk0],
 	    {Ret,St2} = functioncall(Val, [Obj|Args], Stk1, St1),
 	    emul(Is, Lvs, [Ret|Stk0], Env, St2)
@@ -851,50 +1036,76 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#lua_func{lsz=0,esz=0,env=Env,b=Fis}, _, Stk, St0) ->
+functioncall(
+      #lua_func{local_var_size =0, environment_var_size =0, environment =Env, code_block =Instructions},
+    _, Stk, St0) ->
+
     %% No variables at all.
-    functioncall(Fis, [], Stk, Env, St0);
-functioncall(#lua_func{lsz=0,esz=Esz,pars=Pars,env=Env,b=Fis},
-	     Args, Stk, St0) ->
+    functioncall(Instructions, [], Stk, Env, St0);
+functioncall(
+             #lua_func{ local_var_size = 0, % VarsLocalSize
+                        environment_var_size = VarEnvSize,
+                        parameters = Pars,
+                        environment = Env,
+                        code_block = Instructions},
+             Args, Stk, St0) ->
+
     %% No local variables, only env variables.
-    E0 = erlang:make_tuple(Esz, nil),
+    E0 = erlang:make_tuple(VarEnvSize, nil),
     E1 = assign_env_pars(Pars, Args, E0),
     {Fref,St1} = alloc_frame(E1, St0),
-    {Ret,St2} = functioncall(Fis, [], Stk, [Fref|Env], St1),
+    {Ret,St2} = functioncall(Instructions, [], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall(#lua_func{lsz=Lsz,esz=0,pars=Pars,env=Env,b=Fis},
+functioncall(
+             #lua_func{ local_var_size = VarsLocalSize,
+                        environment_var_size = 0,  % VarEnvSize
+                        parameters = Params,
+                        environment = Env,
+                        code_block = Instructions},
 	     Args, Stk, St0) ->
+
     %% No env variables, only local variables.
-    L0 = erlang:make_tuple(Lsz, nil),
-    L1 = assign_local_pars(Pars, Args, L0),
-    {Ret,St1} = functioncall(Fis, [L1], Stk, Env, St0),
+    LocalEmtpy = erlang:make_tuple(VarsLocalSize, nil),
+    LocalVars = assign_local_pars(Params, Args, LocalEmtpy),
+    {Ret,St1} = functioncall(Instructions, [LocalVars], Stk, Env, St0),
     {Ret,St1};
-functioncall(#lua_func{lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Fis},
+
+functioncall(
+             #lua_func{ local_var_size = VarsLocalSize,
+                        environment_var_size = VarEnvSize,
+                        parameters = Params,
+                        environment = Env,
+                        code_block = Instructions},
 	     Args, Stk, St0) ->
-    L0 = erlang:make_tuple(Lsz, nil),
-    E0 = erlang:make_tuple(Esz, nil),
-    {L1,E1} = assign_pars(Pars, Args, L0, E0),
-    {Fref,St1} = alloc_frame(E1, St0),
-    {Ret,St2} = functioncall(Fis, [L1], Stk, [Fref|Env], St1),
+
+    LocalEmpty = erlang:make_tuple(VarsLocalSize, nil),
+    EnvEmpty = erlang:make_tuple(VarEnvSize, nil),
+    {LocalVars, EnvVars} = assign_pars(Params, Args, LocalEmpty, EnvEmpty),
+    {Fref,St1} = alloc_frame(EnvVars, St0),
+
+    {Ret,St2} = functioncall(Instructions, [LocalVars], Stk, [Fref|Env], St1),
     {Ret,St2};
-functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
+functioncall(  #erl_func{code=Instructions},
+               Args, Stack, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk}),
+    {Ret,St1} = Instructions(Args, St0#luerl{stk= Stack}),
     {Ret,St1#luerl{stk=Stk0}};			%Replace it
-functioncall(Func, Args, Stk, St) ->
-    case get_metamethod(Func, <<"__call">>, St) of
-	nil -> lua_error({undef_function,Func}, St);
-	Meta -> functioncall(Meta, [Func|Args], Stk, St)
+functioncall(Instructions, Args, Stack, St) ->
+  case get_metamethod(Instructions, <<"__call">>, St) of
+	nil -> lua_error({undef_function, Instructions}, St);
+	Meta -> functioncall(Meta, [Instructions |Args], Stack, St)
     end.
 
-functioncall(Fis, Lvs, Stk, Env, St0) ->
+functioncall( Instructions,
+              LocalVars, Stack, Env, St0) ->
+
     Tag = St0#luerl.tag,
     %% Must use different St names else they become 'unsafe'.
     %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     try
-	{_,_,_,Sta} = emul(Fis, Lvs, Stk, Env, St0),
-	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
-	{[],Sta}				%No return, no arguments
+	      {_,_,_,Sta} = emul(Instructions, LocalVars, Stack, Env, St0),
+	      %%io:fwrite("fr: ~p\n", [{Tag,[]}]),
+	      {[],Sta}				%No return, no arguments
     catch
 	throw:{return,Tag,Ret,Stb} ->
 	    %%io:fwrite("fr: ~p\n", [{Tag,Ret,Stb#luerl.env}]),
@@ -999,7 +1210,7 @@ do_if(Lvs, [Val|Stk], Env, St, True, False) ->
 	false -> emul(False, Lvs, Stk, Env, St)
     end.
 
-%% do_if_block([?BLOCK(Lsz, Esz, Bis)], Lvs0, Stk0, Env0, St0, Is) ->
+%% do_if_block([?BLOCK_INFO_EMPTY(Lsz, Esz, Bis)], Lvs0, Stk0, Env0, St0, Is) ->
 %%     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
 %%     emul(Is, Lvs1, Stk1, Env1, St1);
 %% do_if_block(Bis, Lvs0, Stk0, Env0, St0, Is) ->
@@ -1278,7 +1489,7 @@ integer_op(Op, A1, A2, E, Raw) ->
     end.
 
 numeric_meta(Op, A, E, St0) ->
-    case get_metamethod(A, E, St0) of
+  case get_metamethod(A, E, St0) of
 	nil -> badarg_error(Op, [A], St0);	%No meta method
 	Meta ->
 	    {Ret,St1} = functioncall(Meta, [A], St0),
@@ -1286,12 +1497,12 @@ numeric_meta(Op, A, E, St0) ->
     end.
 
 numeric_meta(Op, A1, A2, E, St0) ->
-    case get_metamethod(A1, A2, E, St0) of
-	nil -> badarg_error(Op, [A1,A2], St0);	%No meta methods
-	Meta ->
+  case get_metamethod(A1, A2, E, St0) of
+	  nil -> badarg_error(Op, [A1,A2], St0);	%No meta methods
+	  Meta ->
 	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
 	    {first_value(Ret),St1}
-    end.
+  end.
 
 eq_op(_Op, A1, A2) when A1 == A2 -> {ok,true};
 eq_op(_Op, A1, A2) ->
@@ -1457,7 +1668,7 @@ mark([#uref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU) ->
            Su1 = ordsets:add_element(U, Su0),
            mark(Todo, More, GcT, GcF, GcU#gct{s=Su1})
     end;
-mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU) ->
+mark([#lua_func{environment =Env}|Todo], More, GcT, GcF, GcU) ->
     mark(Todo, [Env|More], GcT, GcF, GcU);
 %% Catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcF, GcU) ->
@@ -1466,7 +1677,7 @@ mark([#thread{}|Todo], More, GcT, GcF, GcU) ->
     mark(Todo, More, GcT, GcF, GcU);
 mark([#userdata{m=Meta}|Todo], More, GcT, GcF, GcU) ->
     mark([Meta|Todo], More, GcT, GcF, GcU);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcF, GcU) ->
+mark([#call_frame{local_vars =Lvs,env=Env}|Todo], More0, GcT, GcF, GcU) ->
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
     mark(Todo, More1, GcT, GcF, GcU);
 mark([{K,V}|Todo], More, GcT, GcF, GcU) ->	%Table key-value pair
