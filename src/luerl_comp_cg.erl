@@ -319,9 +319,9 @@ exp(#op{op=Op,as=As}, S, St0) ->
 exp(#tc{fs=Fs}, S, St0) ->
     {Its,Fc,I,St1} = tableconstructor(Fs, St0),
     {Its ++ multiple_values(S, [?BUILD_TAB(Fc,I)]),St1};
-exp(#lvar{n= <<"...">>}=V, S, St) ->		%Can be either local or frame
+exp(#lvar{n='...'}=V, S, St) ->			%Can be either local or frame
     {single_value(S, get_var(V)),St};
-exp(#evar{n= <<"...">>}=V, S, St) ->
+exp(#evar{n='...'}=V, S, St) ->
     {single_value(S, get_var(V)),St};
 exp(E, S, St) ->
     prefixexp(E, S, St).
@@ -389,8 +389,8 @@ functiondef(#fdef{ps=Ps0,ss=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
     {[?PUSH_FDEF(Lsz,Esz,Ps1,Iss)],St1}.
 
-func_pars([#evar{n= <<"...">>,i=I}]) -> -I;	%Tail is index for varargs
-func_pars([#lvar{n= <<"...">>,i=I}]) -> I;
+func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs
+func_pars([#lvar{n='...',i=I}]) -> I;
 func_pars([#evar{i=I}|Ps]) -> [-I|func_pars(Ps)];
 func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
