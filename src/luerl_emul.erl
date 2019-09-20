@@ -424,9 +424,31 @@ call(Func, St) ->
   call(Func, [], St).
 
 call(#lua_func{}=Func, Args, St0) ->		%Already defined
-    {Ret,St1} = functioncall(Func, Args, St0),
+    {Ret, State} = functioncall(Func, Args, St0),
+
+    % If there is coverage Info in State, write it out into file
+
+    LuaMap = element(2, State),
+    case maps:is_key(coverage_info, LuaMap) of
+      false -> ok;
+      true -> % if LuaMap has coverage_info, write it into file
+        CoverageFileCounter = case get(coverage_file_counter) of
+                                undefined -> 1;
+                                StatementFileCounter -> StatementFileCounter+1
+                              end,
+        put(coverage_file_counter, CoverageFileCounter),
+
+        FilePath = "/tmp/luerl_coverage_" ++ io_lib:fwrite("~p", [CoverageFileCounter]) ++ ".txt",
+
+        %% human, readable data: text
+        Data = maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n",
+        FileIdNumbersMap = maps:get(source_file_id_numbers, LuaMap, ""),
+        FileIdNumbers = io_lib:fwrite("FileIdNumbers: ~p", [FileIdNumbersMap] ),
+        file:write_file(FilePath, FileIdNumbers ++ "\n\n" ++ Data, [append] )
+    end,
+
   %% Should do GC here.
-    {Ret,St1};
+    {Ret, State};
 call(#erl_func{}=Func, Args, St0) ->		%Internal erlang function
   {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
@@ -484,9 +506,9 @@ coverage(#info_structure{ source_file=File,
   put(info_last_executed_token, #{last_executed_filename => File, last_executed_linenum => LineNum}),
 
   % the debug info reduce the speed of Luerl, so turn it on only if you want to debug
-  SaveDebugInfoToFile = true,
+  CoverageBuilding = true,
 
-  case SaveDebugInfoToFile of
+  case CoverageBuilding of
     false -> State;
     true ->
 
@@ -772,31 +794,7 @@ emul_1([?POP_VALS_INFO(Vc)|Is], Lvs, Stk0, Env, St) ->
     {Vals,Stk1} = pop_vals(Vc, Stk0),
     emul(Is, Lvs, [Vals|Stk1], Env, StWithCoverInfo);
 
-% TODO: -- luerl dofile("test/luerl_return_SUITE_data/simple_return_multi.lua").
-% can exit in another part of emulator so find that exit point please and
-% write out the coverage from the state
-
 emul_1([], Lvs, Stk, Env, State) ->
-  % If there is coverage Info in State, write it out into file
-
-  LuaMap = element(2, State),
-  case maps:is_key(coverage_info, LuaMap) of
-    false -> ok;
-    true -> % if LuaMap has coverage_info, write it into file
-      CoverageFileCounter = case get(coverage_file_counter) of
-                                      undefined -> 1;
-                                      StatementFileCounter -> StatementFileCounter+1
-                                    end,
-      put(coverage_file_counter, CoverageFileCounter),
-
-      FilePath = "/tmp/luerl_coverage_" ++ io_lib:fwrite("~p", [CoverageFileCounter]) ++ ".txt",
-
-      %% human, readable data: text
-      Data = maps:get(coverage_info, LuaMap) ++ "### COVERAGE END ###\n",
-      FileIdNumbersMap = maps:get(source_file_id_numbers, LuaMap, ""),
-      FileIdNumbers = io_lib:fwrite("FileIdNumbers: ~p", [FileIdNumbersMap] ),
-      file:write_file(FilePath, FileIdNumbers ++ "\n\n" ++ Data, [append] )
-  end,
   {Lvs,Stk,Env, State}.
 
 
