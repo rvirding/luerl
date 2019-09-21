@@ -19,7 +19,7 @@
 
 -module(luerl_debugger_emulatorside).
 
--export([msg_send_to_debugger_client/1, waiting_for_debugger_client_command/1]).
+-export([msg_send/2, msg_send_to_debugger_client/1, waiting_for_debugger_client_command/1]).
 
 %% IMPORTANT: if you use Luerl as a Library, then you have to know
 %% your node's cookie and type it in the debugger's console
@@ -43,6 +43,9 @@ is_debug_mode_on() ->
 
 % STANDARD OF MESSAGES: {SenderModule, SenderFunction, MsgSubject, DataCanBeAnything}
 msg_send_to_debugger_client(Msg) ->
+    msg_send(Msg, "debugger@").
+
+msg_send(Msg, To) ->
   case is_debug_mode_on() of
     _ -> ok;
 
@@ -50,7 +53,7 @@ msg_send_to_debugger_client(Msg) ->
 
       {ok, Hostname} = inet:gethostname(),
       {ok,{hostent,FullHostname,[],inet,_,[_]}} = inet:gethostbyname(Hostname),
-      NodenameDebugger = list_to_atom("debugger@"++FullHostname),
+      NodenameDebugger = list_to_atom(To ++ FullHostname),
       {luerl_debugger, NodenameDebugger} ! Msg
 
   end.

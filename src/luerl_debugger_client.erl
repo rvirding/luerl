@@ -34,9 +34,9 @@ start() ->
   {ok,{hostent,FullHostname,[],inet,_,[_]}} = inet:gethostbyname(Hostname),
 
   io:fwrite("FullHostname: ~p\n", [FullHostname]),
-  net_kernel:start([list_to_atom("debugger@"++FullHostname), longnames]),
-
   ErlCookie = user_input_get("Please Give me the program executer Luerl node's cookie!"),
+
+  net_kernel:start([list_to_atom("debugger@"++FullHostname), longnames]),
   erlang:set_cookie(node(), list_to_atom(ErlCookie)),
 
   register(luerl_debugger, self()),
@@ -44,10 +44,14 @@ start() ->
   waiting_for_server_message(),
   ok.
 
+msg_send_to_emulatorside(Msg) ->
+  luerl_debugger_emulatorside:msg_send(Msg, "debugger@").
+
 waiting_for_server_message() ->
   receive
     M ->
       io:format("Debugger received: ~p~n",[M]),
+      msg_send_to_emulatorside({client_message, execute_next_instruction, no_data}),
       waiting_for_server_message()
   after 6000000 ->
     io:format("Timeout, Debugger is finished"),
