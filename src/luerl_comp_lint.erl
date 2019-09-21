@@ -95,8 +95,8 @@ stmt(#expr_stmt{}=E, St) ->
 assign_stmt(#assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
     St1 = ?IF(length(Vs) =/= length(Es),
               assign_mismatch_warning(Anno, St0), St0),
-    St1 = lists:foldl(fun (V, S) -> assign_var(V, S) end, St0, Vs),
-    explist(Es, St1).
+    St2 = lists:foldl(fun (V, S) -> assign_var(V, S) end, St1, Vs),
+    explist(Es, St2).
 
 assign_var(#dot{e=Exp,r=Rest}, St0) ->
     St1 = prefixexp_first(Exp, St0),
