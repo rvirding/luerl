@@ -12,12 +12,12 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl.erl
+%% File    : luerl_debugger_client.erl
 %% Authors : Balazs Nyiro
 %% Purpose : debugger console for another Luerl node()
 %%           to follow the program execution
 
--module(luerl_debugger).
+-module(luerl_debugger_client).
 
 -export([start/0]).
 
