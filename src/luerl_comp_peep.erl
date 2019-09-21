@@ -83,13 +83,8 @@ instrs([?OR_ELSE(Fis0)|Is], St) ->
 instrs([?IF_TRUE(Tis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     [?IF_TRUE(Tis1)|instrs(Is, St)];
-instrs([?IF_FALSE(Fis0)|Is], St) ->
-    Fis1 = instrs(Fis0, St),
-    [?IF_FALSE(Fis1)|instrs(Is, St)];
 instrs([?IF(Tis, [])|Is], St) ->
     instrs([?IF_TRUE(Tis)|Is], St);
-instrs([?IF([], Fis)|Is], St) ->                %This should never happen
-    instrs([?IF_FALSE(Fis)|Is], St);
 instrs([?IF(Tis0, Fis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     Fis1 = instrs(Fis0, St),

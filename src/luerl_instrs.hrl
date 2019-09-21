@@ -52,13 +52,12 @@
 %% Control instructions.
 
 -define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
-
+-define(CLOSE, close).
 -define(WHILE(E, B), {while,E,B}).
 -define(REPEAT(B), {repeat,B}).
 -define(AND_THEN(T), {and_then,T}).
 -define(OR_ELSE(T), {or_else,T}).
 -define(IF_TRUE(T), {if_true,T}).
--define(IF_FALSE(T), {if_false,T}).
 -define(IF(T, F), {'if',T,F}).
 -define(NFOR(V, B), {nfor,V,B}).
 -define(GFOR(Vs, B), {gfor,Vs,B}).
