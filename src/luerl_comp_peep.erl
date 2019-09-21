@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
 %%  A chunk is now a list of instructions to define the function.
 
 chunk(#code{code=Is0}=Code, Opts) ->
-    Is1 = instrs(Is0, nil),			%No local state
+    Is1 = instrs(Is0, nil),                     %No local state
     luerl_comp:debug_print(Opts, "cp: ~p\n", [Is1]),
     {ok,Code#code{code=Is1}}.
 
@@ -64,8 +64,6 @@ instrs([?POP,?POP|Is], St) ->
 instrs([?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
-instrs([?BLOCK(0,0,Bis)|Is], St) ->		%No need for block
-    instrs(Bis ++ Is, St);
 instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->
     Bis1 = instrs(Bis0, St),
     [?BLOCK(Lsz,Esz,Bis1)|instrs(Is, St)];
@@ -90,7 +88,7 @@ instrs([?IF_FALSE(Fis0)|Is], St) ->
     [?IF_FALSE(Fis1)|instrs(Is, St)];
 instrs([?IF(Tis, [])|Is], St) ->
     instrs([?IF_TRUE(Tis)|Is], St);
-instrs([?IF([], Fis)|Is], St) ->		%This should never happen
+instrs([?IF([], Fis)|Is], St) ->                %This should never happen
     instrs([?IF_FALSE(Fis)|Is], St);
 instrs([?IF(Tis0, Fis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
