@@ -424,9 +424,11 @@ call(Func, St) ->
   call(Func, [], St).
 
 call(#lua_func{}=Func, Args, St0) ->		%Already defined
-    {Ret, State} = functioncall(Func, Args, St0),
 
   luerl_debugger_emulatorside:msg_send_to_debugger_client({luerl_emul, call, call_start_luafunc, notimportant}),
+
+  {Ret, State} = functioncall(Func, Args, St0),
+
 
   % If there is coverage Info in State, write it out into file
   LuaMap = element(2, State),
@@ -510,9 +512,11 @@ coverage(#info_structure{ source_file=File,
   luerl_debugger_emulatorside:msg_send_to_debugger_client(
     {luerl_emul, coverage, instruction_inside_executed, {File, LineNum} }),
 
+  _ClientCommand = luerl_debugger_emulatorside:waiting_for_debugger_client_command(),
+
   % now we execute next instruction and read local variables
   % from Lua functions so here we don't use the next command value
-  _DebuggerClientNextCommand = luerl_debugger_emulatorside:waiting_for_debugger_client_command(State),
+  _DebuggerClientNextCommand = luerl_debugger_emulatorside:waiting_for_debugger_client_command(),
 
   % the debug info reduce the speed of Luerl, so turn it on only if you want to debug
   CoverageBuilding = true,

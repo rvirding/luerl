@@ -36,6 +36,7 @@ start() ->
   io:fwrite("if you see this error message: \nnotice: Protocol 'inet_tcp': register/listen error: econnrefused  erlang\n\n"),
 
   io:fwrite("\nPlease set the server side after 'rebar3 shell' in Luerl console if you want to try the debugger out: \nluerl_debugger_emulatorside:nodename_cookie_set().\n\n"),
+  io:fwrite("then execute this sample lua prg: \nluerl:dofile(\"test/luerl_return_SUITE_data/simple_return_multi.lua\").\n\n\n"),
 
   nodename_cookie_set(),
   waiting_for_server_message(),
@@ -51,19 +52,27 @@ nodename_cookie_set() ->
     "luerl_debugger_client").
 
 msg_send_to_emulatorside(Msg) ->
+  io:fwrite("msg send to emulatorside: ~p", [Msg]),
   luerl_debugger_emulatorside:msg_send(Msg, "luerl_emulator", luerl_emulator).
 
 waiting_for_server_message() ->
+
+  % DISCUSS IT WITH FECO
+  msg_send_to_emulatorside({execute_next_instruction, no_data}),
+
   io:fwrite("Waiting for Luerl emulator's message..."),
   receive
-    M ->
-      io:format("Debugger received: ~p~n",[M]),
-      msg_send_to_emulatorside({client_message, execute_next_instruction, no_data}),
-      waiting_for_server_message()
+    MsgServer ->
+      io:format("Debugger received: ~p~n",[MsgServer])
   after 6000000 ->
     io:format("Timeout, Debugger is finished"),
     ok
-  end.
+  end,
+
+  _UserInput = luerl_debugger_emulatorside:user_input_get("Press <<'X' then Enter >> to execute next instruction\n"),
+  msg_send_to_emulatorside({execute_next_instruction, no_data}),
+  waiting_for_server_message().
+
 debugger_do() ->
   Task = luerl_debugger_emulatorside:user_input_get(),
   debugger_do(Task).

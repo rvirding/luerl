@@ -19,9 +19,10 @@
 
 -module(luerl_debugger_emulatorside).
 
--export([msg_send/3, msg_send_to_debugger_client/1, waiting_for_debugger_client_command/1]).
+-export([msg_send/3, msg_send_to_debugger_client/1, waiting_for_debugger_client_command/0]).
 -export([nodename_cookie_set_general/3, nodename_cookie_set/0]).
 -export([user_input_get/0, user_input_get/1]).
+-export([waiting_for_debugger_client_command/0]).
 %% IMPORTANT: if you use Luerl as a Library, then you have to know
 %% your node's cookie and type it in the debugger's console
 %% without correct cookies the start signal of call() won't arrive into the debugger
@@ -47,41 +48,50 @@ msg_send_to_debugger_client(Msg) ->
     msg_send(Msg, "luerl_debugger_client", luerl_debugger_client).
 
 msg_send(Msg, ToHostName, RegisteredProcessName) ->
-  io:fwrite("msg_send() ~p ~p ~p", [Msg, ToHostName, RegisteredProcessName]),
+  io:fwrite("msg_send() firstline ~p ~p ~p\n", [Msg, ToHostName, RegisteredProcessName]),
   case is_debug_mode_on() of
     true ->
 
-      FullHostname = full_host_name_from_os(),
+      FullHostname = full_host_name_from_os(), % FIXME: don't define hostname at every run
       Nodename = list_to_atom(ToHostName ++ "@" ++ FullHostname),
-      io:fwrite("{~p  ~p}", [RegisteredProcessName, Nodename]),
+      io:fwrite("Process name, NodeName: {~p  ~p}\n", [RegisteredProcessName, Nodename]),
       {RegisteredProcessName, Nodename} ! Msg;
 
       _ -> ok
   end.
 
-waiting_for_debugger_client_command(State) ->
+waiting_for_debugger_client_command() ->
   case is_debug_mode_on() of
-    _ -> ok;
     true ->
          case get_next_client_message() of
-           {timeout, _} -> {client_message, timeout, nodata};
-           {client_message, Msg, Data} ->
-             case Msg of
 
-               % Exit from waiting client messages:
-               execute_next_instruction -> {client_message, Msg, Data};
+           {timeout, Msg} ->
+             {timeout, Msg};
 
-               % Waiting again in unknown cases:
-               _ -> waiting_for_debugger_client_command(State)
+           {client_message, Msg} ->
+             io:fwrite("Luerl waiting for client command, received: ~p\n", [Msg]),
+             % case Msg of
 
-             end
-         end
+             %   % Exit from waiting client messages:
+             %   {execute_next_instruction, _Data} ->
+             %     ok;
+
+             %   % Waiting again in unknown cases:
+             %   _ -> waiting_for_debugger_client_command()
+
+             % end
+             ok
+         end;
+    _ ->
+      io:fwrite("Luerl: no command because debug mode is off\n", []),
+      no_command_because_debug_mode_is_off
   end.
 
 get_next_client_message() ->
+  io:fwrite("... get next client message ...\n"),
   receive
     Msg ->
-      get_next_client_message(),
+      io:format("Luerl received: ~p~n",[Msg]),
       {client_message, Msg}
   after 6000000 ->
     {timeout, client_didnt_send_anything}
