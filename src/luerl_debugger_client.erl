@@ -80,7 +80,7 @@ waiting_for_server_message() ->
   msg_send_to_emulatorside({execute_next_instruction, no_data}),
   waiting_for_server_message().
 
-file_display(LuaFilePath, LineNum) ->
+file_display(LuaFilePath, LineNumActual) ->
   case file_read(LuaFilePath) of
     file_is_unknown_cant_open ->
       dont_do_anything;
@@ -89,19 +89,41 @@ file_display(LuaFilePath, LineNum) ->
       RowsDisplayed = 9, % odd numbers only !
       RowsDelta = (RowsDisplayed - 1) div 2, % integer division
 
-      {LineFirst, LineLast} = case (LineNum-RowsDelta) > 0 of
-                                true -> {LineNum-RowsDelta, LineNum+RowsDelta};
-                                false -> {1, RowsDisplayed}
-                              end,
+      % First part first line in lua src
+      % ....
+      % First part last line in src
+      % ===== HIGHLIGHTED ACTUAL LINE IN CODE =======
+      % Last part first line
+      % ...
+      % Last part last line
 
-      LuaSrcLines = string:tokens(LuaSrcAll, "\n"),
+      LineRangeFirstBegin = max(1, LineNumActual - RowsDelta),
+      LineRangeFirstDelta = LineNumActual - LineRangeFirstBegin,
+      LineRangeLastBegin = LineNumActual + 1,
 
+      % TODO: nicer clear screen solution instead of \n
+      io:fwrite("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"),
+      io:fwrite("First part begin: ~p   delta: ~p\n", [LineRangeFirstBegin, LineRangeFirstDelta]),
+      io:fwrite("          Actual: ~p\n", [LineNumActual]),
+      io:fwrite(" Last part begin: ~p\n", [LineRangeLastBegin]),
 
       % TODO: do line numbering
+      % Plus 1 extra empty line is added, because LineRangeLastBegin can be higher than the real last line
+      LuaSrcLines = string:tokens(LuaSrcAll ++ "\n<<<<< END OF LUA SRC >>>>>>\n", "\n"),
       LuaSrcLinesNumbered = LuaSrcLines, % line_numbering(1, LuaSrcLines),
 
-      Lines = lists:sublist(LuaSrcLinesNumbered, LineFirst, LineLast),
-      io:fwrite(  lists:join("\n", Lines))
+      LinesRangeFirst = lists:sublist(LuaSrcLinesNumbered, LineRangeFirstBegin, LineRangeFirstDelta),
+      LineHighlighted = lists:sublist(LuaSrcLinesNumbered, LineNumActual, 1),
+      LinesRangeLast  = lists:sublist(LuaSrcLinesNumbered, LineRangeLastBegin, RowsDelta),
+
+      io:fwrite(  lists:join("\n", LinesRangeFirst)),
+
+      io:fwrite(  "\n\n=============================================\n" ),
+      io:fwrite(  lists:join("\n", LineHighlighted)),
+      io:fwrite(    "\n=============================================\n\n" ),
+
+      io:fwrite(  lists:join("\n", LinesRangeLast)),
+      ok
   end.
 
 
