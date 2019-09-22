@@ -52,7 +52,7 @@ nodename_cookie_set() ->
     "luerl_debugger_client").
 
 msg_send_to_emulatorside(Msg) ->
-  io:fwrite("msg send to emulatorside: ~p", [Msg]),
+  io:fwrite("msg send to emulatorside: ~p\n", [Msg]),
   luerl_debugger_emulatorside:msg_send(Msg, "luerl_emulator", luerl_emulator).
 
 waiting_for_server_message() ->
@@ -80,13 +80,32 @@ waiting_for_server_message() ->
   msg_send_to_emulatorside({execute_next_instruction, no_data}),
   waiting_for_server_message().
 
-file_display(LuaFilePath, _LineNum) ->
+file_display(LuaFilePath, LineNum) ->
   case file_read(LuaFilePath) of
     file_is_unknown_cant_open ->
       dont_do_anything;
-    LuaSrc ->
-      io:fwrite(LuaSrc)
+    LuaSrcAll ->
+
+      RowsDisplayed = 9, % odd numbers only !
+      RowsDelta = (RowsDisplayed - 1) div 2, % integer division
+
+      {LineFirst, LineLast} = case (LineNum-RowsDelta) > 0 of
+                                true -> {LineNum-RowsDelta, LineNum+RowsDelta};
+                                false -> {1, RowsDisplayed}
+                              end,
+
+      LuaSrcLines = string:tokens(LuaSrcAll, "\n"),
+
+
+      % TODO: do line numbering
+      LuaSrcLinesNumbered = LuaSrcLines, % line_numbering(1, LuaSrcLines),
+
+      Lines = lists:sublist(LuaSrcLinesNumbered, LineFirst, LineLast),
+      io:fwrite(  lists:join("\n", Lines))
   end.
+
+
+
 
 file_read(LuaFilePath) ->
   case file:open(LuaFilePath, [read]) of
