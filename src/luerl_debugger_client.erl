@@ -57,13 +57,20 @@ msg_send_to_emulatorside(Msg) ->
 
 waiting_for_server_message() ->
 
-  % DISCUSS IT WITH FECO
+  % DISCUSS IT WITH FECO: why does this line is important here?
   msg_send_to_emulatorside({execute_next_instruction, no_data}),
 
-  io:fwrite("Waiting for Luerl emulator's message..."),
+  io:fwrite("Waiting for Luerl emulator's message...\n"),
   receive
     MsgServer ->
-      io:format("Debugger received: ~p~n",[MsgServer])
+      io:format("Debugger received: ~p\n",[MsgServer]),
+      case MsgServer of
+        {luerl_emul, coverage, instruction_inside_executed, {LuaFilePath, LineNum} } ->
+          file_display(LuaFilePath, LineNum);
+        _ ->
+          io:format("Not handled server message\n",[])
+      end
+
   after 6000000 ->
     io:format("Timeout, Debugger is finished"),
     ok
@@ -73,11 +80,27 @@ waiting_for_server_message() ->
   msg_send_to_emulatorside({execute_next_instruction, no_data}),
   waiting_for_server_message().
 
-debugger_do() ->
-  Task = luerl_debugger_emulatorside:user_input_get(),
-  debugger_do(Task).
+file_display(LuaFilePath, _LineNum) ->
+  case file_read(LuaFilePath) of
+    file_is_unknown_cant_open ->
+      dont_do_anything;
+    LuaSrc ->
+      io:fwrite(LuaSrc)
+  end.
 
-debugger_do(Task) ->
-  io:fwrite("Task: " + Task),
-  debugger_do().
+file_read(LuaFilePath) ->
+  case file:open(LuaFilePath, [read]) of
+    {ok, Device} ->
+      try get_all_lines(Device)
+        after file:close(Device)
+      end;
+    _OtherReturnValue ->
+      file_is_unknown_cant_open
+  end.
 
+
+get_all_lines(Device) ->
+  case io:get_line(Device, "") of
+    eof  -> [];
+    Line -> Line ++ get_all_lines(Device)
+  end.
