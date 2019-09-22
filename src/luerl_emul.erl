@@ -454,7 +454,7 @@ load_chunk_is([], Funrs, St) -> {[],Funrs,St}.
 %% First the instructions with nested code.
 load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), Funrs0, St0) ->
     {B1,Funrs,St1} = load_chunk_is(B0, [], St0),
-    Fdef = #lua_func{anno=Anno,funrefs=Funrs,lsz=Lsz,esz=Esz,pars=Pars,env=[],b=B1},
+    Fdef = #lua_func{anno=Anno,funrefs=Funrs,lsz=Lsz,esz=Esz,pars=Pars,upv=[],b=B1},
     {Funref,St2} = alloc_funcdef(Fdef, St1),
     Funrs1 = ordsets:add_element(Funref, Funrs0),
     {?PUSH_FDEF(Funref),Funrs1,St2};
@@ -477,9 +477,6 @@ load_chunk_i(?OR_ELSE(T0), Funrs0, St0) ->
 load_chunk_i(?IF_TRUE(T0), Funrs0, St0) ->
     {T1,Funrs1,St1} = load_chunk_is(T0, Funrs0, St0),
     {?IF_TRUE(T1),Funrs1,St1};
-load_chunk_i(?IF_FALSE(T0), Funrs0, St0) ->
-    {T1,Funrs1,St1} = load_chunk_is(T0, Funrs0, St0),
-    {?IF_FALSE(T1),Funrs1,St1};
 load_chunk_i(?IF(T0, F0), Funrs0, St0) ->
     {T1,Funrs1,St1} = load_chunk_is(T0, Funrs0, St0),
     {F1,Funrs2,St2} = load_chunk_is(F0, Funrs1, St1),
@@ -513,7 +510,7 @@ itrace_print(Format, Args) ->
 %% exp(_, _) ->
 %%     error(boom).
 
--record(call_frame, {anno=[],lvs,env}).		%Save these for the GC
+-record(call_frame, {func,lvs,env}).		%Save these for the GC
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
@@ -527,28 +524,18 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("I: ~p\n", [I]),
 		   io:fwrite("Lvs: ~p\n", [Lvs]),
-		   io:fwrite("Env: ~p\n", [Env]),
-		   io:fwrite("St: "),
-		   stack_print(Stk)
+		   io:fwrite("Upv: ~p\n", [Env]),
+		   io:fwrite("Stk: ~p\n", [Stk])
 	       end),
     emul_1(Is, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("I: []\n"),
 		   io:fwrite("Lvs: ~p\n", [Lvs]),
-		   io:fwrite("Env: ~p\n", [Env]),
-		   io:fwrite("St: "),
-		   stack_print(Stk)
+		   io:fwrite("Upv: ~p\n", [Env]),
+		   io:fwrite("Stk: ~p\n", [Stk])
 	       end),
     emul_1([], Lvs, Stk, Env, St).
-
-stack_print([#call_frame{}=E|St]) ->
-    io:fwrite(" ~p\n", [E]),
-    stack_print(St);
-stack_print([E|St]) ->
-    io:fwrite(" ~p", [E]),
-    stack_print(St);
-stack_print([]) -> io:nl().
 
 %% Expression instructions.
 emul_1([?PUSH_LIT(L)|Is], Lvs, Stk, Env, St) ->
@@ -639,48 +626,54 @@ emul_1([?PUSH_FDEF(Funref)|Is], Lvs, Stk, Env, St0) ->
     %% io:format("pf: ~p\n", [[Funref1|Env]]),
     emul(Is, Lvs, [Funref1|Stk], Env, St0);
 %% Control instructions.
-emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
-    {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
-    emul(Is, Lvs1, Stk1, Env1, St1);
+%% emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs0, Stk0, Env0, St0) ->
+%%     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
+%%     emul(Is, Lvs1, Stk1, Env1, St1);
+emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs, Stk, Env, St0) ->
+    L = make_loc_frame(Lsz),
+    {Eref,St1} = make_env_frame(Esz, St0),
+    AllIs = Bis ++ [?CLOSE] ++ Is,
+    emul_1(AllIs, [L|Lvs], Stk, [Eref|Env], St1);
+emul_1([?CLOSE|Is], [_|Lvs], Stk, [_|Env], St) ->
+    emul_1(Is, Lvs, Stk, Env, St);
 emul_1([?WHILE(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
     do_while(Is, Lvs, Stk, Env, St, Eis, Wis);
+
+%% emul_1([?WHILE(Eis, Wis)=While|Is], Lvs, Stk, Env, St) ->
+%%     AllIs = Eis ++ ?IF_TRUE(Wis ++ [{loop_test,Eis,Wis}]) ++ Is,
+%%     emul_1(AllIs, Lvs, Stk, Env, St);
+%% emul_1([{loop_test,Eis,Wis}=Loop|Is], Lvs, Stk, Env, St) ->
+%%     AllIs = Eis ++ ?IF_TRUE(Wis ++ [Loop]) ++ Is,
+%%     emul_1(AllIs, Lvs, Stk, Env, St);
+
 emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
     do_repeat(Is, Lvs, Stk, Env, St, Ris);
-emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St) ->
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
 	true ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
-	    emul(Is, Lvs1, Stk2, Env1, St1);
+	    AllIs = T ++ Is,
+	    emul(AllIs, Lvs, Stk1, Env, St);
 	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
+	    emul(Is, Lvs, Stk0, Env, St)	%Non true value left on stack
     end;
-emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St0) ->
+emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St) ->
     %% This is an expression and must always leave a value on stack.
     case boolean_value(Val) of
 	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
+	    emul(Is, Lvs, Stk0, Env, St);	%Non false value left on stack
 	false ->
-	    {Lvs1,Stk2,Env1,St1} = emul(T, Lvs, Stk1, Env, St0),
-	    emul(Is, Lvs1, Stk2, Env1, St1)
+	    AllIs = T ++ Is,
+	    emul(AllIs, Lvs, Stk1, Env, St)
     end;
-emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
+emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk], Env, St) ->
     %% This is a statement and pops the boolean value.
     case boolean_value(Val) of
 	true ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1);
+	    AllIs = T ++ Is,
+	    emul(AllIs, Lvs, Stk, Env, St);
 	false ->
-	    emul(Is, Lvs, Stk0, Env, St0)
-    end;
-emul_1([?IF_FALSE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-    %% This is a statement and pops the boolean value.
-    case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, St0);
-	false ->
-	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
-	    emul(Is, Lvs1, Stk1, Env1, St1)
+	    emul(Is, Lvs, Stk, Env, St)
     end;
 emul_1([?IF(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
     {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, St0, True, False),
@@ -696,6 +689,7 @@ emul_1([?RETURN(0)|_], _, _, _, St) ->
 emul_1([?RETURN(Ac)|_], _, Stk, _, St) ->
     {Ret,_} = pop_vals(Ac, Stk),
     throw({return,St#luerl.tag,Ret,St});
+
 %% Stack instructions
 emul_1([?POP|Is], Lvs, [_|Stk], Env, St) ->	%Just pop top off stack
     emul(Is, Lvs, Stk, Env, St);
@@ -839,7 +833,7 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 %%     {Function,State}.
 
 do_fdef(Anno, Lsz, Esz, Pars, Is, Env, St) ->
-    {#lua_func{anno=Anno,lsz=Lsz,esz=Esz,pars=Pars,env=Env,b=Is},St}.
+    {#lua_func{anno=Anno,lsz=Lsz,esz=Esz,pars=Pars,upv=Env,b=Is},St}.
 
 %% do_fcall_0(Instrs, LocalVars, Stack, Env, State) ->
 %% do_fcall_1(Instrs, LocalVars, Stack, Env, State) ->
@@ -874,7 +868,7 @@ functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
 %%  call. It must move everything into State.
 
 functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
-    Fr = #call_frame{lvs=Lvs,env=Env},
+    Fr = #call_frame{func=Func,lvs=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
     emul(Is, Lvs, [Ret|Stk0], Env, St1).
@@ -936,7 +930,7 @@ methodcall(Is, Lvs, Stk0, Env, St0, Obj, M, Args) ->
 	{nil,St1} ->				%No method
 	    lua_error({undef_method,Obj,M}, St1);
 	{Val,St1} ->
-	    Fr = #call_frame{lvs=Lvs,env=Env},
+	    Fr = #call_frame{func=Val,lvs=Lvs,env=Env},
 	    Stk1 = [Fr|Stk0],
 	    {Ret,St2} = functioncall(Val, [Obj|Args], Stk1, St1),
 	    emul(Is, Lvs, [Ret|Stk0], Env, St2)
@@ -985,11 +979,12 @@ functioncall(Func, Args, Stk, St) ->
 %%     {Ret,St2} = call_luafunc(Fis, [L1], Stk, [Fref|Env], St1),
 %%     {Ret,St2}.
 
-functioncall(#lua_func{lsz=Lsz,esz=Esz,pars=Pars,b=Fis}, Args, Stk, Env, St0) ->
-    %% io:format("fc1: ~p ~p ~p ~p\n", [Lsz,Esz,Pars,Args]),
+functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=Pars,b=Fis}, Args, Stk, Env, St0) ->
+    %% io:format("fc1: anno=~p\n", [Anno]),
+    %% io:format("fc1: lsz=~p esz=~p pars=~p args=~p\n", [Lsz,Esz,Pars,Args]),
     L = make_loc_frame(Lsz, Pars, Args),
     {Eref,St1} = make_env_frame(Esz, Pars, Args, St0),
-    %% io:format("fc2: ~p ~p\n", [L,Eref]),
+    %% io:format("fc1: L=~p E=~p\n", [L,Eref == not_used orelse (?GET_TABLE(Eref#fref.i,St1#luerl.upvtab))]),
     {Ret,St2} = call_luafunc(Fis, [L], Stk, [Eref|Env], St1),
     {Ret,St2}.
 
@@ -1023,18 +1018,24 @@ call_luafunc(Fis, Lvs, Stk, Env, St0) ->
 
 assign_local_pars([V|Vs], [A|As], Var) when V > 0 ->
     assign_local_pars(Vs, As, setelement(V, Var, A));
+assign_local_pars([V|Vs], [_|As], Var) when V < 0 ->
+    assign_local_pars(Vs, As, Var);
 assign_local_pars([_|Vs], [], Var) ->
     assign_local_pars(Vs, [], Var);		%Var default is nil
 assign_local_pars([], _, Var) -> Var;		%No vararg, drop remain args
-assign_local_pars(V, As, Var) ->		%This is a vararg!
-    setelement(V, Var, As).
+assign_local_pars(V, As, Var) when V > 0 ->	%This is a vararg!
+    setelement(V, Var, As);
+assign_local_pars(V, _As, Var) when V < 0 -> Var.
 
+assign_env_pars([V|Vs], [_|As], Var) when V > 0 ->
+    assign_env_pars(Vs, As, Var);
 assign_env_pars([V|Vs], [A|As], Var) when V < 0 ->
     assign_env_pars(Vs, As, setelement(-V, Var, A));
 assign_env_pars([_|Vs], [], Var) ->
     assign_env_pars(Vs, [], Var);		%Var default is nil
 assign_env_pars([], _, Var) -> Var;		%No vararg, drop remain args
-assign_env_pars(V, As, Var) ->			%This is a vararg!
+assign_env_pars(V, _As, Var) when V > 0 -> Var;	%This is a vararg!
+assign_env_pars(V, As, Var) when Var < 0 ->
     setelement(-V, Var, As).
 
 assign_pars([V|Vs], [A|As], L, E) when V > 0 ->
@@ -1046,7 +1047,7 @@ assign_pars([_|Vs], [], L, E) ->
 assign_pars([], _, L, E) -> {L,E};		%No vararg, drop remain args
 assign_pars(V, As, L, E) when V > 0 ->		%This is a vararg!
     {setelement(V, L, As),E};
-assign_pars(V, As, L, E) ->			%This is a vararg!
+assign_pars(V, As, L, E) when V < 0 ->		%This is a vararg!
     {L,setelement(-V, E, As)}.
 
 %% do_repeat(Instrs, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
@@ -1502,11 +1503,11 @@ boolean_value(false) -> false;
 boolean_value(_) -> true.
 
 %% first_value(Rets) -> Value.
+%% multiple_value(Value) -> [Value].
 
 first_value([V|_]) -> V;
 first_value([]) -> nil.
 
-%%multiple_value(nil) -> [];			%Or maybe [nil]?
 multiple_value(V) -> [V].
 
 %% gc(State) -> State.
@@ -1558,7 +1559,7 @@ mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcF, GcU, GcFun) ->
 	false ->				%Mark it and add to todo
 	    Ts1 = ordsets:add_element(T, Ts0),
 	    #table{a=Arr,d=Dict,meta=Meta} = ?GET_TABLE(T, Tt),
-	    %% Have to be careful where add Tab and Meta as Tab is
+	    %% Have to be careful when adding Tab and Meta as Tab is
 	    %% [{Key,Val}], Arr is array and Meta is
 	    %% nil|#tref{i=M}. We want lists.
 	    Aes = array:sparse_to_list(Arr),
@@ -1583,7 +1584,7 @@ mark([#usdref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU, GcFun) ->
            Su1 = ordsets:add_element(U, Su0),
            mark(Todo, More, GcT, GcF, GcU#gct{s=Su1}, GcFun)
     end;
-mark([#lua_func{env=Env}|Todo], More, GcT, GcF, GcU, GcFun) ->
+mark([#lua_func{upv=Env}|Todo], More, GcT, GcF, GcU, GcFun) ->
     mark(Todo, [Env|More], GcT, GcF, GcU, GcFun);
 mark([#funref{i=F}|ToDo], More, GcT, GcF, GcU,
      #gct{t=Funt0,s=Funs0}=GcFun) ->

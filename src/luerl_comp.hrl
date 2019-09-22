@@ -58,10 +58,10 @@
 		     ss=[],			%Block statements
 		     vars=none,			%Variable info
 		     lsz=none,			%Local frame size
-		     lf=[],			%Local frame
+		     loc=not_used,		%Local var block template
 		     esz=none,			%Env frame size
-		     ef=[],			%Env frame
-		     local=none,		%Local variables
+		     upv=not_used,		%Local upv block template
+		     %%local=none,		%Local variables
 		     locf=false}).		%Local functions
 
 -record(while_stmt, {l,e,b=[]}).
@@ -84,9 +84,9 @@
 		ss=[],				%Sub-blocks
 		vars=none,			%Variable info
 		lsz=none,			%Local frame size
-		lf=[],				%Local frame
+		loc=not_used,			%Local var block template
 		esz=none,			%Env frame size
-		ef=[],
+		upv=not_used,			%Local upv block template
 		locf=false}).
 
 %% Expressions.
@@ -97,10 +97,10 @@
 	       ss=[],				%Statements
 	       vars=none,			%Variable info
 	       lsz=none,			%Local frame size
-	       lf=[],
+	       loc=not_used,			%Local var block template
 	       esz=none,			%Env frame size
-	       ef=[],
-	       local=none,			%Local variables
+	       upv=not_used,			%Local upv block template
+	       %%local=none,			%Local variables
 	       locf=false}).			%Local function
 
 -record(lit, {l,v}).

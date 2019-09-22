@@ -227,13 +227,22 @@ genfor_stmt(#gfor_stmt{vs=[V|Vs],gens=Gs,b=B}, St0) ->
 %%  We must evaluate all expressions, even the unneeded ones.
 
 local_assign_stmt(#local_assign_stmt{vs=Vs,es=Es}, St) ->
-    assign_local(Vs, Es, St).
+    R = assign_local_test(Vs, Es, St),
+    R = assign_local(Vs, Es, St).
+
+%% Have two versions, run both and see that we get the same result.
 
 assign_local([V|Vs], [], St0) ->
     {Ias,St1} = assign_local_loop_var(Vs, 1, St0),
     {[?PUSH_LIT([])] ++ Ias ++ set_var(V),St1};
 assign_local(Vs, Es, St) ->
     assign_local_loop(Vs, Es, St).
+
+assign_local_test([V|Vs], [], St0) ->
+    {Ias,St1} = assign_loop_var(Vs, 1, St0),
+    {[?PUSH_LIT([])] ++ Ias ++ set_var(V),St1};
+assign_local_test(Vs, Es, St) ->
+    assign_loop(Vs, Es, St).
 
 %% assign_local_loop(Vars, Exps, State) -> {Iassigns,State}.
 %%  Must be careful with pushing and popping values here. Make sure

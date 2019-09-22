@@ -69,8 +69,9 @@
 -record(lua_func,{anno=[],			%Annotation
 		  funrefs=[],			%Functions directly referenced
 		  lsz,				%Local var size
+		  loc=not_used,			%Local var block template
 		  esz,				%Env var size
-		  env=[],			%Environment (not used)
+		  upv=not_used,			%Local upv block template
 		  pars,				%Parameter types
 		  b}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
