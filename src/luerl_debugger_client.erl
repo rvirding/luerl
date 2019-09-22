@@ -86,7 +86,7 @@ file_display(LuaFilePath, LineNumActual) ->
       dont_do_anything;
     LuaSrcAll ->
 
-      RowsDisplayed = 9, % odd numbers only !
+      RowsDisplayed = 29, % odd numbers only !
       RowsDelta = (RowsDisplayed - 1) div 2, % integer division
 
       % First part first line in lua src
@@ -116,17 +116,44 @@ file_display(LuaFilePath, LineNumActual) ->
       LineHighlighted = lists:sublist(LuaSrcLinesNumbered, LineNumActual, 1),
       LinesRangeLast  = lists:sublist(LuaSrcLinesNumbered, LineRangeLastBegin, RowsDelta),
 
-      io:fwrite(  lists:join("\n", LinesRangeFirst)),
+      io:fwrite(  lists:join("\n", LinesRangeFirst) ++ "\n"),
 
-      io:fwrite(  "\n\n=============================================\n" ),
+      io:fwrite(  color_use(yellow)  ),
       io:fwrite(  lists:join("\n", LineHighlighted)),
-      io:fwrite(    "\n=============================================\n\n" ),
+      io:fwrite(  color_use(no_color) ++ "\n" ),
 
       io:fwrite(  lists:join("\n", LinesRangeLast)),
       ok
   end.
 
+color_use(Name) ->
+  case Name of
 
+  no_color -> "\e[0m";
+
+  white -> "\e[1;37m";
+  black -> "\e[0;30m";
+
+  blue -> "\e[0;34m";
+  blue_light -> "\e[1;34m";
+
+  green -> "\e[0;32m";
+  green_light -> "\e[1;32m";
+
+  cyan -> "e[0;36m";
+  cyan_light -> "\e[1;36m";
+
+  red -> "\e[0;31m";
+  red_light -> "\e[1;31m";
+
+  purple -> "\e[0;35m";
+  purple_light -> "\e[1;35m";
+
+  brown -> "\e[0;33m";
+  yellow -> "\e[1;33m";
+  gray -> "\e[0;30m";
+  gray_light -> "\e[0;37m"
+end.
 
 
 file_read(LuaFilePath) ->
@@ -141,7 +168,13 @@ file_read(LuaFilePath) ->
 
 
 get_all_lines(Device) ->
+  get_all_lines(Device, 1).
+
+get_all_lines(Device, LineNumActual) ->
   case io:get_line(Device, "") of
     eof  -> [];
-    Line -> Line ++ get_all_lines(Device)
+    Line ->
+      % after $ the SPACE is important, this is the filler char
+      Num = string:right(integer_to_list(LineNumActual), 4, $ ) ++ " ",
+      Num ++ Line ++ get_all_lines(Device, LineNumActual+1)
   end.
