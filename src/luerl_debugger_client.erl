@@ -21,6 +21,9 @@
 
 -export([start/0]).
 
+
+
+
 %% This function is executed after 'rebar3 shell', to connect to another
 %% node() and send commands to control the program execution, to read
 %% variables and in the future maybe modify the variables.
@@ -29,25 +32,29 @@
 
 start() ->
   io:fwrite("== Luerl Debugger ==\n"),
+  io:fwrite("start 'epmd' (Erlang Port Mapper Daemon) in command line, in a separated terminal, manually, "),
+  io:fwrite("if you see this error message: \nnotice: Protocol 'inet_tcp': register/listen error: econnrefused  erlang\n\n"),
 
-  {ok, Hostname} = inet:gethostname(),
-  {ok,{hostent,FullHostname,[],inet,_,[_]}} = inet:gethostbyname(Hostname),
+  io:fwrite("\nPlease set the server side after 'rebar3 shell' in Luerl console if you want to try the debugger out: \nluerl_debugger_emulatorside:nodename_cookie_set().\n\n"),
 
-  io:fwrite("FullHostname: ~p\n", [FullHostname]),
-  ErlCookie = user_input_get("Please Give me the program executer Luerl node's cookie!"),
-
-  net_kernel:start([list_to_atom("debugger@"++FullHostname), longnames]),
-  erlang:set_cookie(node(), list_to_atom(ErlCookie)),
-
-  register(luerl_debugger, self()),
-
+  nodename_cookie_set(),
   waiting_for_server_message(),
+
   ok.
 
+
+nodename_cookie_set() ->
+  % this is a common function to set nodename and cookie
+  luerl_debugger_emulatorside:nodename_cookie_set_general(
+    "== Set Cookie for debugger_client ==",
+    luerl_debugger_client,
+    "luerl_debugger_client").
+
 msg_send_to_emulatorside(Msg) ->
-  luerl_debugger_emulatorside:msg_send(Msg, "debugger@").
+  luerl_debugger_emulatorside:msg_send(Msg, "luerl_emulator", luerl_emulator).
 
 waiting_for_server_message() ->
+  io:fwrite("Waiting for Luerl emulator's message..."),
   receive
     M ->
       io:format("Debugger received: ~p~n",[M]),
@@ -58,16 +65,10 @@ waiting_for_server_message() ->
     ok
   end.
 debugger_do() ->
-  Task = user_input_get(),
+  Task = luerl_debugger_emulatorside:user_input_get(),
   debugger_do(Task).
 
 debugger_do(Task) ->
   io:fwrite("Task: " + Task),
   debugger_do().
 
-user_input_get() ->
-  user_input_get("Luerl Debugger").
-
-user_input_get(Msg) ->
-  {ok,[UserAnswer]} = io:fread(Msg ++ " > ", "~s"),
-  UserAnswer.
