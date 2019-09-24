@@ -231,12 +231,11 @@ genfor_stmt(#gfor_stmt{vars=[V|Vs],gens=Gs,body=B}, St0) ->
 
 %% local_assign_stmt(Local, State) -> {Ilocal,State}.
 %%  We must evaluate all expressions, even the unneeded ones.
+%%  Have two versions, run both and see that we get the same result.
 
 local_assign_stmt(#local_assign_stmt{vars=Vs,exps=Es}, St) ->
     R = assign_local_test(Vs, Es, St),
     R = assign_local(Vs, Es, St).
-
-%% Have two versions, run both and see that we get the same result.
 
 assign_local([V|Vs], [], St0) ->
     {Ias,St1} = assign_local_loop_var(Vs, St0),
@@ -389,19 +388,20 @@ prefixexp_element(#key{key=E}, S, St0) ->
 %%     {Ias,St1} = explist(As, multiple, St0),
 %%     Ifs = Ias ++ [?FCALL(length(As))],
 %%     {single_value(S, Ifs),St1};			%Function call returns list
-prefixexp_element(#fcall{args=[]}, S, St) ->
-    Ifs = [?POP_ARGS(0),?FCALL],
-    {single_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{args=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
     Ifs = Ias ++ [?POP_ARGS(length(As)),?FCALL],
     {single_value(S, Ifs),St1};			%Function call returns list
-prefixexp_element(#mcall{meth=#lit{val=K},args=[]}, S, St) ->
-    Ims = [?MCALL(K, 0)],
-    {single_value(S, Ims),St};			%Method call returns list
+%% prefixexp_element(#mcall{meth=#lit{val=K},args=[]}, S, St) ->
+%%     Ims = [?MCALL(K, 0)],
+%%     {single_value(S, Ims),St};			%Method call returns list
+%% prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
+%%     {Ias,St1} = explist(As, multiple, St0),
+%%     Ims = Ias ++ [?MCALL(K, length(As))],
+%%     {single_value(S, Ims),St1}.			%Method call returns list
 prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ims = Ias ++ [?MCALL(K, length(As))],
+    Ims = Ias ++ [?POP_ARGS(length(As)),?MCALL(K)],
     {single_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
@@ -428,9 +428,9 @@ gen_store([V|Vs], Is) when V > 0 ->
 gen_store([V|Vs], Is) when V < 0 ->
     gen_store(Vs, [?STORE_EVAR(1, -V)|Is]);
 gen_store([], Is) -> Is;
-gen_store(V, Is) when V > 0 -> 
+gen_store(V, Is) when V > 0 ->
     [?STORE_LVAR(1, V)|Is];
-gen_store(V, Is) when V < 0 -> 
+gen_store(V, Is) when V < 0 ->
     [?STORE_LVAR(1, -V)|Is].
 
 %% tableconstructor(Fields, State) -> {Ifields,FieldCount,Index,State}.

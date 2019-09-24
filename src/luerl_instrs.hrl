@@ -39,12 +39,10 @@
 -define(SINGLE, single).			%Ensure single value
 -define(MULTIPLE, multiple).			%Ensure multiple value
 
--define(FCALL, fcall).
-
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
--define(FCALL(Ac), {fcall,Ac}).
+-define(FCALL, fcall).
 -define(TAIL_FCALL(Ac), {tail_fcall,Ac}).
--define(MCALL(M, Ac), {mcall,M,Ac}).
+-define(MCALL(M), {mcall,M}).
 -define(TAIL_MCALL(M, Ac), {tail_mcall,M,Ac}).
 -define(OP(Op,Ac), {op,Op,Ac}).
 -define(PUSH_FDEF(Anno, Lsz, Esz, Pars, Is),
