@@ -208,7 +208,7 @@ functiondef(L, Ps, Stmts, St0) ->
 functiondef(L, Name0, Ps0, B, St0) ->
     %% Check if method and transform method to 'NAME' and add self to vars.
     case is_method(Name0) of			%Export Name1 and Ps1
-	{yes,Name1} -> Ps1 = [{'NAME',L,self}|Ps0];
+	{yes,Name1} -> Ps1 = [{'NAME',L,<<"self">>}|Ps0];
 	no -> Name1 = Name0, Ps1 = Ps0
     end,
     {Var,St1} = funcname(Name1, St0),
