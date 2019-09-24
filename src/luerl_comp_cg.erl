@@ -95,7 +95,7 @@ assign_loop([V], [E], St0) ->			%Remove unnecessary ?PUSH_VALS
     {Ie ++ Iv,St2};
 assign_loop([V|Vs], [E], St0) ->
     {Ie,St1} = exp(E, multiple, St0),		%Last argument to rest of vars
-    {Ias,St2} = assign_loop_var(Vs, 1, St1),
+    {Ias,St2} = assign_loop_var(Vs, St1),
     {Iv,St3} = var(V, St2),
     {Ie ++ Ias ++ Iv,St3};
 assign_loop([V|Vs], [E|Es], St0) ->
@@ -105,6 +105,12 @@ assign_loop([V|Vs], [E|Es], St0) ->
     {Ie ++ Ias ++ Iv,St3};
 assign_loop([], Es, St) ->
     assign_loop_exp(Es, St).
+
+%% assign_loop_var(Vars, State) -> {Iassigns,State}.
+%%  Extract necessary number of values from value list on stack. Pad
+%%  with nil.
+
+assign_loop_var(Vs, St) -> assign_loop_var(Vs, 1, St).
 
 assign_loop_var([V|Vs], Vc, St0) ->
     {Ias,St1} = assign_loop_var(Vs, Vc+1, St0),
@@ -233,13 +239,13 @@ local_assign_stmt(#local_assign_stmt{vars=Vs,exps=Es}, St) ->
 %% Have two versions, run both and see that we get the same result.
 
 assign_local([V|Vs], [], St0) ->
-    {Ias,St1} = assign_local_loop_var(Vs, 1, St0),
+    {Ias,St1} = assign_local_loop_var(Vs, St0),
     {[?PUSH_LIT([])] ++ Ias ++ set_var(V),St1};
 assign_local(Vs, Es, St) ->
     assign_local_loop(Vs, Es, St).
 
 assign_local_test([V|Vs], [], St0) ->
-    {Ias,St1} = assign_loop_var(Vs, 1, St0),
+    {Ias,St1} = assign_loop_var(Vs, St0),
     {[?PUSH_LIT([])] ++ Ias ++ set_var(V),St1};
 assign_local_test(Vs, Es, St) ->
     assign_loop(Vs, Es, St).
@@ -255,7 +261,7 @@ assign_local_loop([V], [E], St0) ->		%Remove unnecessary ?PUSH_VALS
     {Ie ++ set_var(V),St1};
 assign_local_loop([V|Vs], [E], St0) ->
     {Ie,St1} = exp(E, multiple, St0),		%Last argument to many vars!
-    {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
+    {Ias,St2} = assign_local_loop_var(Vs, St1),
     {Ie ++ Ias ++ set_var(V),St2};
 assign_local_loop([V|Vs], [E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%Not last argument!
@@ -264,11 +270,12 @@ assign_local_loop([V|Vs], [E|Es], St0) ->
 assign_local_loop([], Es, St) ->
     assign_local_loop_exp(Es, St).
 
-%% assign_local_loop_var([V|Vs], Vc, St0) ->
-%%     {Ias,St1} = assign_local_loop_var(Vs, Vc+1, St0),
-%%     {Ias ++ [?PUSH_LIT(nil)] ++ set_var(V),St1};
-%% assign_local_loop_var([], Vc, St) ->
-%%     {[],St}.
+%% assign_local_loop_var(Vars, State) -> {Iassigns,State}.
+%%  Extract necessary number of values from value list on stack. Pad
+%%  with nil.
+
+assign_local_loop_var(Vs, St) -> assign_local_loop_var(Vs, 1, St).
+
 assign_local_loop_var([V|Vs], Vc, St0) ->
     {Ias,St1} = assign_local_loop_var(Vs, Vc+1, St0),
     {Ias ++ set_var(V),St1};
@@ -375,12 +382,19 @@ prefixexp_element(#key{key=#lit{val=K}}, S, St) ->
 prefixexp_element(#key{key=E}, S, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ie ++ multiple_values(S, [?GET_KEY]),St1};
+%% prefixexp_element(#fcall{args=[]}, S, St) ->
+%%     Ifs = [?FCALL(0)],
+%%     {single_value(S, Ifs),St};			%Function call returns list
+%% prefixexp_element(#fcall{args=As}, S, St0) ->
+%%     {Ias,St1} = explist(As, multiple, St0),
+%%     Ifs = Ias ++ [?FCALL(length(As))],
+%%     {single_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#fcall{args=[]}, S, St) ->
-    Ifs = [?FCALL(0)],
+    Ifs = [?POP_ARGS(0),?FCALL],
     {single_value(S, Ifs),St};			%Function call returns list
 prefixexp_element(#fcall{args=As}, S, St0) ->
     {Ias,St1} = explist(As, multiple, St0),
-    Ifs = Ias ++ [?FCALL(length(As))],
+    Ifs = Ias ++ [?POP_ARGS(length(As)),?FCALL],
     {single_value(S, Ifs),St1};			%Function call returns list
 prefixexp_element(#mcall{meth=#lit{val=K},args=[]}, S, St) ->
     Ims = [?MCALL(K, 0)],
@@ -396,13 +410,28 @@ prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
 functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz}, St0) ->
     Ps1 = func_pars(Ps0),
     {Iss,St1} = stmts(Ss, St0),
-    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss)],St1}.
+    Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss),
+    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St1}.
 
 func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n='...',i=I}]) -> I;
 func_pars([#evar{i=I}|Ps]) -> [-I|func_pars(Ps)];
 func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
+
+%% Experiments testing case where we push the args onto the stack and
+%% have explicit instructions which pop them ans store them in the LVs
+%% and Upvs.
+
+gen_store([V|Vs], Is) when V > 0 ->
+    gen_store(Vs, [?STORE_LVAR(1, V)|Is]);
+gen_store([V|Vs], Is) when V < 0 ->
+    gen_store(Vs, [?STORE_EVAR(1, -V)|Is]);
+gen_store([], Is) -> Is;
+gen_store(V, Is) when V > 0 -> 
+    [?STORE_LVAR(1, V)|Is];
+gen_store(V, Is) when V < 0 -> 
+    [?STORE_LVAR(1, -V)|Is].
 
 %% tableconstructor(Fields, State) -> {Ifields,FieldCount,Index,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is

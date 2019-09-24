@@ -39,6 +39,8 @@
 -define(SINGLE, single).			%Ensure single value
 -define(MULTIPLE, multiple).			%Ensure multiple value
 
+-define(FCALL, fcall).
+
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
 -define(FCALL(Ac), {fcall,Ac}).
 -define(TAIL_FCALL(Ac), {tail_fcall,Ac}).
@@ -50,7 +52,6 @@
 -define(PUSH_FDEF(FnRef), {push_fdef,FnRef}).
 
 %% Control instructions.
-
 -define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
 -define(CLOSE, close).
 -define(WHILE(E, B), {while,E,B}).
@@ -63,6 +64,7 @@
 -define(GFOR(Vs, B), {gfor,Vs,B}).
 -define(BREAK, break).
 -define(RETURN(Ac), {return,Ac}).
+
 %% Stack instructions.
 -define(PUSH, push).
 -define(POP, pop).
@@ -71,3 +73,8 @@
 -define(DUP, dup).
 -define(PUSH_VALS(Vc), {push_vals,Vc}).
 -define(POP_VALS(Vc), {pop_vals,Vc}).
+-define(POP_ARGS(Ac), {pop_args,Ac}).
+-define(PUSH_ARGS(Al), {push_args,Al}).
+
+%% Comment instruction.
+-define(COMMENT(C), {comment,C}).
