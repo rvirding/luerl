@@ -91,17 +91,17 @@ assign_stmt(#assign_stmt{vars=Vs,exps=Es}, St) ->
 
 assign_loop([V], [E], St0) ->			%Remove unnecessary ?PUSH_VALS
     {Ie,St1} = exp(E, single, St0),		%Last argument to one variable
-    {Iv,St2} = var(V, St1),
+    {Iv,St2} = assign_prefixexp(V, St1),
     {Ie ++ Iv,St2};
 assign_loop([V|Vs], [E], St0) ->
     {Ie,St1} = exp(E, multiple, St0),		%Last argument to rest of vars
     {Ias,St2} = assign_loop_var(Vs, St1),
-    {Iv,St3} = var(V, St2),
+    {Iv,St3} = assign_prefixexp(V, St2),
     {Ie ++ Ias ++ Iv,St3};
 assign_loop([V|Vs], [E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%Not last argument!
     {Ias,St2} = assign_loop(Vs, Es, St1),
-    {Iv,St3} = var(V, St2),
+    {Iv,St3} = assign_prefixexp(V, St2),
     {Ie ++ Ias ++ Iv,St3};
 assign_loop([], Es, St) ->
     assign_loop_exp(Es, St).
@@ -114,10 +114,13 @@ assign_loop_var(Vs, St) -> assign_loop_var(Vs, 1, St).
 
 assign_loop_var([V|Vs], Vc, St0) ->
     {Ias,St1} = assign_loop_var(Vs, Vc+1, St0),
-    {Iv,St2} = var(V, St1),
+    {Iv,St2} = assign_prefixexp(V, St1),
     {Ias ++ Iv,St2};
 assign_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc)],St}.
+
+%% assign_loop_exp(Exprs, State) -> {Instrs,State}.
+%%  Evaluate remaining expressions and pop the values from the stack.
 
 assign_loop_exp([E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
@@ -125,22 +128,26 @@ assign_loop_exp([E|Es], St0) ->
     {Ie ++ Ias ++ [?POP],St2};			%Pop unneeded value off stack
 assign_loop_exp([], St) -> {[],St}.
 
-var(#dot{exp=Exp,rest=Rest}, St0) ->
+%% assign_prefixexp(Expr, State) -> {Instrs,State}.
+%% assign_prefixexp_rest(Expr, State) -> {Instrs,State}.
+%% assign_prefixexp_element(Expr, State) -> {Instrs,State}.
+
+assign_prefixexp(#dot{exp=Exp,rest=Rest}, St0) ->
     {Ie,St1} = prefixexp_first(Exp, single, St0),
-    {Ir,St2} = var_rest(Rest, St1),
+    {Ir,St2} = assign_prefixexp_rest(Rest, St1),
     {Ie ++ Ir,St2};
-var(V, St) ->
+assign_prefixexp(V, St) ->
     {set_var(V),St}.
 
-var_rest(#dot{exp=Exp,rest=Rest}, St0) ->
+assign_prefixexp_rest(#dot{exp=Exp,rest=Rest}, St0) ->
     {Ie,St1} = prefixexp_element(Exp, single, St0),
-    {Ir,St2} = var_rest(Rest, St1),
+    {Ir,St2} = assign_prefixexp_rest(Rest, St1),
     {Ie ++ Ir,St2};
-var_rest(Exp, St) -> var_last(Exp, St).
+assign_prefixexp_rest(Exp, St) -> assign_prefixexp_element(Exp, St).
 
-var_last(#key{key=#lit{val=K}}, St) ->
+assign_prefixexp_element(#key{key=#lit{val=K}}, St) ->
     {[?SET_LIT_KEY(K)],St};			%[?PUSH_LIT(K),?SET_KEY]
-var_last(#key{key=Exp}, St0) ->
+assign_prefixexp_element(#key{key=Exp}, St0) ->
     {Ie,St1} = exp(Exp, single, St0),
     {Ie ++ [?SET_KEY],St1}.
 
@@ -184,7 +191,10 @@ repeat_stmt(#repeat_stmt{body=B}, St0) ->
     {Ib,St1} = do_block(B, St0),
     {[?REPEAT(Ib)],St1}.
 
-%% if_stmt(If, State) -> {If,State}.
+%% if_stmt(If, State) -> {IfIs,State}.
+%%  We generate code which "steps down" the sequence of
+%%  test-block. This means more nested calls but simpler emulator
+%%  code.
 
 if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
@@ -280,6 +290,9 @@ assign_local_loop_var([V|Vs], Vc, St0) ->
     {Ias ++ set_var(V),St1};
 assign_local_loop_var([], Vc, St) ->
     {[?PUSH_VALS(Vc)],St}.
+
+%% assign_local_loop_exp(Exprs, State) -> {Instrs,State}.
+%%  Evaluate remaining expressions and pop the values from the stack.
 
 assign_local_loop_exp([E|Es], St0) ->
     {Ie,St1} = exp(E, single, St0),		%It will be dropped anyway
