@@ -587,11 +587,13 @@ emul_1([?GET_LIT_KEY(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
     {Val,St1} = get_table_key(Tab, K, St0),
     emul(Is, Lvs, [Val|Stk], Env, St1);
 emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
-    St1 = set_table_key(Tab, Key, Val, St0),
+    %% St1 = set_table_key(Tab, Key, Val, St0),
+    St1 = set_table_key(Tab, Key, Val, St0#luerl{stk=Stk}),
     emul(Is, Lvs, Stk, Env, St1);
 emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
     %% [?PUSH_LIT(K),?SET_KEY]
-    St1 = set_table_key(Tab, Key, Val, St0),
+    %% St1 = set_table_key(Tab, Key, Val, St0),
+    St1 = set_table_key(Tab, Key, Val, St0#luerl{stk=Stk}),
     emul(Is, Lvs, Stk, Env, St1);
 
 emul_1([?SINGLE|Is], Lvs, [Val|Stk], Env, St) ->
@@ -625,11 +627,8 @@ emul_1([?PUSH_FDEF(Funref)|Is], Lvs, Stk, Env, St0) ->
 %%     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
 %%     emul(Is, Lvs1, Stk1, Env1, St1);
 
-emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs, Stk, Env, St0) ->
-    L = make_loc_frame(Lsz),
-    {Eref,St1} = make_env_frame(Esz, St0),
-    AllIs = Bis ++ [?CLOSE] ++ Is,
-    emul(AllIs, [L|Lvs], Stk, [Eref|Env], St1);
+emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Lvs, Stk, Env, St) ->
+    do_block(Is, Lvs, Stk, Env, St, Lsz, Esz, Bis);
 emul_1([?CLOSE|Is], [_|Lvs], Stk, [_|Env], St) ->
     emul(Is, Lvs, Stk, Env, St);
 
@@ -658,49 +657,14 @@ emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
 %% 	    emul(AllIs, Lvs, Stk, Upvs, St)
 %%     end;
 
-emul_1([?AND_THEN(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St) ->
-    %% This is an expression and must always leave a value on stack.
-    case boolean_value(Val) of
-	true ->
-	    AllIs = T ++ Is,
-	    emul(AllIs, Lvs, Stk1, Env, St);
-	false ->
-	    emul(Is, Lvs, Stk0, Env, St)	%Non true value left on stack
-    end;
-emul_1([?OR_ELSE(T)|Is], Lvs, [Val|Stk1]=Stk0, Env, St) ->
-    %% This is an expression and must always leave a value on stack.
-    case boolean_value(Val) of
-	true ->
-	    emul(Is, Lvs, Stk0, Env, St);	%Non false value left on stack
-	false ->
-	    AllIs = T ++ Is,
-	    emul(AllIs, Lvs, Stk1, Env, St)
-    end;
-
-%% emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk0], Env, St0) ->
-%%     %% This is a statement and pops the boolean value.
-%%     io:format("it: ~p ~p\n", [Lvs,Env]),
-%%     case boolean_value(Val) of
-%%         true ->
-%% 	    {Lvs1,Stk1,Env1,St1} = emul(T, Lvs, Stk0, Env, St0),
-%% 	    emul(Is, Lvs1, Stk1, Env1, St1);
-%%         false ->
-%% 	    emul(Is, Lvs, Stk0, Env, St0)
-%%     end;
-
-emul_1([?IF_TRUE(T)|Is], Lvs, [Val|Stk], Env, St) ->
-    %% This is a statement and pops the boolean value.
-    case boolean_value(Val) of
-	true ->
-	    AllIs = T ++ Is,
-	    emul(AllIs, Lvs, Stk, Env, St);
-	false ->
-	    emul(Is, Lvs, Stk, Env, St)
-    end;
-
-emul_1([?IF(True, False)|Is], Lvs0, Stk0, Env0, St0) ->
-    {Lvs1,Stk1,Env1,St1} = do_if(Lvs0, Stk0, Env0, St0, True, False),
-    emul(Is, Lvs1, Stk1, Env1, St1);
+emul_1([?AND_THEN(Then)|Is], Lvs, Stk, Env, St) ->
+    do_and_then(Is, Lvs, Stk, Env, St, Then);
+emul_1([?OR_ELSE(Else)|Is], Lvs, Stk, Env, St) ->
+    do_or_else(Is, Lvs, Stk, Env, St, Else);
+emul_1([?IF_TRUE(True)|Is], Lvs, Stk, Env, St) ->
+    do_if_true(Is, Lvs, Stk, Env, St, True);
+emul_1([?IF(True, False)|Is], Lvs, Stk, Env, St) ->
+    do_if(Is, Lvs, Stk, Env, St, True, False);
 emul_1([?NFOR(V, Fis)|Is], Lvs, Stk, Env, St) ->
     do_numfor(Is, Lvs, Stk, Env, St, V, Fis);
 emul_1([?GFOR(Vs, Fis)|Is], Lvs, Stk, Env, St) ->
@@ -781,28 +745,6 @@ push_args([], _As, Stk) -> Stk;			%Drop the rest
 push_args(_V, As, Stk) ->			%Varargs ... save as list
     [As|Stk].
 
-%% do_block(BlockInstrs, LocalVars, Stack, Env, State,
-%%          LocalSize, EnvSize) -> {LocalVars,Stack,Env,State}.
-%%  Local vars may have been updated so must continue with returned
-%%  version. We also continue with returned stack. There should be no
-%%  changes in the env.
-
-%% do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz) ->
-%%     L = make_loc_frame(Lsz),
-%%     {Eref,St1} = make_env_frame(Esz, St0),
-%%     {[_|Lvs1],Stk1,[_|Env1],St2} = emul(Bis, [L|Lvs0], Stk0, [Eref|Env0], St1),
-%%     {Lvs1,Stk1,Env1,St2}.
-
-make_env_frame(0, St) -> {not_used,St};
-make_env_frame(Esz, St0) ->
-    E = erlang:make_tuple(Esz, nil),
-    {Eref,St1} = alloc_frame(E, St0),
-    {Eref,St1}.
-
-make_loc_frame(0) -> not_used;
-make_loc_frame(Lsz) ->
-    erlang:make_tuple(Lsz, nil).
-
 %% do_op1(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 %% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
@@ -834,9 +776,12 @@ do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
 %%  This is called from "within" things, for example metamethods, and
 %%  expects everything necessary to be in the state.
 
-functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
-    {Ret,St1} = functioncall(Func, Args, Stk, St0),
-    {Ret,St1}.
+functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
+    %% This frame is mainly for call info.
+    Fr = #call_frame{func=Func,args=Args,lvs=[],env=[]},
+    Stk1 = [Fr|Stk0],
+    {Ret,St1} = functioncall(Func, Args, Stk1, St0),
+    {Ret,St1#luerl{stk=Stk0}}.			%Reset the stack
 
 %% functioncall(Instrs, LocalVars, Stk, Env, State, Func, Args) -> <emul>
 %%  This is called from within code and continues with Instrs after
@@ -846,7 +791,8 @@ functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
     Fr = #call_frame{func=Func,args=Args,lvs=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    emul(Is, Lvs, [Ret|Stk0], Env, St1).
+    %% io:format("fc: ~p\n    ~p\n    ~p\n", [St0#luerl.stk,Stk0,St1#luerl.stk]),
+    emul(Is, Lvs, [Ret|Stk0], Env, St1).	%Reset the stack
 
 %% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
 %%     ReturnFromEmul.
@@ -935,21 +881,32 @@ call_luafunc(Fis, Lvs, Stk, Env, St0) ->
 	    lua_error({illegal_op,break}, St)
     end.
 
-%% do_repeat(Instrs, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
+%% do_block(Instrs, LocalVars, Stack, Env, State,
+%%          LocalSize, EnvSize, BlockInstrs) -> <env>.
+%%  Local vars may have been updated so must continue with returned
+%%  version. We also continue with returned stack. There should be no
+%%  changes in the env.
 
-do_repeat(Is, Lvs, Stk, Env, St, Ris) ->
-    Do = fun (S) ->
-		 repeat_loop(Ris, Lvs, Stk, Env, S)
-	 end,
-    loop_block(Is, Lvs, Stk, Env, St, Do).
+%% do_block(Is, Lvs0, Stk0, Env0, St0, Lsz, Esz, Bis) ->
+%%     L = make_loc_frame(Lsz),
+%%     {Eref,St1} = make_env_frame(Esz, St0),
+%%     {[_|Lvs1],Stk1,[_|Env1],St2} = emul(Bis, [L|Lvs0], Stk0, [Eref|Env0], St1),
+%%     emul(Is, Lvs1, Stk1, Env1, St2).
 
-repeat_loop(Ris, Lvs0, Stk0, Env0, St0) ->
-    {Lvs1,[Val|Stk1],Env1,St1} =
-	emul(Ris, Lvs0, Stk0, Env0, St0),
-    case boolean_value(Val) of
-	true -> {Lvs1,St1};
-	false -> repeat_loop(Ris, Lvs1, Stk1, Env1, St1)
-    end.
+do_block(Is, Lvs, Stk, Env, St0, Lsz, Esz, Bis) ->
+    L = make_loc_frame(Lsz),
+    {Eref,St1} = make_env_frame(Esz, St0),
+    AllIs = Bis ++ [?CLOSE] ++ Is,		%?CLOSE pops the lvs and env
+    emul(AllIs, [L|Lvs], Stk, [Eref|Env], St1).
+
+make_env_frame(0, St) -> {not_used,St};
+make_env_frame(Esz, St) ->
+    E = erlang:make_tuple(Esz, nil),
+    alloc_frame(E, St).				%{Eref,St}.
+
+make_loc_frame(0) -> not_used;
+make_loc_frame(Lsz) ->
+    erlang:make_tuple(Lsz, nil).
 
 %% do_while(Instrs, LocalVars, Stack, Env, State, WhileEis, WhileBis) ->
 %%     <emul>
@@ -971,6 +928,22 @@ while_loop(Eis, Lvs0, Stk0, Env0, St0, Wis) ->
 	false -> {Lvs1,St1}
     end.
 
+%% do_repeat(Instrs, LocalVars, Stack, Env, State, RepeatInstrs) -> <emul>
+
+do_repeat(Is, Lvs, Stk, Env, St, Ris) ->
+    Do = fun (S) ->
+		 repeat_loop(Ris, Lvs, Stk, Env, S)
+	 end,
+    loop_block(Is, Lvs, Stk, Env, St, Do).
+
+repeat_loop(Ris, Lvs0, Stk0, Env0, St0) ->
+    {Lvs1,[Val|Stk1],Env1,St1} =
+	emul(Ris, Lvs0, Stk0, Env0, St0),
+    case boolean_value(Val) of
+	true -> {Lvs1,St1};
+	false -> repeat_loop(Ris, Lvs1, Stk1, Env1, St1)
+    end.
+
 loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
     Tag = St0#luerl.tag,
     {Lvs2,St1} = try
@@ -982,7 +955,66 @@ loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
     Lvs3 = lists:nthtail(length(Lvs2)-length(Lvs0), Lvs2),
     emul(Is, Lvs3, Stk, Env, St1).
 
-%% do_if(Blocks, Else, Lvs, Stk, Env, Sy) ->
+%% do_and_then(Instrs, LocalVars, Stack, Env, State, ThenInstrs) -> <emul>.
+%% do_or_else(Instrs, LocalVars, Stack, Env, State, ElseInstrs) -> <emul>.
+
+do_and_then(Is, Lvs, [Val|Stk1]=Stk0, Env, St, Then) ->
+    %% This is an expression and must always leave a value on stack.
+    case boolean_value(Val) of
+	true ->
+	    AllIs = Then ++ Is,
+	    emul(AllIs, Lvs, Stk1, Env, St);
+	false ->
+	    emul(Is, Lvs, Stk0, Env, St)	%Non true value left on stack
+    end.
+
+do_or_else(Is, Lvs, [Val|Stk1]=Stk0, Env, St, Else) ->
+    %% This is an expression and must always leave a value on stack.
+    case boolean_value(Val) of
+	true ->
+	    emul(Is, Lvs, Stk0, Env, St);	%Non false value left on stack
+	false ->
+	    AllIs = Else ++ Is,
+	    emul(AllIs, Lvs, Stk1, Env, St)
+    end.
+
+%% do_if(Instrs, LocalVars, Stack, Env, State, TrueInstrs) ->
+%%     <emul>.
+%%  Test value on stack to choose whether to do True instructions.
+
+do_if_true(Is, Lvs, [Val|Stk], Env, St, True) ->
+    %% Experimenting with flattening the code rather than nesting calls.
+    case boolean_value(Val) of
+        true ->
+	    AllIs = True ++ Is,
+	    emul(AllIs, Lvs, Stk, Env, St);
+        false ->
+	    emul(Is, Lvs, Stk, Env, St)
+    end.
+
+%% do_if_true(Is, Lvs, [Val|Stk0], Env, St0, True) ->
+%%     %% This is a statement and pops the boolean value.
+%%     io:format("it: ~p ~p\n", [Lvs,Env]),
+%%     case boolean_value(Val) of
+%%         true ->
+%% 	    {Lvs1,Stk1,Env1,St1} = emul(True, Lvs, Stk0, Env, St0),
+%% 	    emul(Is, Lvs1, Stk1, Env1, St1);
+%%         false ->
+%% 	    emul(Is, Lvs, Stk0, Env, St0)
+%%     end.
+
+%% do_if(Instrs, LocalVars, Stack, Env, State, TrueInstrs, FalseInstrs) ->
+%%     <emul>.
+%%  Test value on stack to choose either True or False instructions.
+
+do_if(Is, Lvs0, [Val|Stk0], Env0, St0, True, False) ->
+    {Lvs1,Stk1,Env1,St1} = case boolean_value(Val) of
+			       true -> emul(True, Lvs0, Stk0, Env0, St0);
+			       false -> emul(False, Lvs0, Stk0, Env0, St0)
+			   end,
+    emul(Is, Lvs1, Stk1, Env1, St1).
+
+%% do_if(Blocks, Else, Lvs, Stk, Env, St) ->
 %%     do_if_blocks(Blocks, Else, Lvs, Stk, Env, St).
 
 %% do_if_blocks([{T,B}|Ts], Else, Lvs0, Stk0, Env0, St0) ->
@@ -993,15 +1025,6 @@ loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
 %%     end;
 %% do_if_blocks([], Else, Lvs, Stk, Env, St) ->
 %%     emul(Else, Lvs, Stk, Env, St).
-
-%% do_if(LocalVars, Stack, Env, State, TrueInstrs, FalseInstrs) ->
-%%     {LocalVars,Stack,Env,State}.
-
-do_if(Lvs, [Val|Stk], Env, St, True, False) ->
-    case boolean_value(Val) of
-	true -> emul(True, Lvs, Stk, Env, St);
-	false -> emul(False, Lvs, Stk, Env, St)
-    end.
 
 %% do_if_block([?BLOCK(Lsz, Esz, Bis)], Lvs0, Stk0, Env0, St0, Is) ->
 %%     {Lvs1,Stk1,Env1,St1} = do_block(Bis, Lvs0, Stk0, Env0, St0, Lsz, Esz),
@@ -1041,7 +1064,7 @@ numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
 %% do_genfor(Instrs, LocalVars, Stack, Env, State, Vars, FromInstrs) -> <emul>
 
 do_genfor(Is, Lvs, [Val|Stk], Env, St, _, Fis) ->
-    case Val of					%Export F, T, V
+    case Val of					%Sneaky, export F, T, V
 	[F] -> T = nil, V = nil;
 	[F,T] -> V = nil;
 	[F,T,V|_] -> ok;
@@ -1393,7 +1416,7 @@ boolean_value(_) -> true.
 first_value([V|_]) -> V;
 first_value([]) -> nil.
 
-multiple_value(V) -> [V].
+multiple_value(V) when not is_list(V) -> [V].
 
 %% gc(State) -> State.
 %%  The garbage collector. Its main job is to reclaim unused tables
