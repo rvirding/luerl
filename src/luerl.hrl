@@ -22,7 +22,7 @@
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
 -record(luerl, {ttab,tfree,tnext,               %Table table, free, next
-                upvtab,upvfree,upvnext,         %Upvalue table, free, next
+                envtab,envfree,envnext,         %Environment table, free, next
                 usdtab,usdfree,usdnext,         %Userdata table, free, next
                 funtab,funfree,funnext,         %Function table, free, next
 		g,				%Global table
@@ -37,7 +37,7 @@
 -record(ltab, {tab,free,next}).                 %Table structure.
 
 -record(heap, {ttab,tfree,tnext,
-               upvtab,upvfree,upvnext,
+               envtab,envfree,envnext,
                usdtab,usdfree,usdnext,
                funtab,funfree,funnext,
 	       g}).
@@ -71,12 +71,12 @@
 		  lsz,				%Local var size
 		  loc=not_used,			%Local var block template
 		  esz,				%Env var size
-		  upv=not_used,			%Local upv block template
+		  env=not_used,			%Local env block template
 		  pars,				%Parameter types
 		  b}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
 
--record(fref, {i}).				%Frame reference, index
+-record(eref, {i}).				%Environment reference, index
 
 %% Test if it a function, of either sort.
 -define(IS_FUNCTION(F), (is_record(F, funref) orelse is_record(F, erl_func))).

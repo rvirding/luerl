@@ -98,7 +98,7 @@ init_tables(St0) ->
     %% Initialise the table handling.
     St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
     %% Initialise the frame handling.
-    St2 = St1#luerl{upvtab=?MAKE_TABLE(),upvfree=[],upvnext=0},
+    St2 = St1#luerl{envtab=?MAKE_TABLE(),envfree=[],envnext=0},
     %% Initialise the userdata handling.
     St3 = St2#luerl{usdtab=?MAKE_TABLE(),usdfree=[],usdnext=0},
     %% Initialise the function def handling.
@@ -135,15 +135,15 @@ get_global_name(Name, St) ->
 get_global_key(Key, #luerl{g=G}=St) ->
     get_table_key(G, Key, St).
 
-%% alloc_frame(Frame, State) -> {Fref,State}.
-%%  Allocate the frame in the frame table and return its fref.
+%% alloc_environment(Env, State) -> {Fref,State}.
+%%  Allocate the environment in the environemnt table and return its eref.
 
-alloc_frame(Fr, #luerl{upvtab=Ft0,upvfree=[N|Ns]}=St) ->
-    Ft1 = ?SET_TABLE(N, Fr, Ft0),
-    {#fref{i=N},St#luerl{upvtab=Ft1,upvfree=Ns}};
-alloc_frame(Fr, #luerl{upvtab=Ft0,upvfree=[],upvnext=N}=St) ->
-    Ft1 = ?SET_TABLE(N, Fr, Ft0),
-    {#fref{i=N},St#luerl{upvtab=Ft1,upvnext=N+1}}.
+alloc_environment(Fr, #luerl{envtab=Et0,envfree=[N|Ns]}=St) ->
+    Et1 = ?SET_TABLE(N, Fr, Et0),
+    {#eref{i=N},St#luerl{envtab=Et1,envfree=Ns}};
+alloc_environment(Fr, #luerl{envtab=Et0,envfree=[],envnext=N}=St) ->
+    Et1 = ?SET_TABLE(N, Fr, Et0),
+    {#eref{i=N},St#luerl{envtab=Et1,envnext=N+1}}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -389,31 +389,31 @@ get_local_var(D, I, [_|Fs]) ->
 %%  We must have the state as the environments are global in the
 %%  state.
 
-set_env_var(D, I, Val, Env, #luerl{upvtab=Ft0}=St) ->
-    Ft1 = set_env_var_1(D, I, Val, Env, Ft0),
-    St#luerl{upvtab=Ft1}.
+set_env_var(D, I, Val, Env, #luerl{envtab=Et0}=St) ->
+    Et1 = set_env_var_1(D, I, Val, Env, Et0),
+    St#luerl{envtab=Et1}.
 
-set_env_var_1(1, I, V, [#fref{i=N}|_], Ft) ->
-    F = setelement(I, ?GET_TABLE(N, Ft), V),
-    ?SET_TABLE(N, F, Ft);
-set_env_var_1(2, I, V, [_,#fref{i=N}|_], Ft) ->
-    F = setelement(I, ?GET_TABLE(N, Ft), V),
-    ?SET_TABLE(N, F, Ft);
-set_env_var_1(D, I, V, Fps, Ft) ->
-    #fref{i=N} = lists:nth(D, Fps),
-    F = setelement(I, ?GET_TABLE(N, Ft), V),
-    ?SET_TABLE(N, F, Ft).
+set_env_var_1(1, I, V, [#eref{i=N}|_], Et) ->
+    F = setelement(I, ?GET_TABLE(N, Et), V),
+    ?SET_TABLE(N, F, Et);
+set_env_var_1(2, I, V, [_,#eref{i=N}|_], Et) ->
+    F = setelement(I, ?GET_TABLE(N, Et), V),
+    ?SET_TABLE(N, F, Et);
+set_env_var_1(D, I, V, Fps, Et) ->
+    #eref{i=N} = lists:nth(D, Fps),
+    F = setelement(I, ?GET_TABLE(N, Et), V),
+    ?SET_TABLE(N, F, Et).
 
-get_env_var(D, I, Env, #luerl{upvtab=Ft}) ->
-    get_env_var_1(D, I, Env, Ft).
+get_env_var(D, I, Env, #luerl{envtab=Et}) ->
+    get_env_var_1(D, I, Env, Et).
 
-get_env_var_1(1, I, [#fref{i=N}|_], Ft) ->
-    element(I, ?GET_TABLE(N, Ft));
-get_env_var_1(2, I, [_,#fref{i=N}|_], Ft) ->
-    element(I, ?GET_TABLE(N, Ft));
-get_env_var_1(D, I, Fps, Ft) ->
-    #fref{i=N} = lists:nth(D, Fps),
-    element(I, ?GET_TABLE(N, Ft)).
+get_env_var_1(1, I, [#eref{i=N}|_], Et) ->
+    element(I, ?GET_TABLE(N, Et));
+get_env_var_1(2, I, [_,#eref{i=N}|_], Et) ->
+    element(I, ?GET_TABLE(N, Et));
+get_env_var_1(D, I, Fps, Et) ->
+    #eref{i=N} = lists:nth(D, Fps),
+    element(I, ?GET_TABLE(N, Et)).
 
 %% set_global_var(Var, Val, State) -> State.
 %% get_global_var(Var, State) -> {Val,State}.
@@ -527,7 +527,7 @@ emul(Is, St) ->
 emul([I|_]=Is, Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("Lvs: ~p\n", [Lvs]),
-		   io:fwrite("Upv: ~p\n", [Env]),
+		   io:fwrite("Env: ~p\n", [Env]),
 		   io:fwrite("Stk: ~p\n", [Stk]),
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
@@ -536,7 +536,7 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("Lvs: ~p\n", [Lvs]),
-		   io:fwrite("Upv: ~p\n", [Env]),
+		   io:fwrite("Env: ~p\n", [Env]),
 		   io:fwrite("Stk: ~p\n", [Stk]),
 		   io:put_chars("--------\n")
 	       end),
@@ -645,16 +645,16 @@ emul_1([?WHILE(Eis, Wis)|Is], Lvs, Stk, Env, St) ->
 emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
     do_repeat(Is, Lvs, Stk, Env, St, Ris);
 
-%% emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Upvs, St) ->
+%% emul_1([?REPEAT(Ris)|Is], Lvs, Stk, Env, St) ->
 %%     AllIs = Ris ++ [{repeat_test,Ris}] ++ Is,
-%%     emul(AllIs, Lvs, Stk, Upvs, St);
-%% emul_1([{repeat_test,Ris}|Is], Lvs, [Val|Stk], Upvs, St) ->
+%%     emul(AllIs, Lvs, Stk, Env, St);
+%% emul_1([{repeat_test,Ris}|Is], Lvs, [Val|Stk], Env, St) ->
 %%     case boolean_value(Val) of
 %% 	true ->
-%% 	    emul(Is, Lvs, Stk, Upvs, St);
+%% 	    emul(Is, Lvs, Stk, Env, St);
 %% 	false ->
 %% 	    AllIs = [?REPEAT(Ris)|Is],
-%% 	    emul(AllIs, Lvs, Stk, Upvs, St)
+%% 	    emul(AllIs, Lvs, Stk, Env, St)
 %%     end;
 
 emul_1([?AND_THEN(Then)|Is], Lvs, Stk, Env, St) ->
@@ -766,7 +766,7 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 	{error,E} -> lua_error(E, St)
     end.
 
-%% do_fcall(Instrs, LocalVars, Stack, Upvs, State) -> ReturnFromEmul.
+%% do_fcall(Instrs, LocalVars, Stack, Env, State) -> ReturnFromEmul.
 %%  Pop arg list and function from stack and do call.
 
 do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
@@ -851,8 +851,8 @@ functioncall(Func, Args, Stk, St) ->
 	Meta -> functioncall(Meta, [Func|Args], Stk, St)
     end.
 
-%% functioncall(LuaFunc, Args, Stack, Upv, State) -> {Return,State}.
-%%  Make the local variable and Upv frames and push them onto
+%% functioncall(LuaFunc, Args, Stack, Env, State) -> {Return,State}.
+%%  Make the local variable and Env frames and push them onto
 %%  respective stacks and call the function.
 
 functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=_Pars,b=Fis}, Args, Stk, Env, St0) ->
@@ -862,7 +862,7 @@ functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=_Pars,b=Fis}, Args, Stk, 
     {Eref,St1} = make_env_frame(Esz, St0),
     %% io:format("fc1: L=~p E=~p\n",
     %% 	      [L,Eref == not_used
-    %% 	       orelse (?GET_TABLE(Eref#fref.i,St1#luerl.upvtab))]),
+    %% 	       orelse (?GET_TABLE(Eref#fref.i,St1#luerl.envtab))]),
     {Ret,St2} = call_luafunc(Fis, [L], [Args|Stk], [Eref|Env], St1),
     {Ret,St2}.
 
@@ -902,7 +902,7 @@ do_block(Is, Lvs, Stk, Env, St0, Lsz, Esz, Bis) ->
 make_env_frame(0, St) -> {not_used,St};
 make_env_frame(Esz, St) ->
     E = erlang:make_tuple(Esz, nil),
-    alloc_frame(E, St).				%{Eref,St}.
+    alloc_environment(E, St).			%{Eref,St}.
 
 make_loc_frame(0) -> not_used;
 make_loc_frame(Lsz) ->
@@ -1428,42 +1428,42 @@ multiple_value(V) when not is_list(V) -> [V].
 -record(gct, {t,s}).				%Gc table info table, seen
 
 gc(#luerl{ttab=Tt0,tfree=Tf0,
-	  upvtab=Ft0,upvfree=Ff0,
+	  envtab=Et0,envfree=Ef0,
 	  usdtab=Ut0,usdfree=Uf0,
-	  funtab=Funt0,funfree=Funf0,
+	  funtab=Ft0,funfree=Ff0,
           g=G,stk=Stk,meta=Meta}=St) ->
     %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
 	    G|Stk],
     %% Mark all seen tables and frames, i.e. return them.
     GcT = #gct{t=Tt0,s=[]},
-    GcF = #gct{t=Ft0,s=[]},
+    GcE = #gct{t=Et0,s=[]},
     GcU = #gct{t=Ut0,s=[]},
-    GcFun = #gct{t=Funt0,s=[]},
-    {SeenT,SeenF,SeenU,SeenFun} = mark(Root, [], GcT, GcF, GcU, GcFun),
+    GcF = #gct{t=Ft0,s=[]},
+    {SeenT,SeenE,SeenU,SeenF} = mark(Root, [], GcT, GcE, GcU, GcF),
     %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
-    {Ff1,Ft1} = filter_frames(SeenF, Ff0, Ft0),
+    {Ef1,Et1} = filter_environment(SeenE, Ef0, Et0),
     {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
-    {Funf1,Funt1} = filter_funcdefs(SeenFun, Funf0, Funt0),
+    {Ff1,Ft1} = filter_funcdefs(SeenF, Ff0, Ft0),
     St#luerl{ttab=Tt1,tfree=Tf1,
-	     upvtab=Ft1,upvfree=Ff1,
+	     envtab=Et1,envfree=Ef1,
 	     usdtab=Ut1,usdfree=Uf1,
-	     funtab=Funt1,funfree=Funf1}.
+	     funtab=Ft1,funfree=Ff1}.
 
-%% mark(ToDo, MoreTodo, GcTabs, GcFrames, GcUserdata, GcFuncdefs) ->
+%% mark(ToDo, MoreTodo, GcTabs, GcEnv, GcUserdata, GcFuncdefs) ->
 %%     {SeenTabs,SeenFrames,SeenUserdata,SeenFuncdefs}.
 %% Scan over all live objects and mark seen tables by adding them to
 %% the seen list.
 
-mark([{in_table,_}=_T|Todo], More, GcT, GcF, GcU, GcFun) ->
+mark([{in_table,_}=_T|Todo], More, GcT, GcE, GcU, GcF) ->
     %%io:format("gc: ~p\n", [_T]),
-    mark(Todo, More, GcT, GcF, GcU, GcFun);
-mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcF, GcU, GcFun) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
     case ordsets:is_element(T, Ts0) of
 	true ->					%Already done
-	    mark(Todo, More, GcT, GcF, GcU, GcFun);
+	    mark(Todo, More, GcT, GcE, GcU, GcF);
 	false ->				%Mark it and add to todo
 	    Ts1 = ordsets:add_element(T, Ts0),
 	    #table{a=Arr,d=Dict,meta=Meta} = ?GET_TABLE(T, Tt),
@@ -1473,63 +1473,63 @@ mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcF, GcU, GcFun) ->
 	    Aes = array:sparse_to_list(Arr),
 	    Des = ttdict:to_list(Dict),
 	    mark([Meta|Todo], [[{in_table,T}],Des,Aes,[{in_table,-T}]|More],
-		 GcT#gct{s=Ts1}, GcF, GcU, GcFun)
+		 GcT#gct{s=Ts1}, GcE, GcU, GcF)
     end;
-mark([#fref{i=F}|Todo], More, GcT, #gct{s=Sf0,t=Ft}=GcF, GcU, GcFun) ->
-    case ordsets:is_element(F, Sf0) of
+mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
+    case ordsets:is_element(F, Es0) of
 	true ->					%Already done
-	    mark(Todo, More, GcT, GcF, GcU, GcFun);
+	    mark(Todo, More, GcT, GcE, GcU, GcF);
 	false ->				%Mark it and add to todo
-	    Sf1 = ordsets:add_element(F, Sf0),
-	    Ses = tuple_to_list(?GET_TABLE(F, Ft)),
-	    mark(Todo, [Ses|More], GcT, GcF#gct{s=Sf1}, GcU, GcFun)
+	    Es1 = ordsets:add_element(F, Es0),
+	    Ses = tuple_to_list(?GET_TABLE(F, Et)),
+	    mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
     end;
-mark([#usdref{i=U}|Todo], More, GcT, GcF, #gct{s=Su0}=GcU, GcFun) ->
-    case ordsets:is_element(U, Su0) of
+mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
+    case ordsets:is_element(U, Us0) of
        true ->                                 %Already done
-           mark(Todo, More, GcT, GcF, GcU, GcFun);
+           mark(Todo, More, GcT, GcE, GcU, GcF);
        false ->
-           Su1 = ordsets:add_element(U, Su0),
-           mark(Todo, More, GcT, GcF, GcU#gct{s=Su1}, GcFun)
+           Us1 = ordsets:add_element(U, Us0),
+           mark(Todo, More, GcT, GcE, GcU#gct{s=Us1}, GcF)
     end;
-mark([#lua_func{upv=Env}|Todo], More, GcT, GcF, GcU, GcFun) ->
-    mark(Todo, [Env|More], GcT, GcF, GcU, GcFun);
-mark([#funref{i=F}|ToDo], More, GcT, GcF, GcU,
-     #gct{t=Funt0,s=Funs0}=GcFun) ->
-    case ordsets:is_element(F, Funs0) of
+mark([#lua_func{env=Env}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, [Env|More], GcT, GcE, GcU, GcF);
+mark([#funref{i=F}|ToDo], More, GcT, GcE, GcU,
+     #gct{t=Ft0,s=Fs0}=GcF) ->
+    case ordsets:is_element(F, Fs0) of
 	true ->
-	    mark(ToDo, More, GcT, GcF, GcU, GcFun);
+	    mark(ToDo, More, GcT, GcE, GcU, GcF);
 	false ->
-	    Funs1 = ordsets:add_element(F, Funs0),
-	    Fdef = ?GET_TABLE(F, Funt0),
+	    Fs1 = ordsets:add_element(F, Fs0),
+	    Fdef = ?GET_TABLE(F, Ft0),
 	    Funrefs = Fdef#lua_func.funrefs,
-	    mark(ToDo, [Funrefs|More], GcT, GcF, GcU, GcFun#gct{s=Funs1})
+	    mark(ToDo, [Funrefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
 %% Specifically catch these as they would match table key-value pair.
-mark([#erl_func{}|Todo], More, GcT, GcF, GcU, GcFun) ->
-    mark(Todo, More, GcT, GcF, GcU, GcFun);
-mark([#thread{}|Todo], More, GcT, GcF, GcU, GcFun) ->
-    mark(Todo, More, GcT, GcF, GcU, GcFun);
-mark([#userdata{meta=Meta}|Todo], More, GcT, GcF, GcU, GcFun) ->
-    mark([Meta|Todo], More, GcT, GcF, GcU, GcFun);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcF, GcU, GcFun) ->
+mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#userdata{meta=Meta}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark([Meta|Todo], More, GcT, GcE, GcU, GcF);
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
-    mark(Todo, More1, GcT, GcF, GcU, GcFun);
-mark([{K,V}|Todo], More, GcT, GcF, GcU, GcFun) -> %Table key-value pair
+    mark(Todo, More1, GcT, GcE, GcU, GcF);
+mark([{K,V}|Todo], More, GcT, GcE, GcU, GcF) -> %Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
-    mark([K,V|Todo], More, GcT, GcF, GcU, GcFun);
-mark([_|Todo], More, GcT, GcF, GcU, GcFun) ->
+    mark([K,V|Todo], More, GcT, GcE, GcU, GcF);
+mark([_|Todo], More, GcT, GcE, GcU, GcF) ->
     %% Can ignore everything else.
-    mark(Todo, More, GcT, GcF, GcU, GcFun);
-mark([], [M|More], GcT, GcF, GcU, GcFun) ->
-    mark(M, More, GcT, GcF, GcU, GcFun);
-mark([], [], #gct{s=St}, #gct{s=Sf}, #gct{s=Su}, #gct{s=Sfun}) ->
-    {St,Sf,Su,Sfun}.
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([], [M|More], GcT, GcE, GcU, GcF) ->
+    mark(M, More, GcT, GcE, GcU, GcF);
+mark([], [], #gct{s=St}, #gct{s=Se}, #gct{s=Su}, #gct{s=Sf}) ->
+    {St,Se,Su,Sf}.
 
 %% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
-%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
-%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
-%% filter_frames(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_environment(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_userdata(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_funcdefs(Seen, Free, Frames) -> {Free,Frames}.
 %%  Filter tables/frames/userdata/funcdefs and return updated free
 %%  lists and tables/frames.
 
@@ -1544,16 +1544,16 @@ filter_tables(Seen, Tf0, Tt0) ->
     Tt1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Tt0),
     {Tf1,Tt1}.
 
-filter_frames(Seen, Ff0, Ft0) ->
+filter_environment(Seen, Ef0, Et0) ->
     %% Update the free list.
-    Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
+    Ef1 = ?FOLD_TABLES(fun (K, _, Free) ->
 			       case ordsets:is_element(K, Seen) of
 				   true -> Free;
 				   false -> [K|Free]
 			       end
-		       end, Ff0, Ft0),
-    Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
-    {Ff1,Ft1}.
+		       end, Ef0, Et0),
+    Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
+    {Ef1,Et1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->
     %% Update the free list.
@@ -1567,13 +1567,13 @@ filter_userdata(Seen, Uf0, Ut0) ->
     Ut1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ut0),
     {Uf1,Ut1}.
 
-filter_funcdefs(Seen, Funf0, Funt0) ->
+filter_funcdefs(Seen, Ff0, Ft0) ->
     %% Update the free list.
-    Funf1 = ?FOLD_TABLES(fun (K, _, Free) ->
+    Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
 				case ordsets:is_element(K, Seen) of
 				    true -> Free;
 				    false -> [K|Free]
 				end
-			end, Funf0, Funt0),
-    Funt1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Funt0),
-    {Funf1,Funt1}.
+			end, Ff0, Ft0),
+    Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
+    {Ff1,Ft1}.

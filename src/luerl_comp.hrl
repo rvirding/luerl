@@ -60,7 +60,7 @@
 		     lsz=none,			%Local frame size
 		     loc=not_used,		%Local var block template
 		     esz=none,			%Env frame size
-		     upv=not_used,		%Local upv block template
+		     env=not_used,		%Local env block template
 		     %%local=none,		%Local variables
 		     locf=false}).		%Local functions
 
@@ -92,7 +92,7 @@
 		lsz=none,			%Local frame size
 		loc=not_used,			%Local var block template
 		esz=none,			%Env frame size
-		upv=not_used,			%Local upv block template
+		env=not_used,			%Local env block template
 		locf=false}).
 
 %% Expressions.
@@ -105,7 +105,7 @@
 	       lsz=none,			%Local frame size
 	       loc=not_used,			%Local var block template
 	       esz=none,			%Env frame size
-	       upv=not_used,			%Local upv block template
+	       env=not_used,			%Local env block template
 	       %%local=none,			%Local variables
 	       locf=false}).			%Local function
 
