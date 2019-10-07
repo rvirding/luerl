@@ -21,28 +21,31 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
--record(luerl, {ttab,tfree,tnext,               %Table table, free, next
-                envtab,envfree,envnext,         %Environment table, free, next
-                usdtab,usdfree,usdnext,         %Userdata table, free, next
-                funtab,funfree,funnext,         %Function table, free, next
-		g,				%Global table
+%% -record(luerl, {ttab,tfree,tnext,               %Table table, free, next
+%%                 envtab,envfree,envnext,         %Environment table, free, next
+%%                 usdtab,usdfree,usdnext,         %Userdata table, free, next
+%%                 funtab,funfree,funnext,         %Function table, free, next
+%% 		g,				%Global table
+-record(luerl, {heap,				%The heap
 		%%
 		stk=[],				%Current stack
 		%%
 		meta=[],			%Data type metatables
-		rand,				%Random state
+		rand,				%Random number state
 		tag				%Unique tag
 	       }).
 
 -record(ltab, {tab,free,next}).                 %Table structure.
 
--record(heap, {ttab,tfree,tnext,
-               envtab,envfree,envnext,
-               usdtab,usdfree,usdnext,
-               funtab,funfree,funnext,
-	       g}).
+%% The Luerl heap.
 
-%% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
+-record(heap, {ttab,tfree,tnext,                %Table table, free, next
+               envtab,envfree,envnext,          %Environment table, free, next
+               usdtab,usdfree,usdnext,          %Userdata table, free, next
+               funtab,funfree,funnext,          %Function table, free, next
+	       g 				%Global table
+	      }).
+
 %% -record(eenv, {env=[]}).			%Environment
 %% -record(luerl, {tabs,env}).			%Full state
 
@@ -60,6 +63,7 @@
 -record(usdref, {i}).                           %Userdata reference, index
 -record(userdata, {d,meta=nil}).		%Userdata type, data and meta
 -record(thread, {}).				%Thread type
+
 %% There are two function types, the Lua one, and the Erlang one.
 
 %% The environment with upvalues is defined when the function is

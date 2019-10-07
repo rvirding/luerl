@@ -353,7 +353,7 @@ decode_table(N, St, In0) ->
 	true -> error(recursive_data);		%Been here before
 	false ->
 	    In1 = [N|In0],			%We are in this as well
-	    case ?GET_TABLE(N, St#luerl.ttab) of
+	    case ?GET_TABLE(N, St#luerl.heap#heap.ttab) of
 		#table{a=Arr,d=Dict} ->
 		    Fun = fun (K, V, Acc) ->
 				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
@@ -365,5 +365,5 @@ decode_table(N, St, In0) ->
     end.
 
 decode_userdata(N, St) ->
-    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.usdtab),
+    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.heap#heap.usdtab),
     {userdata,Data}.

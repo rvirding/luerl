@@ -76,7 +76,8 @@ init() ->
     St1 = init_tables(St0),
     %% Allocate the _G table and initialise the environment
     {_G,St2} = luerl_lib_basic:install(St1),	%Global environment
-    St3 = St2#luerl{g=_G},
+    H = St2#luerl.heap#heap{g=_G},
+    St3 = St2#luerl{heap=H},
     %% Now we can start adding libraries. Package MUST be first!
     St4 = load_lib(<<"package">>, luerl_lib_package, St3),
     %% Add the other standard libraries.
@@ -94,16 +95,27 @@ init() ->
     St6 = set_global_key(<<"_G">>, _G, St5),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St6).
 
-init_tables(St0) ->
-    %% Initialise the table handling.
-    St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
-    %% Initialise the frame handling.
-    St2 = St1#luerl{envtab=?MAKE_TABLE(),envfree=[],envnext=0},
-    %% Initialise the userdata handling.
-    St3 = St2#luerl{usdtab=?MAKE_TABLE(),usdfree=[],usdnext=0},
-    %% Initialise the function def handling.
-    St4 = St3#luerl{funtab=?MAKE_TABLE(),funfree=[],funnext=0},
-    St4.
+%% init_tables(St0) ->
+%%     %% Initialise the table handling.
+%%     St1 = St0#luerl{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
+%%     %% Initialise the frame handling.
+%%     St2 = St1#luerl{envtab=?MAKE_TABLE(),envfree=[],envnext=0},
+%%     %% Initialise the userdata handling.
+%%     St3 = St2#luerl{usdtab=?MAKE_TABLE(),usdfree=[],usdnext=0},
+%%     %% Initialise the function def handling.
+%%     St4 = St3#luerl{funtab=?MAKE_TABLE(),funfree=[],funnext=0},
+%%     St4.
+
+init_tables(St) ->
+    H0 = #heap{},
+    H1 = H0#heap{ttab=?MAKE_TABLE(),tfree=[],tnext=0},
+    H2 = H1#heap{envtab=?MAKE_TABLE(),envfree=[],envnext=0},
+    H3 = H2#heap{usdtab=?MAKE_TABLE(),usdfree=[],usdnext=0},
+    H4 = H3#heap{funtab=?MAKE_TABLE(),funfree=[],funnext=0},
+    St#luerl{heap=H4}.
+
+init_table() ->
+    #ltab{tab=?MAKE_TABLE(),free=[],next=0}.
 
 load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
@@ -126,24 +138,30 @@ load_lib(Key, Mod, St0) ->
 set_global_name(Name, Val, St) ->
     set_global_key(atom_to_binary(Name, latin1), Val, St).
 
-set_global_key(Key, Val, #luerl{g=G}=St) ->
+set_global_key(Key, Val, #luerl{heap=#heap{g=G}}=St) ->
     set_table_key(G, Key, Val, St).
 
 get_global_name(Name, St) ->
     get_global_key(atom_to_binary(Name, latin1), St).
 
-get_global_key(Key, #luerl{g=G}=St) ->
+get_global_key(Key, #luerl{heap=#heap{g=G}}=St) ->
     get_table_key(G, Key, St).
 
-%% alloc_environment(Env, State) -> {Fref,State}.
+%% alloc_environment(EnvFrame, State) -> {Fref,State}.
 %%  Allocate the environment in the environemnt table and return its eref.
 
-alloc_environment(Fr, #luerl{envtab=Et0,envfree=[N|Ns]}=St) ->
+alloc_environment(Fr, #luerl{heap=He}=St)->
+    %% io:format("ae: ~p\n~p\n~p\n", [Fr,St,He]),
+    alloc_environment_heap(Fr, St, He).
+
+alloc_environment_heap(Fr, St, #heap{envtab=Et0,envfree=[N|Ns]}=He0) ->
     Et1 = ?SET_TABLE(N, Fr, Et0),
-    {#eref{i=N},St#luerl{envtab=Et1,envfree=Ns}};
-alloc_environment(Fr, #luerl{envtab=Et0,envfree=[],envnext=N}=St) ->
+    He1 = He0#heap{envtab=Et1,envfree=Ns},
+    {#eref{i=N},St#luerl{heap=He1}};
+alloc_environment_heap(Fr, St, #heap{envtab=Et0,envfree=[],envnext=N}=He0) ->
     Et1 = ?SET_TABLE(N, Fr, Et0),
-    {#eref{i=N},St#luerl{envtab=Et1,envnext=N+1}}.
+    He1 = He0#heap{envtab=Et1,envnext=N+1},
+    {#eref{i=N},St#luerl{heap=He1}}.
 
 %% alloc_table(State) -> {Tref,State}.
 %% alloc_table(InitialTable, State) -> {Tref,State}.
@@ -153,16 +171,20 @@ alloc_environment(Fr, #luerl{envtab=Et0,envfree=[],envnext=N}=St) ->
 
 alloc_table(St) -> alloc_table([], St).
 
-alloc_table(Itab, #luerl{ttab=Ts0,tfree=[N|Ns]}=St) ->
-    T = create_table(Itab),
+alloc_table(Itab, #luerl{heap=He}=St) ->
+    Tab = create_table(Itab),
+    alloc_table_heap(Tab, St, He).
+
+alloc_table_heap(T, St, #heap{ttab=Ts0,tfree=[N|Ns]}=He0) ->
     %% io:fwrite("it1: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
-    {#tref{i=N},St#luerl{ttab=Ts1,tfree=Ns}};
-alloc_table(Itab, #luerl{ttab=Ts0,tfree=[],tnext=N}=St) ->
-    T = create_table(Itab),
+    He1 = He0#heap{ttab=Ts1,tfree=Ns},
+    {#tref{i=N},St#luerl{heap=He1}};
+alloc_table_heap(T, St, #heap{ttab=Ts0,tfree=[],tnext=N}=He0) ->
     %% io:fwrite("it2: ~p\n", [{N,T}]),
     Ts1 = ?SET_TABLE(N, T, Ts0),
-    {#tref{i=N},St#luerl{ttab=Ts1,tnext=N+1}}.
+    He1 = He0#heap{ttab=Ts1,tnext=N+1},
+    {#tref{i=N},St#luerl{heap=He1}}.
 
 create_table(Itab) ->
     D0 = ttdict:new(),
@@ -180,17 +202,18 @@ create_table(Itab) ->
     {D1,A1} = lists:foldl(Init, {D0,A0}, Itab),
     #table{a=A1,d=D1,meta=nil}.
 
-free_table(#tref{i=N}, #luerl{ttab=Ts0,tfree=Ns}=St) ->
+free_table(#tref{i=N}, #luerl{heap=#heap{ttab=Ts0,tfree=Ns}=He0}=St) ->
     %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
     Ts1 = ?DEL_TABLE(N, Ts0),
-    St#luerl{ttab=Ts1,tfree=[N|Ns]}.
+    He1 = He0#heap{ttab=Ts1,tfree=[N|Ns]},
+    St#luerl{heap=He1}.
 
 %% get_table_keys(Keys, State) -> {Value,State}.
 %% get_table_keys(Tab, Keys, State) -> {Value,State}.
 %%  Search down tables which stops when no more tables.
 
 get_table_keys(Keys, St) ->
-    get_table_keys(St#luerl.g, Keys, St).
+    get_table_keys(St#luerl.heap#heap.g, Keys, St).
 
 get_table_keys(Tab, [K|Ks], St0) ->
     {Val,St1} = luerl_emul:get_table_key(Tab, K, St0),
@@ -202,7 +225,7 @@ get_table_keys(Val, [], St) -> {Val,St}.
 %%  Setter down tables.
 
 set_table_keys(Keys, Val, St) ->
-    set_table_keys(St#luerl.g, Keys, Val, St).
+    set_table_keys(St#luerl.heap#heap.g, Keys, Val, St).
 
 set_table_keys(Tab, [K], Val, St) ->
     luerl_emul:set_table_key(Tab, K, Val, St);
@@ -231,7 +254,8 @@ set_table_key(#tref{}=Tref, Key, Val, St) ->
 set_table_key(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
-set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
+set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{heap=He0}=St) ->
+    Ts0 = He0#heap.ttab,
     #table{d=Dict0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
     case ttdict:find(Key, Dict0) of
 	{ok,_} ->				%Key exists
@@ -239,7 +263,8 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 		       true -> ttdict:store(Key, Val, Dict0)
 		    end,
 	    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-	    St#luerl{ttab=Ts1};
+	    He1 = He0#heap{ttab=Ts1},
+	    St#luerl{heap=He1};
 	error ->				%Key does not exist
 	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
@@ -248,7 +273,8 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 			       true -> ttdict:store(Key, Val, Dict0)
 			    end,
 		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-		    St#luerl{ttab=Ts1};
+		    He1 = He0#heap{ttab=Ts1},
+		    St#luerl{heap=He1};
 		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
@@ -256,7 +282,8 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{ttab=Ts0}=St) ->
 	    end
     end.
 
-set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
+set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{heap=He0}=St) ->
+    Ts0 = He0#heap.ttab,
     #table{a=Arr0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
     case array:get(I, Arr0) of
 	nil ->					%Key does not exist
@@ -267,7 +294,8 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 			      true -> array:set(I, Val, Arr0)
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-		    St#luerl{ttab=Ts1};
+		    He1 = He0#heap{ttab=Ts1},
+		    St#luerl{heap=He1};
 		Meth when ?IS_FUNCTION(Meth) ->
 		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
 		    St1;
@@ -277,7 +305,8 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{ttab=Ts0}=St) ->
 	    %% Can do this as 'nil' is default value of array.
 	    Arr1 = array:set(I, Val, Arr0),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    St#luerl{ttab=Ts1}
+	    He1 = He0#heap{ttab=Ts1},
+	    St#luerl{heap=He1}
     end.
 
 get_table_key(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
@@ -299,7 +328,7 @@ get_table_key(Tab, Key, St) ->			%Just find the metamethod
 	    get_table_key(Meth, Key, St)
     end.
 
-get_table_key_key(#tref{i=N}=T, Key, #luerl{ttab=Ts}=St) ->
+get_table_key_key(#tref{i=N}=T, Key, #luerl{heap=#heap{ttab=Ts}}=St) ->
     #table{d=Dict,meta=Meta} = ?GET_TABLE(N, Ts),
     case ttdict:find(Key, Dict) of
 	{ok,Val} -> {Val,St};
@@ -308,7 +337,7 @@ get_table_key_key(#tref{i=N}=T, Key, #luerl{ttab=Ts}=St) ->
 	    get_table_metamethod(T, Meta, Key, Ts, St)
     end.
 
-get_table_int_key(#tref{i=N}=T, Key, I, #luerl{ttab=Ts}=St) ->
+get_table_int_key(#tref{i=N}=T, Key, I, #luerl{heap=#heap{ttab=Ts}}=St) ->
     #table{a=A,meta=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
     case array:get(I, A) of
 	nil ->
@@ -335,18 +364,23 @@ get_table_metamethod(T, Meta, Key, Ts, St) ->
 alloc_userdata(Data, St) ->
     alloc_userdata(Data, nil, St).
 
-alloc_userdata(Data, Meta, #luerl{usdtab=Us0,usdfree=[N|Ns]}=St) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    {#usdref{i=N},St#luerl{usdtab=Us1,usdfree=Ns}};
-alloc_userdata(Data, Meta, #luerl{usdtab=Us0,usdfree=[],usdnext=N}=St) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    {#usdref{i=N},St#luerl{usdtab=Us1,usdnext=N+1}}.
+alloc_userdata(Data, Meta, #luerl{heap=He}=St) ->
+    alloc_userdata_heap(Data, Meta, St, He).
 
-set_userdata(#usdref{i=N}, Data, #luerl{usdtab=Us0}=St) ->
+alloc_userdata_heap(Data, Meta, St, #heap{usdtab=Us0,usdfree=[N|Ns]}=He0) ->
+    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
+    He1 = He0#heap{usdtab=Us1,usdfree=Ns},
+    {#usdref{i=N},St#luerl{heap=He1}};
+alloc_userdata_heap(Data, Meta, St, #heap{usdtab=Us0,usdfree=[],usdnext=N}=He0) ->
+    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
+    He1 = He0#heap{usdtab=Us1,usdnext=N+1},
+    {#usdref{i=N},St#luerl{heap=He1}}.
+
+set_userdata(#usdref{i=N}, Data, #luerl{heap=#heap{usdtab=Us0}=He}=St) ->
     Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{d=Data} end, Us0),
-    St#luerl{usdtab=Us1}.
+    St#luerl{heap=He#heap{usdtab=Us1}}.
 
-get_userdata(#usdref{i=N}, #luerl{usdtab=Us}=St) ->
+get_userdata(#usdref{i=N}, #luerl{heap=#heap{usdtab=Us}}=St) ->
     #userdata{} = Udata = ?GET_TABLE(N, Us),
     {Udata,St}.
 
@@ -357,18 +391,23 @@ get_userdata(#usdref{i=N}, #luerl{usdtab=Us}=St) ->
 %% set_funcdef(Funref, Fdef, State) -> State.
 %% get_funcdef(Funref, State) -> {Fdef,State}.
 
-alloc_funcdef(Func, #luerl{funtab=Ft0,funfree=[N|Ns]}=St) ->
-    Ft1 = ?SET_TABLE(N, Func, Ft0),
-    {#funref{i=N},St#luerl{funtab=Ft1,funfree=Ns}};
-alloc_funcdef(Func, #luerl{funtab=Ft0,funfree=[],funnext=N}=St) ->
-    Ft1 = ?SET_TABLE(N, Func, Ft0),
-    {#funref{i=N},St#luerl{funtab=Ft1,funnext=N+1}}.
+alloc_funcdef(Func, #luerl{heap=He}=St) ->
+    alloc_funcdef_heap(Func, St, He).
 
-set_funcdef(#funref{i=N}, Func, #luerl{funtab=Ft0}=St) ->
+alloc_funcdef_heap(Func, St, #heap{funtab=Ft0,funfree=[N|Ns]}=He0) ->
     Ft1 = ?SET_TABLE(N, Func, Ft0),
-    St#luerl{funtab=Ft1}.
+    He1 = He0#heap{funtab=Ft1,funfree=Ns},
+    {#funref{i=N},St#luerl{heap=He1}};
+alloc_funcdef_heap(Func, St, #heap{funtab=Ft0,funfree=[],funnext=N}=He0) ->
+    Ft1 = ?SET_TABLE(N, Func, Ft0),
+    He1 = He0#heap{funtab=Ft1,funnext=N+1},
+    {#funref{i=N},St#luerl{heap=He1}}.
 
-get_funcdef(#funref{i=N}, #luerl{funtab=Ft}=St) ->
+set_funcdef(#funref{i=N}, Func, #luerl{heap=#heap{funtab=Ft0}=He}=St) ->
+    Ft1 = ?SET_TABLE(N, Func, Ft0),
+    St#luerl{heap=He#heap{funtab=Ft1}}.
+
+get_funcdef(#funref{i=N}, #luerl{heap=#heap{funtab=Ft}}=St) ->
     Fdef = ?GET_TABLE(N, Ft),
     {Fdef,St}.
 
@@ -389,9 +428,11 @@ get_local_var(D, I, [_|Fs]) ->
 %%  We must have the state as the environments are global in the
 %%  state.
 
-set_env_var(D, I, Val, Env, #luerl{envtab=Et0}=St) ->
+set_env_var(D, I, Val, Env, #luerl{heap=He0}=St) ->
+    Et0 = He0#heap.envtab,
     Et1 = set_env_var_1(D, I, Val, Env, Et0),
-    St#luerl{envtab=Et1}.
+    He1 = He0#heap{envtab=Et1},
+    St#luerl{heap=He1}.
 
 set_env_var_1(1, I, V, [#eref{i=N}|_], Et) ->
     F = setelement(I, ?GET_TABLE(N, Et), V),
@@ -404,7 +445,7 @@ set_env_var_1(D, I, V, Fps, Et) ->
     F = setelement(I, ?GET_TABLE(N, Et), V),
     ?SET_TABLE(N, F, Et).
 
-get_env_var(D, I, Env, #luerl{envtab=Et}) ->
+get_env_var(D, I, Env, #luerl{heap=#heap{envtab=Et}}) ->
     get_env_var_1(D, I, Env, Et).
 
 get_env_var_1(1, I, [#eref{i=N}|_], Et) ->
@@ -421,10 +462,10 @@ get_env_var_1(D, I, Fps, Et) ->
 %%  functions.  However we can optimise a bit as we KNOW that _G is a
 %%  table and the var is always a normal non-integer key.
 
-set_global_var(Var, Val, #luerl{g=G}=St) ->
+set_global_var(Var, Val, #luerl{heap=#heap{g=G}}=St) ->
     set_table_key_key(G, Var, Val, St).
 
-get_global_var(Var, #luerl{g=G}=St) ->
+get_global_var(Var, #luerl{heap=#heap{g=G}}=St) ->
     get_table_key_key(G, Var, St).
 
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
@@ -529,6 +570,7 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
 		   io:fwrite("Lvs: ~p\n", [Lvs]),
 		   io:fwrite("Env: ~p\n", [Env]),
 		   io:fwrite("Stk: ~p\n", [Stk]),
+		   %% io:fwrite("St:  ~p\n", [St]),
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
 	       end),
@@ -770,6 +812,7 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 %%  Pop arg list and function from stack and do call.
 
 do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
+    %% io:format("df: ~p\n", [St]),
     functioncall(Is, Lvs, Stk, Env, St, Func, Args).
 
 %% functioncall(Function, Args, State) -> {Return,State}.
@@ -777,6 +820,7 @@ do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
 %%  expects everything necessary to be in the state.
 
 functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
+    %% io:format("fc3: ~p\n", [St0]),
     %% This frame is mainly for call info.
     Fr = #call_frame{func=Func,args=Args,lvs=[],env=[]},
     Stk1 = [Fr|Stk0],
@@ -788,10 +832,12 @@ functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
 %%  call. It must move everything into State.
 
 functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
+    %% io:fwrite("fc: ~p ~p\n", [Lvs,Env]),
     Fr = #call_frame{func=Func,args=Args,lvs=Lvs,env=Env},
     Stk1 = [Fr|Stk0],
+    %% io:format("fc7: ~p\n", [St0]),
     {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    %% io:format("fc: ~p\n    ~p\n    ~p\n", [St0#luerl.stk,Stk0,St1#luerl.stk]),
+    %% io:format("fc7: ~p\n    ~p\n    ~p\n", [St0#luerl.stk,Stk0,St1#luerl.stk]),
     emul(Is, Lvs, [Ret|Stk0], Env, St1).	%Reset the stack
 
 %% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
@@ -839,7 +885,9 @@ methodcall(Is, Lvs, Stk, Env, St0, Obj, M, Args) ->
 %%  Setup environment for function and do the actual call.
 
 functioncall(#funref{env=Env}=Funref, Args, Stk, St0) ->
+    %% io:format("fc4: ~p\n~p\n", [Stk,St0]),
     {Func,St1} = get_funcdef(Funref, St0),
+    %% io:format("fc4: ~p\n~p\n", [Func,St1]),
     functioncall(Func, Args, Stk, Env, St1);
 functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
@@ -856,19 +904,20 @@ functioncall(Func, Args, Stk, St) ->
 %%  respective stacks and call the function.
 
 functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=_Pars,b=Fis}, Args, Stk, Env, St0) ->
-    %% io:format("fc1: anno=~p\n", [_Anno]),
-    %% io:format("fc1: lsz=~p esz=~p pars=~p args=~p\n", [Lsz,Esz,_Pars,Args]),
+    %% io:format("fc5: anno=~p\n", [_Anno]),
+    %% io:format("fc5: lsz=~p esz=~p pars=~p args=~p\n", [Lsz,Esz,_Pars,Args]),
     L = make_loc_frame(Lsz),
     {Eref,St1} = make_env_frame(Esz, St0),
-    %% io:format("fc1: L=~p E=~p\n",
+    %% io:format("fc5: ~p\n~p\n", [Eref,St1]),
+    %% io:format("fc5: L=~p E=~p\n",
     %% 	      [L,Eref == not_used
-    %% 	       orelse (?GET_TABLE(Eref#fref.i,St1#luerl.envtab))]),
+    %% 	       orelse (?GET_TABLE(Eref#funref.i,St1#luerl.heap#heap.envtab))]),
     {Ret,St2} = call_luafunc(Fis, [L], [Args|Stk], [Eref|Env], St1),
     {Ret,St2}.
 
 call_luafunc(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,
-    %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
+    %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.heap#heap.envtab}]),
     try
 	{_,_,_,Sta} = emul(Fis, Lvs, Stk, Env, St0),
 	%%io:fwrite("fr: ~p\n", [{Tag,[]}]),
@@ -1097,7 +1146,7 @@ get_metamethod(O1, O2, E, St) ->
 
 get_metamethod(O, E, St) ->
     Meta = get_metatable(O, St),			%Can be nil
-    get_metamethod_tab(Meta, E, St#luerl.ttab).
+    get_metamethod_tab(Meta, E, St#luerl.heap#heap.ttab).
 
 get_metamethod_tab(#tref{i=M}, E, Ts) ->
     #table{d=Mdict} = ?GET_TABLE(M, Ts),
@@ -1107,9 +1156,9 @@ get_metamethod_tab(#tref{i=M}, E, Ts) ->
     end;
 get_metamethod_tab(_, _, _) -> nil.		%Other types have no metatables
 
-get_metatable(#tref{i=T}, #luerl{ttab=Ts}) ->
+get_metatable(#tref{i=T}, #luerl{heap=#heap{ttab=Ts}}) ->
     (?GET_TABLE(T, Ts))#table.meta;
-get_metatable(#usdref{i=U}, #luerl{usdtab=Us}) ->
+get_metatable(#usdref{i=U}, #luerl{heap=#heap{usdtab=Us}}) ->
     (?GET_TABLE(U, Us))#userdata.meta;
 get_metatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
 get_metatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
@@ -1120,12 +1169,16 @@ get_metatable(S, #luerl{meta=Meta}) when is_binary(S) ->
     Meta#meta.string;
 get_metatable(_, _) -> nil.			%Other types have no metatables
 
-set_metatable(#tref{i=N}, M, #luerl{ttab=Ts0}=St) ->
+set_metatable(#tref{i=N}, M, #luerl{heap=He0}=St) ->
+    Ts0 = He0#heap.ttab,
     Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end, Ts0),
-    St#luerl{ttab=Ts1};
-set_metatable(#usdref{i=N}, M, #luerl{usdtab=Us0}=St) ->
+    He1 = He0#heap{ttab=Ts1},
+    St#luerl{heap=He1};
+set_metatable(#usdref{i=N}, M, #luerl{heap=He0}=St) ->
+    Us0 = He0#heap.usdtab,
     Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{meta=M} end, Us0),
-    St#luerl{usdtab=Us1};
+    He1 = He0#heap{usdtab=Us1},
+    St#luerl{heap=He1};
 set_metatable(nil, M, #luerl{meta=Meta0}=St) ->
     Meta1 = Meta0#meta{nil=M},
     St#luerl{meta=Meta1};
@@ -1427,11 +1480,12 @@ multiple_value(V) when not is_list(V) -> [V].
 
 -record(gct, {t,s}).				%Gc table info table, seen
 
-gc(#luerl{ttab=Tt0,tfree=Tf0,
-	  envtab=Et0,envfree=Ef0,
-	  usdtab=Ut0,usdfree=Uf0,
-	  funtab=Ft0,funfree=Ff0,
-          g=G,stk=Stk,meta=Meta}=St) ->
+gc(#luerl{heap=#heap{ttab=Tt0,tfree=Tf0,
+		     envtab=Et0,envfree=Ef0,
+		     usdtab=Ut0,usdfree=Uf0,
+		     funtab=Ft0,funfree=Ff0,
+		     g=G}=He0,
+	  stk=Stk,meta=Meta}=St) ->
     %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
 	    G|Stk],
@@ -1447,10 +1501,11 @@ gc(#luerl{ttab=Tt0,tfree=Tf0,
     {Ef1,Et1} = filter_environment(SeenE, Ef0, Et0),
     {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
     {Ff1,Ft1} = filter_funcdefs(SeenF, Ff0, Ft0),
-    St#luerl{ttab=Tt1,tfree=Tf1,
-	     envtab=Et1,envfree=Ef1,
-	     usdtab=Ut1,usdfree=Uf1,
-	     funtab=Ft1,funfree=Ff1}.
+    He1 = He0#heap{ttab=Tt1,tfree=Tf1,
+		   envtab=Et1,envfree=Ef1,
+		   usdtab=Ut1,usdfree=Uf1,
+		   funtab=Ft1,funfree=Ff1},
+    St#luerl{heap=He1}.
 
 %% mark(ToDo, MoreTodo, GcTabs, GcEnv, GcUserdata, GcFuncdefs) ->
 %%     {SeenTabs,SeenFrames,SeenUserdata,SeenFuncdefs}.
