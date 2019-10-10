@@ -1501,7 +1501,8 @@ floor(N) when is_float(N) -> round(N - 0.5).
 %%  Together with their metas straight out of the reference
 %%  manual. Note that:
 %%  - numeric_op string args are always floats
-%%  - eq/neq metamethods here must return boolean values
+%%  - eq/neq metamethods here must return boolean values and the tests
+%%    themselves are type dependent
 
 numeric_op(Op, A, St, E, Raw) ->
     case arg_to_number(A) of
@@ -1562,7 +1563,8 @@ integer_op(Op, A1, A2, St, E, Raw) ->
     end.
 
 eq_op(_Op, A1, A2, St) when A1 == A2 -> {value,true,St};
-eq_op(_Op, A1, A2, St) ->
+eq_op(_Op, A1, A2, St)
+  when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
     case get_eqmetamethod(A1, A2, St) of
 	nil -> {value,false,St};
 	Meth ->
@@ -1571,19 +1573,23 @@ eq_op(_Op, A1, A2, St) ->
 			   {[boolean_value(Ret)],St1}
 		   end,
 	    {meta,#erl_func{code=Func},[A1,A2],St}
-    end.
+    end;
+eq_op(_, _, _, St) -> {value,false,St}.
+
 
 neq_op(_Op, A1, A2, St) when A1 == A2 -> {value,false,St};
-neq_op(_Op, A1, A2, St) ->
+neq_op(_Op, A1, A2, St)
+  when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
     case get_eqmetamethod(A1, A2, St) of
 	nil -> {value,true,St};
-	Meth -> 
+	Meth ->
 	    Func = fun (Args, St0) ->
 			   {Ret,St1} = functioncall(Meth, Args, St0),
 			   {[not boolean_value(Ret)],St1}
 		   end,
 	    {meta,#erl_func{code=Func},[A1,A2],St}
-    end.
+    end;
+neq_op(_, _, _, St) -> {value,true,St}.
 
 get_eqmetamethod(A1, A2, St) ->
     %% Must have "same" metamethod here. How do we test?

@@ -59,12 +59,17 @@
 -record(userdata, {d,meta=nil}).		%Userdata type, data and meta
 -record(thread, {}).				%Thread type
 
+-define(IS_TREF(T), is_record(T, tref)).
+-define(IS_USDREF(U), is_record(U, usdref)).
+
 %% There are two function types, the Lua one, and the Erlang one.
 
 %% The environment with upvalues is defined when the function is
 %% referenced and can vary if the function is referenced many
 %% times. Hence it is in the reference not in the the definition.
 -record(funref, {i,env=[]}).			%Function reference
+-define(IS_FUNREF(F), is_record(F, funref)).
+
 -record(lua_func,{anno=[],			%Annotation
 		  funrefs=[],			%Functions directly referenced
 		  lsz,				%Local var size
@@ -74,11 +79,14 @@
 		  pars,				%Parameter types
 		  b}).				%Code block
 -record(erl_func,{code}).			%Erlang code (fun)
+-define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
 -record(eref, {i}).				%Environment reference, index
+-define(IS_EREF(E), is_record(E, eref).
 
 %% Test if it a function, of either sort.
 -define(IS_FUNCTION(F), (is_record(F, funref) orelse is_record(F, erl_func))).
+-define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F))).
 
 -define(IS_FLOAT_INT(N), (float(round(N)) =:= N)).
 -define(IS_FLOAT_INT(N,I), (float(I=round(N)) =:= N)).
