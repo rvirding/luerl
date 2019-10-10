@@ -74,5 +74,8 @@
 -define(POP_ARGS(Ac), {pop_args,Ac}).
 -define(PUSH_ARGS(Al), {push_args,Al}).
 
+-define(NOP, nop).
+-define(FCALL(Func, Args), {fcall,Func,Args}).
+
 %% Comment instruction.
 -define(COMMENT(C), {comment,C}).

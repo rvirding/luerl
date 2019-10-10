@@ -21,11 +21,6 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
-%% -record(luerl, {ttab,tfree,tnext,               %Table table, free, next
-%%                 envtab,envfree,envnext,         %Environment table, free, next
-%%                 usdtab,usdfree,usdnext,         %Userdata table, free, next
-%%                 funtab,funfree,funnext,         %Function table, free, next
-%% 		g,				%Global table
 -record(luerl, {heap,				%The heap
 		%%
 		stk=[],				%Current stack
