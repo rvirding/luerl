@@ -151,7 +151,7 @@ arg_to_number(B) when is_binary(B) ->
 arg_to_number(_) -> error.
 
 arg_to_number(A, B) ->
-    case conv_list([A,B], [list,integer]) of
+    case conv_list([A,B], [erl_list,lua_integer]) of
 	[N0,Base] ->
 	    case catch begin [N1] = string:tokens(N0, [9,10,11,12,13,32,160]),
 			     {ok,list_to_integer(N1, Base)} end of
