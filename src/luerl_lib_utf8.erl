@@ -42,7 +42,7 @@ table() ->
 %%  concatenation of all these sequences.
 
 utf8_char(As, St) ->
-    case luerl_lib:args_to_exact_integers(As) of
+    case luerl_lib:args_to_integers(As) of
 	Is when is_list(Is) ->
 	    Ss = << <<I/utf8>> || I <- Is >>,
 	    {[Ss],St};
@@ -122,6 +122,7 @@ codes_next([Str,P|_], St) when is_binary(Str) ->
     {[P1,C],St}.
 
 %% offset(String, N, ...) -> Integer.
+-spec offset([_], any()) -> no_return().
 
 offset(As, St) ->
     _ = string_args(As, offset, St),
@@ -134,8 +135,7 @@ offset(As, St) ->
 
 string_args(As, Op, St) ->
     %% Get the args.
-    Args = luerl_lib:conv_list(As, [lua_string,
-				    lua_exact_integer,lua_exact_integer]),
+    Args = luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]),
     case Args of			%Cunning here, export A1,A2,A3
 	[A1,A2,A3|_] -> ok;
 	[A1,A2] -> A3 = byte_size(A1);

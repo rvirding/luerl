@@ -96,9 +96,11 @@ do_byte_ij(S, _, I, J) ->
 
 char([nil], St) -> {[<<>>],St};
 char(As, St) ->
-    case catch list_to_binary(luerl_lib:args_to_exact_integers(As)) of
-	{'EXIT',_} -> badarg_error(char, As, St);
-	B -> {[B],St}
+    case luerl_lib:args_to_integers(As) of
+	error -> badarg_error(char, As, St);
+	Bs ->
+	    String = list_to_binary(Bs),
+	    {[String],St}
     end.
 
 %% dump(Function) -> String.
