@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2018 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -21,10 +21,10 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
--record(luerl, {ttab,tfree,tnext,               %Table table, free, next
-                envtab,envfree,envnext,         %Environment table, free, next
-                usdtab,usdfree,usdnext,         %Userdata table, free, next
-                funtab,funfree,funnext,         %Function table, free, next
+-record(luerl, {tabs,                           %Table table
+                envs,                           %Environment table
+                usds,                           %Userdata table
+                fncs,                           %Function table
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
@@ -34,17 +34,7 @@
 		tag				%Unique tag
 	       }).
 
--record(ltab, {tab,free,next}).                 %Table structure.
-
--record(heap, {ttab,tfree,tnext,
-               envtab,envfree,envnext,
-               usdtab,usdfree,usdnext,
-               funtab,funfree,funnext,
-	       g}).
-
-%% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
-%% -record(eenv, {env=[]}).			%Environment
-%% -record(luerl, {tabs,env}).			%Full state
+-record(tstruct, {data,free,next}).             %Table structure.
 
 %% Metatables for atomic datatypes.
 
@@ -56,16 +46,29 @@
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
+-define(IS_TREF(T), is_record(T, tref)).
+
 -record(table, {a,d=[],meta=nil}).		%Table type, array, dict, meta
+
+-record(eref, {i}).				%Environment reference, index
+-define(IS_EREF(E), is_record(E, eref).
+
 -record(usdref, {i}).                           %Userdata reference, index
+-define(IS_USDREF(U), is_record(U, usdref)).
+
 -record(userdata, {d,meta=nil}).		%Userdata type, data and meta
+
 -record(thread, {}).				%Thread type
+
 %% There are two function types, the Lua one, and the Erlang one.
 
 %% The environment with upvalues is defined when the function is
 %% referenced and can vary if the function is referenced many
 %% times. Hence it is in the reference not in the the definition.
+
 -record(funref, {i,env=[]}).			%Function reference
+-define(IS_FUNREF(F), is_record(F, funref)).
+
 -record(lua_func,{anno=[],			%Annotation
 		  funrefs=[],			%Functions directly referenced
 		  lsz,				%Local var size
@@ -74,15 +77,17 @@
 		  env=not_used,			%Local env block template
 		  pars,				%Parameter types
 		  b}).				%Code block
--record(erl_func,{code}).			%Erlang code (fun)
+-define(IS_LUAFUNC(F), is_record(F, lua_func)).
 
--record(eref, {i}).				%Environment reference, index
+-record(erl_func,{code}).			%Erlang code (fun)
+-define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
 %% Test if it a function, of either sort.
--define(IS_FUNCTION(F), (is_record(F, funref) orelse is_record(F, erl_func))).
+-define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F))).
 
--define(IS_FLOAT_INT(N), (float(round(N)) =:= N)).
--define(IS_FLOAT_INT(N,I), (float(I=round(N)) =:= N)).
+%% Testing for integers/integer floats or booleans.
+-define(IS_FLOAT_INT(N), (round(N) == N)).
+-define(IS_FLOAT_INT(N,I), ((I=round(N)) == N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Different methods for storing tables in the global data #luerl{}.
@@ -166,4 +171,3 @@
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
-
