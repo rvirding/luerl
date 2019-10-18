@@ -320,8 +320,8 @@ unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
     [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
-%% raw_length(Table, State) -> Length.
 %% length(Table, State) -> {Length,State}.
+%% raw_length(Table, State) -> Length.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 

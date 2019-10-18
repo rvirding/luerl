@@ -75,8 +75,8 @@ assert(As, St) ->
 
 collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
 collectgarbage([<<"collect">>|_], St) ->
-    %% {[],luerl_emul:gc(St)};
-    {[],St};					%No-op for the moment
+    {[],luerl_emul:gc(St)};
+    %% {[],St};					%No-op for the moment
 collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
@@ -114,7 +114,8 @@ ipairs(As, St) -> badarg_error(ipairs, As, St).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
 ipairs_next([#tref{i=T},K|_], St) ->
-    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs#tstruct.data),	%Get the table
+    %% Get the table.
+    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs#tstruct.data),
     Next = K + 1,
     case raw_get_index(Arr, Next) of
 	nil -> {[nil],St};
@@ -149,7 +150,8 @@ next([#tref{i=T},K|_], St) ->
 	    case ?IS_FLOAT_INT(K, I) of
 		true when I >= 1 ->
 		    next_index(I, Arr, Dict, St);
-		_NegFalse -> next_key(K, Dict, St)	%Not integer or negative
+		_NegFalse ->			%Not integer or negative
+		    next_key(K, Dict, St)
 	    end;
        true -> next_key(K, Dict, St)
     end;
@@ -215,7 +217,8 @@ rawlen([#tref{}=T|_], St) ->
 rawlen(As, St) -> badarg_error(rawlen, As, St).
 
 rawget([#tref{i=N},K|_], St) when is_integer(K), K >= 1 ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),	%Get the table.
+    %% Get the table.
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
     V = raw_get_index(Arr, K),
     {[V],St};
 rawget([#tref{i=N},K|_], St) when is_float(K) ->
@@ -229,45 +232,35 @@ rawget([#tref{i=N},K|_], St) when is_float(K) ->
 	end,
     {[V],St};
 rawget([#tref{i=N},K|_], St) ->
-    #table{d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),	%Get the table.
+    %% Get the table.
+    #table{d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
     V = raw_get_key(Dict, K),
     {[V],St};
 rawget(As, St) -> badarg_error(rawget, As, St).
 
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St)
   when is_integer(K), K >= 1 ->
-    Ts0 = Tst0#tstruct.data,
-    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
-    Arr1 = raw_set_index(Arr0, K, V),
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1},
+    Tst1 = raw_set_index(N, K, V, Tst0),
     {[Tref],St#luerl{tabs=Tst1}};
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St) when is_float(K) ->
-    Ts0 = Tst0#tstruct.data,
-    #table{a=Arr0,d=Dict0}=T = ?GET_TABLE(N, Ts0),
-    Ts1 = case ?IS_FLOAT_INT(K, I) of
-	      true when I >= 1 ->
-		  Arr1 = raw_set_index(Arr0, I, V),
-		  ?SET_TABLE(N, T#table{a=Arr1}, Ts0);
-	      _NegFalse ->			%Negative or false
-		  Dict1 = raw_set_key(Dict0, K, V),
-		  ?SET_TABLE(N, T#table{d=Dict1}, Ts0)
-	  end,
-    Tst1 = Tst0#tstruct{data=Ts1},
+    Tst1 = case ?IS_FLOAT_INT(K, I) of
+	       true when I >= 1 ->
+		   raw_set_index(N, I, V, Tst0);
+	       _NegFalse ->
+		   raw_set_key(N, K, V, Tst0)
+	   end,
     {[Tref],St#luerl{tabs=Tst1}};
 rawset([Tref,nil=K,_|_], St) ->
     lua_error({illegal_index,Tref,K}, St);
 rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St) ->
-    Ts0 = Tst0#tstruct.data,
-    #table{d=Dict0}=T = ?GET_TABLE(N, Ts0),
-    Dict1 = raw_set_key(Dict0, K, V),
-    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1},
+    Tst1 = raw_set_key(N, K, V, Tst0),
     {[Tref],St#luerl{tabs=Tst1}};
 rawset(As, St) -> badarg_error(rawset, As, St).
 
 %% raw_get_index(Array, Index) -> nil | Value.
 %% raw_get_key(Dict, Key) -> nil | Value.
+%% raw_set_index(N, Index, Value, Tstruct) -> Tstruct.
+%% raw_set_key(N, Key, Value, Tstruct) -> Tstruct.
 
 raw_get_index(Arr, I) -> array:get(I, Arr).
 
@@ -277,10 +270,19 @@ raw_get_key(Dict, K) ->
 	error -> nil
     end.
 
-raw_set_index(Arr, I, V) -> array:set(I, V, Arr).
+raw_set_index(N, I, V, #tstruct{data=Ts0}=Tst) ->
+    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
+    Arr1 = array:set(I, V, Arr0),		%Default value is nil
+    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
+    Tst#tstruct{data=Ts1}.
 
-raw_set_key(Dict, K, nil) -> ttdict:erase(K, Dict);
-raw_set_key(Dict, K, V) -> ttdict:store(K, V, Dict).
+raw_set_key(N, K, V, #tstruct{data=Ts0}=Tst) ->
+    #table{d=Dict0}=T = ?GET_TABLE(N, Ts0),
+    Dict1 = if V =:= nil -> ttdict:erase(K, Dict0);
+	       true -> ttdict:store(K, V, Dict0)
+	    end,
+    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
+    Tst#tstruct{data=Ts1}.
 
 %% select(Args, State) -> {[Element],State}.
 

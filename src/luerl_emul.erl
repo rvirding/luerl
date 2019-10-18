@@ -230,21 +230,42 @@ set_table_keys(Tab0, [K|Ks], Val, St0) ->
 %%  not from the table; however, we won't add a nil value.
 %%  NOTE: WE ALWAYS RETURN A SINGLE VALUE!
 
-set_table_key(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
-    set_table_int_key(Tref, Key, Key, Val, St);
-set_table_key(#tref{}=Tref, Key, Val, St) when is_float(Key) ->
+set_table_key(Tref, Key, Val, St0) ->
+    case flat_set_table(Tref, Key, Val, St0) of
+	{value,_Val,St1} -> St1;
+	{meta,Meth,Args,St1} ->
+	    {_Ret,St2} = functioncall(Meth, Args, St1),
+	    St2
+    end.
+
+get_table_key(Tref, Key, St0) ->
+    case flat_get_table(Tref, Key, St0) of
+	{value,Val,St1} -> {Val,St1};
+	{meta,Meth,Args,St1} ->
+	    {Ret,St2} = functioncall(Meth, Args, St1),
+	    {first_value(Ret),St2}
+    end.
+
+%% flat_set_table(Table, Key, Val, State) ->
+%%     {value,Value,State} | {meta,Method,Args,State}.
+%% flat_get_table(Table, Key, State) ->
+%%     {value,Value,State} | {meta,Method,Args,State}.
+
+flat_set_table(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
+    flat_set_table_int(Tref, Key, Key, Val, St);
+flat_set_table(#tref{}=Tref, Key, Val, St) when is_float(Key) ->
     case ?IS_FLOAT_INT(Key, I) of
-	true when I >= 1 -> set_table_int_key(Tref, Key, I, Val, St);
-	_NegFalse -> set_table_key_key(Tref, Key, Val, St)
+	true when I >= 1 -> flat_set_table_int(Tref, Key, I, Val, St);
+	_NegFalse -> flat_set_table_key(Tref, Key, Val, St)
     end;
-set_table_key(Tab, nil=Key, _, St) ->
+flat_set_table(Tab, nil=Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St);
-set_table_key(#tref{}=Tref, Key, Val, St) ->
-    set_table_key_key(Tref, Key, Val, St);
-set_table_key(Tab, Key, _, St) ->
+flat_set_table(#tref{}=Tref, Key, Val, St) ->
+    flat_set_table_key(Tref, Key, Val, St);
+flat_set_table(Tab, Key, _, St) ->
     lua_error({illegal_index,Tab,Key}, St).
 
-set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
+flat_set_table_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
     Ts0 = Tst0#tstruct.data,
     #table{d=Dict0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
     case ttdict:find(Key, Dict0) of
@@ -254,26 +275,24 @@ set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
 		    end,
 	    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 	    Tst1 = Tst0#tstruct{data=Ts1},
-	    St#luerl{tabs=Tst1};
+	    {value,[],St#luerl{tabs=Tst1}};
 	error ->				%Key does not exist
 	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
 		nil ->
 		    %% Only add non-nil value.
 		    Dict1 = if Val =:= nil -> Dict0;
-
 			       true -> ttdict:store(Key, Val, Dict0)
 			    end,
 		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
 		    Tst1 = Tst0#tstruct{data=Ts1},
-		    St#luerl{tabs=Tst1};
+		    {value,[],St#luerl{tabs=Tst1}};
 		Meth when ?IS_FUNCTION(Meth) ->
-		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
-		    St1;
-		Meth -> set_table_key(Meth, Key, Val, St)
+		    {meta,Meth,[Tab,Key,Val],St};
+		Meth -> flat_set_table(Meth, Key, Val, St)
 	    end
     end.
 
-set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{tabs=Tst0}=St) ->
+flat_set_table_int(#tref{i=N}=Tab, Key, I, Val, #luerl{tabs=Tst0}=St) ->
     Ts0 = Tst0#tstruct.data,
     #table{a=Arr0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
     case array:get(I, Arr0) of
@@ -286,65 +305,62 @@ set_table_int_key(#tref{i=N}=Tab, Key, I, Val, #luerl{tabs=Tst0}=St) ->
 			   end,
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 		    Tst1 = Tst0#tstruct{data=Ts1},
-		    St#luerl{tabs=Tst1};
+		    {value,[],St#luerl{tabs=Tst1}};
 		Meth when ?IS_FUNCTION(Meth) ->
-		    {_Ret, St1} = functioncall(Meth, [Tab,Key,Val], St),
-		    St1;
-		Meth -> set_table_key(Meth, Key, Val, St)
+		    {meta,Meth,[Tab,Key,Val],St};
+		Meth -> flat_set_table(Meth, Key, Val, St)
 	    end;
 	_ ->					%Key exists
 	    %% Can do this as 'nil' is default value of array.
 	    Arr1 = array:set(I, Val, Arr0),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
 	    Tst1 = Tst0#tstruct{data=Ts1},
-	    St#luerl{tabs=Tst1}
+	    {value,[],St#luerl{tabs=Tst1}}
     end.
 
-get_table_key(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
-    get_table_int_key(Tref, Key, Key, St);
-get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
+flat_get_table(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
+    flat_get_table_int(Tref, Key, Key, St);
+flat_get_table(#tref{}=Tref, Key, St) when is_float(Key) ->
     case ?IS_FLOAT_INT(Key, I) of
-	true when I >= 1 -> get_table_int_key(Tref, Key, I, St);
-	_NegFalse -> get_table_key_key(Tref, Key, St)
+	true when I >= 1 -> flat_get_table_int(Tref, Key, I, St);
+	_NegFalse -> flat_get_table_key(Tref, Key, St)
     end;
-get_table_key(#tref{}=Tref, Key, St) ->
-    get_table_key_key(Tref, Key, St);
-get_table_key(Tab, Key, St) ->			%Just find the metamethod
+flat_get_table(#tref{}=Tref, Key, St) ->
+    flat_get_table_key(Tref, Key, St);
+flat_get_table(Tab, Key, St) ->			%Just find the metamethod
     case get_metamethod(Tab, <<"__index">>, St) of
 	nil -> lua_error({illegal_index,Tab,Key}, St);
 	Meth when ?IS_FUNCTION(Meth) ->
-	    {Vs,St1} = functioncall(Meth, [Tab,Key], St),
-	    {first_value(Vs),St1};
+	    {meta,Meth,[Tab,Key],St};
 	Meth ->					%Recurse down the metatable
-	    get_table_key(Meth, Key, St)
+	    flat_get_table(Meth, Key, St)
     end.
 
-get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=#tstruct{data=Ts}}=St) ->
+flat_get_table_key(#tref{i=N}=T, Key, #luerl{tabs=#tstruct{data=Ts}}=St) ->
     #table{d=Dict,meta=Meta} = ?GET_TABLE(N, Ts),
     case ttdict:find(Key, Dict) of
-	{ok,Val} -> {Val,St};
+	{ok,Val} -> {value,Val,St};
 	error ->
 	    %% Key not present so try metamethod
-	    get_table_metamethod(T, Meta, Key, Ts, St)
+	    flat_get_table_metamethod(T, Meta, Key, Ts, St)
     end.
 
-get_table_int_key(#tref{i=N}=T, Key, I, #luerl{tabs=#tstruct{data=Ts}}=St) ->
+flat_get_table_int(#tref{i=N}=T, Key, I, #luerl{tabs=#tstruct{data=Ts}}=St) ->
     #table{a=A,meta=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
     case array:get(I, A) of
 	nil ->
 	    %% Key not present so try metamethod
-	    get_table_metamethod(T, Meta, Key, Ts, St);
-	Val -> {Val,St}
+	    flat_get_table_metamethod(T, Meta, Key, Ts, St);
+	Val -> {value,Val,St}
     end.
 
-get_table_metamethod(T, Meta, Key, Ts, St) ->
+flat_get_table_metamethod(T, Meta, Key, Ts, St) ->
     case get_metamethod_tab(Meta, <<"__index">>, Ts) of
-	nil -> {nil,St};
+	nil -> {value,nil,St};
 	Meth when ?IS_FUNCTION(Meth) ->
-	    {Vs,St1} = functioncall(Meth, [T,Key], St),
-	    {first_value(Vs),St1};
+	    {meta,Meth,[T,Key],St};
 	Meth ->				%Recurse down the metatable
-	    get_table_key(Meth, Key, St)
+	    flat_get_table(Meth, Key, St)
     end.
 
 %% alloc_userdata(Data, State) -> {Usdref,State}.
@@ -454,10 +470,16 @@ get_env_var_1(D, I, Fps, Es) ->
 %%  table and the var is always a normal non-integer key.
 
 set_global_var(Var, Val, #luerl{g=G}=St) ->
-    set_table_key_key(G, Var, Val, St).
+    set_table_key(G, Var, Val, St).
+
+flat_set_global(Var, Val, #luerl{g=G}=St) ->
+    flat_set_table(G, Var, Val, St).
 
 get_global_var(Var, #luerl{g=G}=St) ->
-    get_table_key_key(G, Var, St).
+    get_table_key(G, Var, St).
+
+flat_get_global(Var, #luerl{g=G}=St) ->
+    flat_get_table(G, Var, St).
 
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
 %% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
@@ -564,7 +586,6 @@ emul([I|_]=Is, Lvs, Stk, Env, St) ->
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
 	       end),
-    if is_record(St, luerl) -> ok ; true -> io:format("boom\n"), error(boom) end,
     emul_1(Is, Lvs, Stk, Env, St);
 emul([], Lvs, Stk, Env, St) ->
     ?ITRACE_DO(begin
@@ -573,7 +594,6 @@ emul([], Lvs, Stk, Env, St) ->
 		   io:fwrite("Stk: ~p\n", [Stk]),
 		   io:put_chars("--------\n")
 	       end),
-    if is_record(St, luerl) -> ok ; true -> io:format("boom\n"), error(boom) end,
     emul_1([], Lvs, Stk, Env, St).
 
 %% Expression instructions.
@@ -583,12 +603,14 @@ emul_1([?PUSH_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
     Val = get_local_var(D, I, Lvs),
     emul(Is, Lvs, [Val|Stk], Env, St);
 emul_1([?PUSH_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
-    %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
     Val = get_env_var(D, I, Env, St),
     emul(Is, Lvs, [Val|Stk], Env, St);
-emul_1([?PUSH_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
-    {Val,St1} = get_global_var(K, St0),
-    emul(Is, Lvs, [Val|Stk], Env, St1);
+emul_1([?PUSH_GVAR(Key)|Is], Lvs, Stk, Env, St0) ->
+    case flat_get_global(Key, St0) of
+	{value,Val,St1} -> emul(Is, Lvs, [Val|Stk], Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
+    end;
 
 emul_1([?PUSH_LAST_LIT(L)|Is], Lvs, Stk, Env, St) ->
     emul(Is, Lvs, [[L]|Stk], Env, St);
@@ -596,12 +618,14 @@ emul_1([?PUSH_LAST_LVAR(D, I)|Is], Lvs, Stk, Env, St) ->
     Val = get_local_var(D, I, Lvs),
     emul(Is, Lvs, [[Val]|Stk], Env, St);
 emul_1([?PUSH_LAST_EVAR(D, I)|Is], Lvs, Stk, Env, St) ->
-    %% io:fwrite("pe: ~p\n", [{D,I,St#luerl.env}]),
     Val = get_env_var(D, I, Env, St),
     emul(Is, Lvs, [[Val]|Stk], Env, St);
-emul_1([?PUSH_LAST_GVAR(K)|Is], Lvs, Stk, Env, St0) ->
-    {Val,St1} = get_global_var(K, St0),
-    emul(Is, Lvs, [[Val]|Stk], Env, St1);
+emul_1([?PUSH_LAST_GVAR(Key)|Is], Lvs, Stk, Env, St0) ->
+    case flat_get_global(Key, St0) of
+	{value,Val,St1} -> emul(Is, Lvs, [[Val]|Stk], Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL|Is], Lvs, [Args,Meth|Stk], Env, St1)
+    end;
 
 emul_1([?STORE_LVAR(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
     Lvs1 = set_local_var(D, I, V, Lvs0),
@@ -609,26 +633,23 @@ emul_1([?STORE_LVAR(D, I)|Is], Lvs0, [V|Stk], Env, St) ->
 emul_1([?STORE_EVAR(D, I)|Is], Lvs, [V|Stk], Env, St0) ->
     St1 = set_env_var(D, I, V, Env, St0),
     emul(Is, Lvs, Stk, Env, St1);
-emul_1([?STORE_GVAR(K)|Is], Lvs, [V|Stk], Env, St0) ->
-    St1 = set_global_var(K, V, St0),
-    emul(Is, Lvs, Stk, Env, St1);
+emul_1([?STORE_GVAR(Key)|Is], Lvs, [Val|Stk], Env, St0) ->
+    case flat_set_global(Key, Val, St0) of
+	{value,_,St1} -> emul(Is, Lvs, Stk, Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?POP|Is], Lvs, [Args,Meth|Stk], Env, St1)
+    end;
 
-emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St0) ->
-    {Val,St1} = get_table_key(Tab, Key, St0),
-    emul(Is, Lvs, [Val|Stk], Env, St1);
-emul_1([?GET_LIT_KEY(K)|Is], Lvs, [Tab|Stk], Env, St0) ->
+emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St) ->
+    do_get_key(Is, Lvs, Stk, Env, St, Tab, Key);
+emul_1([?GET_LIT_KEY(Key)|Is], Lvs, [Tab|Stk], Env, St) ->
     %% [?PUSH_LIT(K),?GET_KEY]
-    {Val,St1} = get_table_key(Tab, K, St0),
-    emul(Is, Lvs, [Val|Stk], Env, St1);
-emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St0) ->
-    %% St1 = set_table_key(Tab, Key, Val, St0),
-    St1 = set_table_key(Tab, Key, Val, St0#luerl{stk=Stk}),
-    emul(Is, Lvs, Stk, Env, St1);
-emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St0) ->
+    do_get_key(Is, Lvs, Stk, Env, St, Tab, Key);
+emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St) ->
+    do_set_key(Is, Lvs, Stk, Env, St, Tab, Key, Val);
+emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St) ->
     %% [?PUSH_LIT(K),?SET_KEY]
-    %% St1 = set_table_key(Tab, Key, Val, St0),
-    St1 = set_table_key(Tab, Key, Val, St0#luerl{stk=Stk}),
-    emul(Is, Lvs, Stk, Env, St1);
+    do_set_key(Is, Lvs, Stk, Env, St, Tab, Key, Val);
 
 emul_1([?SINGLE|Is], Lvs, [Val|Stk], Env, St) ->
     emul(Is, Lvs, [first_value(Val)|Stk], Env, St);
@@ -639,7 +660,6 @@ emul_1([?BUILD_TAB(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
     {Tab,Stk1,St1} = build_tab(Fc, I, Stk0, St0),
     emul(Is, Lvs, [Tab|Stk1], Env, St1);
 emul_1([?FCALL|Is], Lvs, Stk, Env, St) ->
-    if is_record(St, luerl) -> ok ; true -> io:format("boom\n"), error(boom) end,
     do_fcall(Is, Lvs, Stk, Env, St);
 emul_1([?TAIL_FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
     do_tail_fcall(Is, Lvs, Stk, Env, St, Ac);
@@ -653,7 +673,6 @@ emul_1([?PUSH_FDEF(Funref)|Is], Lvs, Stk, Env, St0) ->
     %% Update the env field of the function reference with the current
     %% environment.
     Funref1 = Funref#funref{env=Env},
-    %% io:format("pf: ~p\n", [[Funref1|Env]]),
     emul(Is, Lvs, [Funref1|Stk], Env, St0);
 
 %% Control instructions.
@@ -780,25 +799,40 @@ push_args([], _As, Stk) -> Stk;			%Drop the rest
 push_args(_V, As, Stk) ->			%Varargs ... save as list
     [As|Stk].
 
+%% do_set_key(Instrs, LocalVars, Stack, Env, State, Table, Key, Val) ->
+%%  ReturnFromEmul.
+%% do_get_key(Instrs, LocalVars, Stack, Env, State, Table, Key) ->
+%%  ReturnFromEmul.
+
+do_set_key(Is, Lvs, Stk, Env, St0, Tab, Key, Val) ->
+    case flat_set_table(Tab, Key, Val, St0) of
+	{value,_,St1} -> emul(Is, Lvs, Stk, Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?POP|Is], Lvs, [Args,Meth|Stk], Env, St1)
+    end.
+
+do_get_key(Is, Lvs, Stk, Env, St0, Tab, Key) ->
+    case flat_get_table(Tab, Key, St0) of
+	{value,Val,St1} -> emul(Is, Lvs, [Val|Stk], Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
+    end.
+
 %% do_op1(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 %% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
-do_op1(Is, Lvs, [A|Stk], Env, St, Op) ->
-    case op(Op, A) of
-	{ok,Res} ->
-	    emul(Is, Lvs, [Res|Stk], Env, St);
-	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
-	{error,E} -> lua_error(E, St)
+do_op1(Is, Lvs, [A|Stk], Env, St0, Op) ->
+    case op(Op, A, St0) of
+	{value,Res,St1} -> emul(Is, Lvs, [Res|Stk], Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
     end.
 
 do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
-    case op(Op, A1, A2) of
-	{ok,Res} ->
-	    emul(Is, Lvs, [Res|Stk], Env, St);
-	{meta,Meta} ->
-	    functioncall(Is, Lvs, Stk, Env, St, #erl_func{code=Meta}, []);
-	{error,E} -> lua_error(E, St)
+    case op(Op, A1, A2, St) of
+	{value,Res,St1} -> emul(Is, Lvs, [Res|Stk], Env, St1);
+	{meta,Meth,Args,St1} ->
+	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
     end.
 
 %% do_fcall(Instrs, LocalVars, Stack, Env, State) -> ReturnFromEmul.
@@ -808,8 +842,8 @@ do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
     functioncall(Is, Lvs, Stk, Env, St, Func, Args).
 
 %% functioncall(Function, Args, State) -> {Return,State}.
-%%  This is called from "within" things, for example metamethods, and
-%%  expects everything necessary to be in the state.
+%%  This is called from the outside and expects everything necessary
+%%  to be in the state.
 
 functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
     %% This frame is mainly for call info.
@@ -845,8 +879,8 @@ do_mcall(Is, Lvs, [Args,Obj|Stk], Env, St, M) ->
     methodcall(Is, Lvs, Stk, Env, St, Obj, M, Args).
 
 %% methodcall(Object, Method, Args, State) -> {Return,State}.
-%%  This is called from "within" things, for example metamethods, and
-%%  expects everything necessary to be in the state.
+%%  This is called from the outside and expects everything necessary
+%%  to be in the state.
 
 methodcall(Obj, M, Args, St0) ->
     %% Get the function to call from object and method.
@@ -1200,33 +1234,37 @@ build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
     build_tab_loop(C-1, Stk, [{K,V}|Fs]).
 
-%% op(Op, Arg) -> {ok,Ret} | {meta,Func} | {error,Error}.
-%% op(Op, Arg1, Arg2) -> {ok,Ret} | {meta,Func} | {error,Error}.
+%% op(Op, Arg, State) -> {value,Ret,State} | {meta,Method,Args,State}.
+%% op(Op, Arg1, Arg2, State) -> {value,Ret,State} | {meta,Method,Args,State}.
 %%  The built-in operators. Always return a single value!
 
-op('-', A) ->
-    numeric_op('-', A, <<"__unm">>, fun (N) -> -N end);
-op('not', A) -> {ok,not ?IS_TRUE(A)};
-op('~', A) ->
-    integer_op('~', A, <<"__bnot">>, fun (N) -> {ok,bnot(N)} end);
-op('#', B) when is_binary(B) -> {ok,byte_size(B)};
-op('#', #tref{}=T) ->
-    {meta,fun (_, St) -> luerl_lib_table:length(T, St) end};
-op(Op, A) -> {error,{badarg,Op,[A]}}.
+op('-', A, St) ->
+    numeric_op('-', A, St, <<"__unm">>, fun (N) -> -N end);
+op('not', A, St) -> {value,not ?IS_TRUE(A),St};
+op('~', A, St) ->
+    integer_op('~', A, St, <<"__bnot">>, fun (N) -> bnot(N) end);
+op('#', B, St) when is_binary(B) -> {value,byte_size(B),St};
+op('#', #tref{}=T, St) ->
+    %% Need to do testing here to avoid nested call here.
+    Meth = get_metamethod(T, <<"__len">>, St),
+    if ?IS_TRUE(Meth) -> {meta,Meth,[T],St};
+       true -> {value,luerl_lib_table:raw_length(T, St),St}
+    end;
+op(Op, A, St) -> badarg_error(Op, [A], St).
 
 %% Numeric operators.
-op('+', A1, A2) ->
-    numeric_op('+', A1, A2, <<"__add">>, fun (N1,N2) -> N1+N2 end);
-op('-', A1, A2) ->
-    numeric_op('-', A1, A2, <<"__sub">>, fun (N1,N2) -> N1-N2 end);
-op('*', A1, A2) ->
-    numeric_op('*', A1, A2, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
-op('/', A1, A2) ->
-    numeric_op('/', A1, A2, <<"__div">>, fun (N1,N2) -> N1/N2 end);
+op('+', A1, A2, St) ->
+    numeric_op('+', A1, A2, St, <<"__add">>, fun (N1,N2) -> N1+N2 end);
+op('-', A1, A2, St) ->
+    numeric_op('-', A1, A2, St, <<"__sub">>, fun (N1,N2) -> N1-N2 end);
+op('*', A1, A2, St) ->
+    numeric_op('*', A1, A2, St, <<"__mul">>, fun (N1,N2) -> N1*N2 end);
+op('/', A1, A2, St) ->
+    numeric_op('/', A1, A2, St, <<"__div">>, fun (N1,N2) -> N1/N2 end);
 %% The '//' and '%' operators are specially handled to avoid first
 %% converting integers to floats and potentially lose precision.
-op('//', A1, A2) ->
-    numeric_op('//', A1, A2, <<"__idiv">>,
+op('//', A1, A2, St) ->
+    numeric_op('//', A1, A2, St, <<"__idiv">>,
 	       fun (N1,N2) when is_integer(N1), is_integer(N2) ->
 		       Idiv = N1 div N2,
 		       Irem = N1 rem N2,
@@ -1235,8 +1273,8 @@ op('//', A1, A2) ->
 			  true -> Idiv
 		       end;
 		   (N1,N2) -> 0.0 + floor(N1/N2) end);
-op('%', A1, A2) ->
-    numeric_op('%', A1, A2, <<"__mod">>,
+op('%', A1, A2, St) ->
+    numeric_op('%', A1, A2, St, <<"__mod">>,
                fun (N1,N2) when is_integer(N1), is_integer(N2) ->
                        Irem = N1 rem N2,
                        if (Irem < 0) and (N2 >= 0) -> Irem + N2;
@@ -1254,34 +1292,33 @@ op('%', A1, A2) ->
                        %%    true -> 0             %Irem =:= 0
                        %% end;
                    (N1,N2) -> N1 - floor(N1/N2)*N2 end);
-op('^', A1, A2) ->
-    numeric_op('^', A1, A2, <<"__pow">>,
+op('^', A1, A2, St) ->
+    numeric_op('^', A1, A2, St, <<"__pow">>,
 	       fun (N1,N2) -> math:pow(N1, N2) end);
 %% Bitwise operators.
-
 %% The '>>' is an arithmetic shift as a logical shift implies a word
 %% size which we don't have.
-op('&', A1, A2) ->
-    integer_op('&', A1, A2, <<"__band">>, fun (N1,N2) -> N1 band N2 end);
-op('|', A1, A2) ->
-    integer_op('|', A1, A2, <<"__bor">>, fun (N1,N2) -> N1 bor N2 end);
-op('~', A1, A2) ->
-    integer_op('|', A1, A2, <<"__bxor">>, fun (N1,N2) -> N1 bxor N2 end);
-op('<<', A1, A2) ->
-    integer_op('<<', A1, A2, <<"__shl">>, fun (N1,N2) -> N1 bsl N2 end);
-op('>>', A1, A2) ->
-    integer_op('>>', A1, A2, <<"__shr">>, fun (N1,N2) -> N1 bsr N2 end);
+op('&', A1, A2, St) ->
+    integer_op('&', A1, A2, St, <<"__band">>, fun (N1,N2) -> N1 band N2 end);
+op('|', A1, A2, St) ->
+    integer_op('|', A1, A2, St, <<"__bor">>, fun (N1,N2) -> N1 bor N2 end);
+op('~', A1, A2, St) ->
+    integer_op('|', A1, A2, St, <<"__bxor">>, fun (N1,N2) -> N1 bxor N2 end);
+op('<<', A1, A2, St) ->
+    integer_op('<<', A1, A2, St, <<"__shl">>, fun (N1,N2) -> N1 bsl N2 end);
+op('>>', A1, A2, St) ->
+    integer_op('>>', A1, A2, St, <<"__shr">>, fun (N1,N2) -> N1 bsr N2 end);
 %% Relational operators, getting close.
-op('==', A1, A2) -> eq_op('==', A1, A2);
-op('~=', A1, A2) -> neq_op('~=', A1, A2);
-op('<=', A1, A2) -> le_op('<=', A1, A2);
-op('>=', A1, A2) -> le_op('>=', A2, A1);
-op('<', A1, A2) -> lt_op('<', A1, A2);
-op('>', A1, A2) -> lt_op('>', A2, A1);
+op('==', A1, A2, St) -> eq_op('==', A1, A2, St);
+op('~=', A1, A2, St) -> neq_op('~=', A1, A2, St);
+op('<=', A1, A2, St) -> le_op('<=', A1, A2, St);
+op('>=', A1, A2, St) -> le_op('>=', A2, A1, St);
+op('<', A1, A2, St) -> lt_op('<', A1, A2, St);
+op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 %% String operator.
-op('..', A1, A2) -> concat_op(A1, A2);
+op('..', A1, A2, St) -> concat_op(A1, A2, St);
 %% Bad args here.
-op(Op, A1, A2) -> {error,{badarg,Op,[A1,A2]}}.
+op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
 
 -ifndef(HAS_FLOOR).
 %% floor(Number) -> integer().
@@ -1291,31 +1328,42 @@ floor(N) when is_integer(N) -> N;
 floor(N) when is_float(N) -> round(N - 0.5).
 -endif.
 
-%% numeric_op(Op, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
-%% numeric_op(Op, Arg, Arg, Event, Raw) -> {ok,Res} | {meta,Meta}.
-%% eq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
-%% neq_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
-%% lt_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
-%% le_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
-%% concat_op(Op, Arg, Arg) -> {ok,Res} | {meta,Meta}.
+%% numeric_op(Op, Arg, State, Event, Raw) -> OpReturn.
+%% numeric_op(Op, Arg, Arg, State, Event, Raw) -> OpReturn.
+%% integer_op(Op, Arg, State, Event, Raw) -> OpReturn.
+%% integer_op(Op, Arg, Arg, State, Event, Raw) -> OpReturn.
+%% eq_op(Op, Arg, Arg, State) -> OpReturn.
+%% neq_op(Op, Arg, Arg, State) -> OpReturn.
+%% lt_op(Op, Arg, Arg, State) -> OpReturn.
+%% le_op(Op, Arg, Arg, State) -> OpReturn.
+%% concat_op(Arg, Arg, State) -> OpReturn.
 %%  Together with their metas straight out of the reference
-%%  manual. Note that numeric_op string args are always floats.
+%%  manual. Note that:
+%%  - numeric_op string args are always floats
+%%  - eq/neq metamethods here must return boolean values and the tests
+%%    themselves are type dependent
 
-numeric_op(Op, A, E, Raw) ->
+numeric_op(Op, A, St, E, Raw) ->
     case arg_to_number(A) of
-	error ->				%Neither number nor string
-	    {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end}; 
-	N -> {ok,Raw(N)}
+	error -> op_meta(Op, A, E, St);
+	N -> {value,Raw(N),St}
     end.
 
-numeric_op(Op, A1, A2, E, Raw) ->
+numeric_op(Op, A1, A2, St, E, Raw) ->
+    case args_to_numbers(A1, A2) of
+	[N1,N2] ->
+	    {value,Raw(N1, N2),St};
+	error ->
+	    op_meta(Op, A1, A2, E, St)
+    end.
+
+args_to_numbers(A1, A2) ->
     case arg_to_number(A1) of
-	error -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
+	error -> error;
 	N1 ->
 	    case arg_to_number(A2) of
-		error ->
-		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
-		N2 -> {ok,Raw(N1, N2)}
+		error -> error;
+		N2 -> [N1,N2]
 	    end
     end.
 
@@ -1326,116 +1374,96 @@ arg_to_number(Arg) ->
 	N -> N
     end.
 
-integer_op(Op, A, E, Raw) ->
+integer_op(Op, A, St, E, Raw) ->
     case luerl_lib:arg_to_exact_integer(A) of
-	error -> {meta,fun (_, St) -> numeric_meta(Op, A, E, St) end};
-	N -> {ok,Raw(N)}
+	error -> op_meta(Op, A, E, St);
+	N -> {value,Raw(N),St}
     end.
 
-integer_op(Op, A1, A2, E, Raw) ->
-    case luerl_lib:arg_to_exact_integer(A1) of
-	error -> {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
-	N1 ->
-	    case luerl_lib:arg_to_exact_integer(A2) of
-		error ->
-		    {meta,fun (_, St) -> numeric_meta(Op, A1, A2, E, St) end};
-		N2 -> {ok,Raw(N1, N2)}
-	    end
+integer_op(Op, A1, A2, St, E, Raw) ->
+    case luerl_lib:conv_list([A1,A2], [lua_exakt_integer,lua_exakt_integer]) of
+	[N1,N2] -> {value,Raw(N1, N2),St};
+	error ->
+	    op_meta(Op, A1, A2, E, St)
     end.
 
-numeric_meta(Op, A, E, St0) ->
-    case get_metamethod(A, E, St0) of
-	nil -> badarg_error(Op, [A], St0);	%No meta method
-	Meta ->
-	    {Ret,St1} = functioncall(Meta, [A], St0),
-	    {first_value(Ret),St1}
-    end.
+eq_op(_Op, A1, A2, St) when A1 == A2 -> {value,true,St};
+eq_op(_Op, A1, A2, St)
+  when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
+    case get_eqmetamethod(A1, A2, St) of
+	nil -> {value,false,St};
+	Meth ->
+	    Func = fun (Args, St0) ->
+			   {Ret,St1} = functioncall(Meth, Args, St0),
+			   {[boolean_value(Ret)],St1}
+		   end,
+	    {meta,#erl_func{code=Func},[A1,A2],St}
+    end;
+eq_op(_, _, _, St) -> {value,false,St}.
 
-numeric_meta(Op, A1, A2, E, St0) ->
-    case get_metamethod(A1, A2, E, St0) of
-	nil -> badarg_error(Op, [A1,A2], St0);	%No meta methods
-	Meta ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {first_value(Ret),St1}
-    end.
+neq_op(_Op, A1, A2, St) when A1 == A2 -> {value,false,St};
+neq_op(_Op, A1, A2, St)
+  when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
+    case get_eqmetamethod(A1, A2, St) of
+	nil -> {value,true,St};
+	Meth ->
+	    Func = fun (Args, St0) ->
+			   {Ret,St1} = functioncall(Meth, Args, St0),
+			   {[not boolean_value(Ret)],St1}
+		   end,
+	    {meta,#erl_func{code=Func},[A1,A2],St}
+    end;
+neq_op(_, _, _, St) -> {value,true,St}.
 
-eq_op(_Op, A1, A2) when A1 == A2 -> {ok,true};
-eq_op(_Op, A1, A2) ->
-    {meta,fun (_, St) -> eq_meta(A1, A2, St) end}.
-
-neq_op(_Op, A1, A2) when A1 == A2 -> {ok,false};
-neq_op(_Op, A1, A2) ->
-    {meta,fun (_, St0) ->
-		  {Ret,St1} = eq_meta(A1, A2, St0),
-		  {not Ret,St1}
-	  end}.
-
-eq_meta(A1, A2, St0) ->
+get_eqmetamethod(A1, A2, St) ->
     %% Must have "same" metamethod here. How do we test?
-    case get_metamethod(A1, <<"__eq">>, St0) of
-	nil -> {false,St0};			%Tweren't no method
-	Meta ->
-	    case get_metamethod(A2, <<"__eq">>, St0) of
-		Meta ->				%Must be the same method
-		    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-		    {boolean_value(Ret),St1};
-		_ -> {false,St0}
+    case get_metamethod(A1, <<"__eq">>, St) of
+	nil -> nil;
+	Meth ->
+	    case get_metamethod(A2, <<"__eq">>, St) of
+		Meth -> Meth;			%Must be the same method
+		_ -> nil
 	    end
     end.
 
-lt_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 < A2};
-lt_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 < A2};
-lt_op(Op, A1, A2) ->
-    {meta,fun (_, St) -> lt_meta(Op, A1, A2, St) end}.
+lt_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {value,A1 < A2,St};
+lt_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {value,A1 < A2,St};
+lt_op(Op, A1, A2, St) ->
+    op_meta(Op, A1, A2, <<"__lt">>, St).
 
-lt_meta(Op, A1, A2, St0) ->
-    case get_metamethod(A1, A2, <<"__lt">>, St0) of
-	nil -> badarg_error(Op, [A1,A2], St0);
-	Meta ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {boolean_value(Ret),St1}
-    end.
-
-le_op(_Op, A1, A2) when is_number(A1), is_number(A2) -> {ok,A1 =< A2};
-le_op(_Op, A1, A2) when is_binary(A1), is_binary(A2) -> {ok,A1 =< A2};
-le_op(Op, A1, A2) ->
-    {meta,fun (_, St) -> le_meta(Op, A1, A2, St) end}.
-
-le_meta(Op, A1, A2, St0) ->
+le_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {value,A1 =< A2,St};
+le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {value,A1 =< A2,St};
+le_op(Op, A1, A2, St) ->
     %% Must check for first __le then __lt metamethods.
-    case get_metamethod(A1, A2, <<"__le">>, St0) of
+    case get_metamethod(A1, A2, <<"__le">>, St) of
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
-	    case get_metamethod(A1, A2, <<"__lt">>, St0) of
-		nil -> badarg_error(Op, [A1,A2], St0);
-		Meta ->
-		    {Ret,St1} = functioncall(Meta, [A2,A1], St0),
-		    {not boolean_value(Ret),St1}
+	    case get_metamethod(A1, A2, <<"__lt">>, St) of
+		nil -> badarg_error(Op, [A1,A2], St);
+		Meth ->
+		    {meta,Meth,[A2,A1],St}
 	    end;
-	Meta ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {boolean_value(Ret),St1}
+	Meth ->
+	    {meta,Meth,[A1,A2],St}
     end.
 
-concat_op(A1, A2) ->
-    case luerl_lib:arg_to_string(A1) of
+concat_op(A1, A2, St) ->
+    case luerl_lib:conv_list([A1,A2], [lua_string,lua_string]) of
+	[S1,S2] -> {value,<<S1/binary,S2/binary>>,St};
 	error ->
-	    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-	S1 ->
-	    case luerl_lib:arg_to_string(A2) of
-		error ->
-		    {meta,fun (_, St) -> concat_meta(A1, A2, St) end};
-		S2 ->
-		    {ok,<<S1/binary,S2/binary>>}
-	    end
+	    op_meta('..', A1, A2, <<"__concat">>, St)
     end.
 
-concat_meta(A1, A2, St0) ->
-    case get_metamethod(A1, A2, <<"__concat">>, St0) of
-	nil -> badarg_error('..', [A1,A2], St0);
-	Meta ->
-	    {Ret,St1} = functioncall(Meta, [A1,A2], St0),
-	    {first_value(Ret),St1}
+op_meta(Op, A, E, St) ->
+    case get_metamethod(A, E, St) of
+	nil -> badarg_error(Op, [A], St);
+	Meth -> {meta,Meth,[A],St}
+    end.
+
+op_meta(Op, A1, A2, E, St) ->
+    case get_metamethod(A1, A2, E, St) of
+	nil -> badarg_error(Op, [A1,A2], St);
+	Meth -> {meta,Meth,[A1,A2],St}
     end.
 
 %% boolean_value(Rets) -> boolean().
@@ -1553,7 +1581,7 @@ mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
 mark([#userdata{meta=Meta}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark([Meta|Todo], More, GcT, GcE, GcU, GcF);
 mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
-    More1 = [ tuple_to_list(Lv) || Lv <- Lvs ] ++ [Env|More0],
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Env|More0],
     mark(Todo, More1, GcT, GcE, GcU, GcF);
 mark([{K,V}|Todo], More, GcT, GcE, GcU, GcF) -> %Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),

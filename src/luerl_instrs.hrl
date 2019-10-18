@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 %% File    : luerl_instrs.hrl
 %% Author  : Robert Virding
-%% Purpose : Internal LUA 5.2 instructions.
+%% Purpose : Internal LUA 5.3 instructions.
 
 %% Expression instructions.
 -define(PUSH_LIT(L), {push_lit,L}).

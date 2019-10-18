@@ -235,7 +235,7 @@ to_loop(As, Fun, Acc) ->
 
 conv_list(As, Tos) -> conv_list(As, Tos, []).
 
-conv_list(_, _, error) -> error;			%Propagate error
+conv_list(_, _, error) -> error;		%Propagate error
 conv_list([A|As], [To|Tos], Rs) ->
     %% Get the right value.
     Ret = case To of
@@ -251,7 +251,7 @@ conv_list([A|As], [To|Tos], Rs) ->
 	      lua_bool -> ?IS_TRUE(A)
 	  end,
     case Ret of
-	error -> error;			%Return error
+	error -> error;				%Return error
 	Ret -> 
 	    conv_list(As, Tos, [Ret|Rs])
     end;
