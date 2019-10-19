@@ -107,23 +107,23 @@ build({$s,Fl,F,P}, [A|As], St0) ->
     {adjust_bin(S1, Fl, F),As,St1};
 %% Integer formats.
 build({$c,Fl,F,_}, [A|As], St) ->
-    N = luerl_lib:arg_to_exact_integer(A),
+    N = luerl_lib:arg_to_integer(A),
     C = N band 255,
     {adjust_str([C], Fl, F),As,St};
 build({$i,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_exact_integer(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$d,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_exact_integer(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_decimal(Fl, F, P, I),As,St};
 build({$o,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_exact_integer(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_octal(Fl, F, P, I),As,St};
 build({$x,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_exact_integer(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_hex(Fl, F, P, I),As,St};
 build({$X,Fl,F,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_exact_integer(A),
+    I = luerl_lib:arg_to_integer(A),
     {format_HEX(Fl, F, P, I),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->

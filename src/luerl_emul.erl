@@ -1243,13 +1243,8 @@ op('-', A, St) ->
 op('not', A, St) -> {value,not ?IS_TRUE(A),St};
 op('~', A, St) ->
     integer_op('~', A, St, <<"__bnot">>, fun (N) -> bnot(N) end);
-op('#', B, St) when is_binary(B) -> {value,byte_size(B),St};
-op('#', #tref{}=T, St) ->
-    %% Need to do testing here to avoid nested call here.
-    Meth = get_metamethod(T, <<"__len">>, St),
-    if ?IS_TRUE(Meth) -> {meta,Meth,[T],St};
-       true -> {value,luerl_lib_table:raw_length(T, St),St}
-    end;
+op('#', A, St) ->
+    length_op('#', A, St);
 op(Op, A, St) -> badarg_error(Op, [A], St).
 
 %% Numeric operators.
@@ -1303,7 +1298,7 @@ op('&', A1, A2, St) ->
 op('|', A1, A2, St) ->
     integer_op('|', A1, A2, St, <<"__bor">>, fun (N1,N2) -> N1 bor N2 end);
 op('~', A1, A2, St) ->
-    integer_op('|', A1, A2, St, <<"__bxor">>, fun (N1,N2) -> N1 bxor N2 end);
+    integer_op('~', A1, A2, St, <<"__bxor">>, fun (N1,N2) -> N1 bxor N2 end);
 op('<<', A1, A2, St) ->
     integer_op('<<', A1, A2, St, <<"__shl">>, fun (N1,N2) -> N1 bsl N2 end);
 op('>>', A1, A2, St) ->
@@ -1328,6 +1323,7 @@ floor(N) when is_integer(N) -> N;
 floor(N) when is_float(N) -> round(N - 0.5).
 -endif.
 
+%% length_op(Op, Arg, State) -> OpReturn.
 %% numeric_op(Op, Arg, State, Event, Raw) -> OpReturn.
 %% numeric_op(Op, Arg, Arg, State, Event, Raw) -> OpReturn.
 %% integer_op(Op, Arg, State, Event, Raw) -> OpReturn.
@@ -1343,45 +1339,40 @@ floor(N) when is_float(N) -> round(N - 0.5).
 %%  - eq/neq metamethods here must return boolean values and the tests
 %%    themselves are type dependent
 
+length_op(_Op, A, St) when is_binary(A) -> {value,byte_size(A),St};
+length_op(_Op, A, St) ->
+    case get_metamethod(A, <<"__len">>, St) of
+	nil ->
+	    if ?IS_TREF(A) ->
+		    {value,luerl_lib_table:raw_length(A, St),St};
+	       true ->
+		    badarg_error('#', [A], St)
+	    end;
+	Meth -> {meta,Meth,[A],St}
+    end.
+
 numeric_op(Op, A, St, E, Raw) ->
-    case arg_to_number(A) of
+    case luerl_lib:arg_to_number(A) of
 	error -> op_meta(Op, A, E, St);
 	N -> {value,Raw(N),St}
     end.
 
 numeric_op(Op, A1, A2, St, E, Raw) ->
-    case args_to_numbers(A1, A2) of
+    case luerl_lib:args_to_numbers(A1, A2) of
 	[N1,N2] ->
 	    {value,Raw(N1, N2),St};
 	error ->
 	    op_meta(Op, A1, A2, E, St)
     end.
 
-args_to_numbers(A1, A2) ->
-    case arg_to_number(A1) of
-	error -> error;
-	N1 ->
-	    case arg_to_number(A2) of
-		error -> error;
-		N2 -> [N1,N2]
-	    end
-    end.
-
-arg_to_number(Arg) ->
-    case luerl_lib:arg_to_number(Arg) of
-	error -> error;
-	N when is_binary(Arg) -> float(N);	%String arg always float
-	N -> N
-    end.
-
 integer_op(Op, A, St, E, Raw) ->
-    case luerl_lib:arg_to_exact_integer(A) of
+    case luerl_lib:arg_to_integer(A) of
 	error -> op_meta(Op, A, E, St);
 	N -> {value,Raw(N),St}
     end.
 
 integer_op(Op, A1, A2, St, E, Raw) ->
-    case luerl_lib:conv_list([A1,A2], [lua_exakt_integer,lua_exakt_integer]) of
+    case luerl_lib:args_to_integers(A1, A2) of
 	[N1,N2] -> {value,Raw(N1, N2),St};
 	error ->
 	    op_meta(Op, A1, A2, E, St)

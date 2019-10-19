@@ -264,7 +264,7 @@ remove_array_1(Arr0, N) ->
 %% pack - pack arguments in to a table.
 
 pack(As, St0) ->
-    T = pack_loop(As, 0.0),			%Indexes are floats!
+    T = pack_loop(As, 0),			%Indexes are integers!
     {Tab,St1} = luerl_emul:alloc_table(T, St0),
     {[Tab],St1}.
 
@@ -336,7 +336,7 @@ length(#tref{}=T, St0) ->
 
 raw_length(#tref{i=N}, St) ->
     #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
-    float(length_loop(Arr)).
+    length_loop(Arr).
 
 length_loop(Arr) ->
     case {array:get(1, Arr),array:get(2, Arr)} of
