@@ -52,13 +52,16 @@
          get_metamethod/3,get_metamethod/4]).
 
 %% Currently unused internal functions, to suppress warnings.
--export([set_global_name/3,set_global_key/3,
-	 get_global_name/2,get_global_key/2]).
+-export([set_global_name/3,get_global_name/2,
+         set_global_key/3,get_global_key/2]).
 
 %% For testing.
 -export([pop_vals/2,push_vals/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).
+
+%% Call frames on the stack.
+-record(call_frame, {func,args,lvs,env}).	%Save these for the GC
 
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[boolean_value/1,first_value/1]}).
@@ -463,20 +466,13 @@ get_env_var_1(D, I, Fps, Es) ->
     #eref{i=N} = lists:nth(D, Fps),
     element(I, ?GET_TABLE(N, Es)).
 
-%% set_global_var(Var, Val, State) -> State.
-%% get_global_var(Var, State) -> {Val,State}.
+%% flat_set_global(Var, Val, State) -> State.
+%% flat_get_global(Var, State) -> {Val,State}.
 %%  _G a normal table with metatable so we must use the table
-%%  functions.  However we can optimise a bit as we KNOW that _G is a
-%%  table and the var is always a normal non-integer key.
-
-set_global_var(Var, Val, #luerl{g=G}=St) ->
-    set_table_key(G, Var, Val, St).
+%%  functions.
 
 flat_set_global(Var, Val, #luerl{g=G}=St) ->
     flat_set_table(G, Var, Val, St).
-
-get_global_var(Var, #luerl{g=G}=St) ->
-    get_table_key(G, Var, St).
 
 flat_get_global(Var, #luerl{g=G}=St) ->
     flat_get_table(G, Var, St).
@@ -550,6 +546,10 @@ load_chunk_i(I, Funrs, St) -> {I,Funrs,St}.
 
 %% call(Function, State) -> {Return,State}.
 %% call(Function, Args, State) -> {Return,State}.
+%% functioncall(Function, Args, State) -> {Return,State}.
+%% methodcall(Object, Method, Args, State) -> {Return,State}.
+%%  These ares called from the outside and expect everything necessary
+%%  to be in the state.
 
 call(Func, St) -> call(Func, [], St).
 
@@ -562,13 +562,21 @@ call(#erl_func{}=Func, Args, St0) ->		%Erlang function
     %% Should do GC here.
     {Ret,St1}.
 
-itrace_print(Format, Args) ->
-    ?ITRACE_DO(io:fwrite(Format, Args)).
+functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
+    %% This frame is mainly for call info.
+    Fr = #call_frame{func=Func,args=Args,lvs=[],env=[]},
+    Stk1 = [Fr|Stk0],
+    {Ret,St1} = functioncall(Func, Args, Stk1, St0),
+    {Ret,St1#luerl{stk=Stk0}}.			%Reset the stack
 
-%% exp(_, _) ->
-%%     error(boom).
-
--record(call_frame, {func,args,lvs,env}).	%Save these for the GC
+methodcall(Obj, Meth, Args, St0) ->
+    %% Get the function to call from object and method.
+    case get_table_key(Obj, Meth, St0) of
+	{nil,St1} ->				%No method
+	    lua_error({undef_method,Obj,Meth}, St1);
+	{Func,St1} ->
+	    functioncall(Func, [Obj|Args], St1)
+    end.
 
 %% emul(Instrs, State).
 %% emul(Instrs, LocalVariables, Stack, Env, State).
@@ -595,6 +603,9 @@ emul([], Lvs, Stk, Env, St) ->
 		   io:put_chars("--------\n")
 	       end),
     emul_1([], Lvs, Stk, Env, St).
+
+itrace_print(Format, Args) ->
+    ?ITRACE_DO(io:fwrite(Format, Args)).
 
 %% Expression instructions.
 emul_1([?PUSH_LIT(L)|Is], Lvs, Stk, Env, St) ->
@@ -643,12 +654,12 @@ emul_1([?STORE_GVAR(Key)|Is], Lvs, [Val|Stk], Env, St0) ->
 emul_1([?GET_KEY|Is], Lvs, [Key,Tab|Stk], Env, St) ->
     do_get_key(Is, Lvs, Stk, Env, St, Tab, Key);
 emul_1([?GET_LIT_KEY(Key)|Is], Lvs, [Tab|Stk], Env, St) ->
-    %% [?PUSH_LIT(K),?GET_KEY]
+    %% [?PUSH_LIT(Key),?GET_KEY]
     do_get_key(Is, Lvs, Stk, Env, St, Tab, Key);
 emul_1([?SET_KEY|Is], Lvs, [Key,Tab,Val|Stk], Env, St) ->
     do_set_key(Is, Lvs, Stk, Env, St, Tab, Key, Val);
 emul_1([?SET_LIT_KEY(Key)|Is], Lvs, [Tab,Val|Stk], Env, St) ->
-    %% [?PUSH_LIT(K),?SET_KEY]
+    %% [?PUSH_LIT(Key),?SET_KEY]
     do_set_key(Is, Lvs, Stk, Env, St, Tab, Key, Val);
 
 emul_1([?SINGLE|Is], Lvs, [Val|Stk], Env, St) ->
@@ -661,10 +672,12 @@ emul_1([?BUILD_TAB(Fc, I)|Is], Lvs, Stk0, Env, St0) ->
     emul(Is, Lvs, [Tab|Stk1], Env, St1);
 emul_1([?FCALL|Is], Lvs, Stk, Env, St) ->
     do_fcall(Is, Lvs, Stk, Env, St);
-emul_1([?TAIL_FCALL(Ac)|Is], Lvs, Stk, Env, St) ->
-    do_tail_fcall(Is, Lvs, Stk, Env, St, Ac);
-emul_1([?MCALL(K)|Is], Lvs, Stk, Env, St) ->
-    do_mcall(Is, Lvs, Stk, Env, St, K);
+emul_1([?TAIL_FCALL|Is], Lvs, Stk, Env, St) ->
+    do_tail_fcall(Is, Lvs, Stk, Env, St);
+emul_1([?MCALL(M)|Is], Lvs, Stk, Env, St) ->
+    do_mcall(Is, Lvs, Stk, Env, St, M);
+emul_1([?TAIL_MCALL(M)|Is], Lvs, Stk, Env, St) ->
+    do_tail_mcall(Is, Lvs, Stk, Env, St, M);
 emul_1([?OP(Op,1)|Is], Lvs, Stk, Env, St) ->
     do_op1(Is, Lvs, Stk, Env, St, Op);
 emul_1([?OP(Op,2)|Is], Lvs, Stk, Env, St) ->
@@ -841,17 +854,6 @@ do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
 do_fcall(Is, Lvs, [Args,Func|Stk], Env, St) ->
     functioncall(Is, Lvs, Stk, Env, St, Func, Args).
 
-%% functioncall(Function, Args, State) -> {Return,State}.
-%%  This is called from the outside and expects everything necessary
-%%  to be in the state.
-
-functioncall(Func, Args, #luerl{stk=Stk0}=St0) ->
-    %% This frame is mainly for call info.
-    Fr = #call_frame{func=Func,args=Args,lvs=[],env=[]},
-    Stk1 = [Fr|Stk0],
-    {Ret,St1} = functioncall(Func, Args, Stk1, St0),
-    {Ret,St1#luerl{stk=Stk0}}.			%Reset the stack
-
 %% functioncall(Instrs, LocalVars, Stk, Env, State, Func, Args) -> <emul>
 %%  This is called from within code and continues with Instrs after
 %%  call. It must move everything into State.
@@ -863,46 +865,35 @@ functioncall(Is, Lvs, Stk0, Env, St0, Func, Args) ->
     %% io:format("fc: ~p\n    ~p\n    ~p\n", [St0#luerl.stk,Stk0,St1#luerl.stk]),
     emul(Is, Lvs, [Ret|Stk0], Env, St1).	%Reset the stack
 
-%% do_tail_fcall(Instrs, Acc, LocalVars, Stack, Env, State, ArgCount) ->
+%% do_tail_fcall(Instrs, LocalVars, Stack, Env, State) ->
 %%     ReturnFromEmul.
 
-do_tail_fcall(_Is, _Var, Stk, _Env, _St, 0) ->
-    error({boom,[],Stk});
-do_tail_fcall(_Is, _Var, Stk0, _Env, _St, Ac) ->
-    {Args,Stk1} = pop_vals(Ac, Stk0),		%Pop arguments
-    [Func|Stk2] = Stk1,				%Get function
-    error({boom,Func,Args,Stk2}).
+do_tail_fcall(_Is, _Lvs, [Args,Func|_Stk], _Env, St) ->
+    error({tail_fcall,Func,Args,St}).
 
 %% do_mcall(Instrs, LocalVars, Stack, Env, State, Method) ->
 
 do_mcall(Is, Lvs, [Args,Obj|Stk], Env, St, M) ->
     methodcall(Is, Lvs, Stk, Env, St, Obj, M, Args).
 
-%% methodcall(Object, Method, Args, State) -> {Return,State}.
-%%  This is called from the outside and expects everything necessary
-%%  to be in the state.
-
-methodcall(Obj, M, Args, St0) ->
-    %% Get the function to call from object and method.
-    case get_table_key(Obj, M, St0) of
-	{nil,St1} ->				%No method
-	    lua_error({undef_method,Obj,M}, St1);
-	{Val,St1} ->
-	    functioncall(Val, [Obj|Args], St1#luerl.stk, St1)
-    end.
-
 %% methodcall(Instrs, Var, Stk, Env, State, Object, Method, Args) -> <emul>
 %%  This is called from within code and continues with Instrs after
 %%  call. It must move everything into State.
 
-methodcall(Is, Lvs, Stk, Env, St0, Obj, M, Args) ->
+methodcall(Is, Lvs, Stk, Env, St0, Obj, Meth, Args) ->
     %% Get the function to call from object and method.
-    case get_table_key(Obj, M, St0) of
+    case get_table_key(Obj, Meth, St0) of
 	{nil,St1} ->				%No method
-	    lua_error({undef_method,Obj,M}, St1);
-	{Val,St1} ->
-	    functioncall(Is, Lvs, Stk, Env, St1, Val, [Obj|Args])
+	    lua_error({undef_method,Obj,Meth}, St1);
+	{Func,St1} ->
+	    functioncall(Is, Lvs, Stk, Env, St1, Func, [Obj|Args])
     end.
+
+%% do_tail_mcall(Instrs, LocalVars, Stack, Env, State, Method) ->
+%%     ReturnFromEmul.
+
+do_tail_mcall(_Is, _Lvs, [Args,Obj|_Stk], _Env, St, Meth) ->
+    error({tail_mcall,Obj,Meth,Args,St}).
 
 %% functioncall(Function, Args, Stack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
@@ -924,16 +915,11 @@ functioncall(Func, Args, Stk, St) ->
 %%  Make the local variable and Env frames and push them onto
 %%  respective stacks and call the function.
 
-functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=_Pars,b=Fis}, Args, Stk, Env, St0) ->
-    %% io:format("fc1: anno=~p\n", [_Anno]),
-    %% io:format("fc1: lsz=~p esz=~p pars=~p args=~p\n", [Lsz,Esz,_Pars,Args]),
+functioncall(#lua_func{anno=_Anno,lsz=Lsz,esz=Esz,pars=_Pars,b=Fis},
+	     Args, Stk, Env, St0) ->
     L = make_loc_frame(Lsz),
     {Eref,St1} = make_env_frame(Esz, St0),
-    %% io:format("fc1: L=~p E=~p\n",
-    %% 	      [L,Eref == not_used
-    %% 	       orelse (?GET_TABLE(Eref#fref.i,St1#luerl.envtab))]),
-    {Ret,St2} = call_luafunc(Fis, [L], [Args|Stk], [Eref|Env], St1),
-    {Ret,St2}.
+    call_luafunc(Fis, [L], [Args|Stk], [Eref|Env], St1).
 
 call_luafunc(Fis, Lvs, Stk, Env, St0) ->
     Tag = St0#luerl.tag,

@@ -96,6 +96,12 @@ instrs([?GFOR(Vs, Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?GFOR(Vs, Fis1)|instrs(Is, St)];
 
+%% Tail calls for when they are implemented in the VM.
+%% instrs([?FCALL,?POP], _St) -> [?TAIL_FCALL];
+%% instrs([?FCALL,?RETURN(_)|_], _St) -> [?TAIL_FCALL];
+%% instrs([?MCALL(M),?POP], _St) -> [?TAIL_MCALL(M)];
+%% instrs([?MCALL(M),?RETURN(_)|_], _St) -> [?TAIL_MCALL(M)];
+
 %% Nothing to do.
 instrs([I|Is], St) -> [I|instrs(Is, St)];
 instrs([], _) -> [].

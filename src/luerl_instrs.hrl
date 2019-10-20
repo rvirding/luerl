@@ -41,9 +41,9 @@
 
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
 -define(FCALL, fcall).
--define(TAIL_FCALL(Ac), {tail_fcall,Ac}).
+-define(TAIL_FCALL, tail_fcall).
 -define(MCALL(M), {mcall,M}).
--define(TAIL_MCALL(M, Ac), {tail_mcall,M,Ac}).
+-define(TAIL_MCALL(M), {tail_mcall,M}).
 -define(OP(Op,Ac), {op,Op,Ac}).
 -define(PUSH_FDEF(Anno, Lsz, Esz, Pars, Is),
 	{push_fdef,Anno,Lsz,Esz,Pars,Is}).
