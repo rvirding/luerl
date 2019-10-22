@@ -204,10 +204,35 @@ string_token(Cs0, Len, L) ->
     case catch {ok,chars(Cs1)} of
 	{ok,Cs2} ->
 	    %% Strings are utf8 encoded.
-	    Str = unicode:characters_to_binary(Cs2, unicode, unicode),
+	    %% io:format("before: ~w\n", [Cs2]),
+	    Str = case is_valid_utf8(Cs2) of
+		      true ->
+			  list_to_binary(Cs2);
+		      false ->
+			  unicode:characters_to_binary(Cs2, unicode, unicode)
+		  end,
+	    %% io:format("after: ~w\n", [Str]),
 	    {token,{'LITERALSTRING',L,Str}};
 	error -> {error,"illegal string"}
     end.
+
+%% Valid UTF-8 bytes and where they can occur.
+%% ascii          0 - 7F    0 - 127
+%% continutaion  80 - BF  128 - 191
+%% first with 1  C2 - DF  194 - 223
+%% first with 2  E0 - EF  224 - 239
+%% first with 3  F0 - F4  240 - 244
+
+is_valid_utf8([C|Cs]) when C >= 0, C =< 127 -> is_valid_utf8(Cs);
+is_valid_utf8([F1|Cs]) when F1 >= 194, F1 =< 223 -> is_cont_utf8(1, Cs);
+is_valid_utf8([F2|Cs]) when F2 >= 224, F2 =< 239 -> is_cont_utf8(2, Cs);
+is_valid_utf8([F3|Cs]) when F3 >= 240, F3 =< 244 -> is_cont_utf8(3, Cs);
+is_valid_utf8([]) -> true;
+is_valid_utf8(_Cs) -> false.
+
+is_cont_utf8(1, [C|Cs]) when C >= 128, C =< 191 -> is_valid_utf8(Cs);
+is_cont_utf8(N, [C|Cs]) when C >= 128, C =< 191 -> is_cont_utf8(N-1, Cs);
+is_cont_utf8(_N, _Cs) -> false.
 
 chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits
     I1 = C1 - $0,
