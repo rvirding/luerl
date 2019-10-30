@@ -72,9 +72,9 @@
 -record(lua_func,{anno=[],			%Annotation
 		  funrefs=[],			%Functions directly referenced
 		  lsz,				%Local var size
-		  loc=not_used,			%Local var block template
+		  %% loc=not_used,		%Local var block template
 		  esz,				%Env var size
-		  env=not_used,			%Local env block template
+		  %% env=not_used,		%Local env block template
 		  pars,				%Parameter types
 		  b}).				%Code block
 -define(IS_LUAFUNC(F), is_record(F, lua_func)).

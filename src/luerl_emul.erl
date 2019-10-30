@@ -1537,8 +1537,6 @@ mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
            Us1 = ordsets:add_element(U, Us0),
            mark(Todo, More, GcT, GcE, GcU#gct{s=Us1}, GcF)
     end;
-mark([#lua_func{env=Env}|Todo], More, GcT, GcE, GcU, GcF) ->
-    mark(Todo, [Env|More], GcT, GcE, GcU, GcF);
 mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
      #gct{t=Ft0,s=Fs0}=GcF) ->
     case ordsets:is_element(F, Fs0) of
@@ -1547,9 +1545,11 @@ mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
 	false ->
 	    Fs1 = ordsets:add_element(F, Fs0),
 	    Fdef = ?GET_TABLE(F, Ft0),
-	    Funrefs = Fdef#lua_func.funrefs,
-	    mark(ToDo, [Erefs,Funrefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
+	    %% And mark the function definition.
+	    mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
+mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, [Funrefs|More], GcT, GcE, GcU, GcF);
 %% Specifically catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
