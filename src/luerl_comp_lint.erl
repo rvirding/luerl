@@ -92,9 +92,11 @@ stmt(#expr_stmt{}=E, St) ->
 %% local_fdef_stmt(Fdef, State) -> State.
 %% expr_stmt(Expr, State) -> State.
 
-assign_stmt(#assign_stmt{l=Anno,vars=Vs,exps=Es}, St0) ->
-    St1 = ?IF(length(Vs) =/= length(Es),
-              assign_mismatch_warning(Anno, St0), St0),
+assign_stmt(#assign_stmt{vars=Vs,exps=Es}, St0) ->
+    %% Must work more on this to get it right.
+    %% St1 = ?IF(length(Vs) =/= length(Es),
+    %%           assign_mismatch_warning(Anno, St0), St0),
+    St1 = St0,
     St2 = lists:foldl(fun (V, S) -> assign_var(V, S) end, St1, Vs),
     explist(Es, St2).
 
@@ -147,9 +149,11 @@ genfor_stmt(#gfor_stmt{gens=Gs,body=B}, St0) ->
     St1 = explist(Gs, St0),
     block(B, St1).
 
-local_assign_stmt(#local_assign_stmt{l=Anno,vars=Vs,exps=Es}, St0) ->
-    St1 = ?IF(length(Vs) =/= length(Es),
-              assign_mismatch_warning(Anno, St0), St0),
+local_assign_stmt(#local_assign_stmt{exps=Es}, St0) ->
+    %% Must work more on this to get it right.
+    %% St1 = ?IF(length(Vs) =/= length(Es),
+    %%           assign_mismatch_warning(Anno, St0), St0),
+    St1 = St0,
     explist(Es, St1).
 
 local_fdef_stmt(#local_fdef_stmt{func=F}, St) ->
@@ -247,12 +251,12 @@ add_error(Anno, E, #lint{errors=Errs}=St) ->
     L = luerl_anno:line(Anno),
     St#lint{errors=Errs ++ [{L,?MODULE,E}]}.
 
-add_warning(Anno, W, #lint{warnings=Warns}=St) ->
-    L = luerl_anno:line(Anno),
-    St#lint{warnings=Warns ++ [{L,?MODULE,W}]}.
+%% add_warning(Anno, W, #lint{warnings=Warns}=St) ->
+%%     L = luerl_anno:line(Anno),
+%%     St#lint{warnings=Warns ++ [{L,?MODULE,W}]}.
 
 illegal_varargs_error(Anno, St) ->
     add_error(Anno, illegal_varargs, St).
 
-assign_mismatch_warning(Anno, St) ->
-    add_warning(Anno, assign_mismatch, St).
+%% assign_mismatch_warning(Anno, St) ->
+%%     add_warning(Anno, assign_mismatch, St).
