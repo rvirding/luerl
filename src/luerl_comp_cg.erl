@@ -219,7 +219,7 @@ numfor_stmt(#nfor_stmt{var=V,init=I,limit=L,step=S,body=B}, St0) ->
     {Ib,St2} = do_block(B, St1),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
     ForBlock = [?BLOCK(Lsz, Esz, set_var(V) ++ Is)],
-    {Ies ++ [?NFOR(V,ForBlock)],St2}.
+    {Ies ++ [?NFOR(V, ForBlock)],St2}.
 
 %% %% An experiment to put the block *outside* the for loop.
 %% numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
@@ -230,14 +230,20 @@ numfor_stmt(#nfor_stmt{var=V,init=I,limit=L,step=S,body=B}, St0) ->
 %%     {Ies ++ ForBlock,St2}.
 
 %% genfor_stmt(For, State) -> {ForIs,State}.
+%%  Evaluate the explist to return the generator function, data and
+%%  initial value. The handling of setting the pushing and setting the
+%%  vars in the block come from assign_local_loop.
 
-genfor_stmt(#gfor_stmt{vars=[V|Vs],gens=Gs,body=B}, St0) ->
+genfor_stmt(Gfor, St) ->
+    genfor_stmt_1(Gfor, St).
+
+genfor_stmt_1(#gfor_stmt{vars=Vs,gens=Gs,body=B}, St0) ->
     {Igs,St1} = explist(Gs, multiple, St0),
-    {Ias,St2} = assign_local_loop_var(Vs, 1, St1),
+    {Ias,St2} = assign_local_loop_var(Vs, 0, St1),
     {Ib,St3} = do_block(B, St2),
     [?BLOCK(Lsz, Esz, Is)] = Ib,
-    ForBlock = [?BLOCK(Lsz, Esz, Ias ++ set_var(V) ++ Is)],
-    {Igs ++ [?POP_VALS(length(Gs))] ++ [?GFOR(Vs,ForBlock)],St3}.
+    ForBlock = [?BLOCK(Lsz, Esz, Ias ++ Is)],
+    {Igs ++ [?POP_VALS(length(Gs))] ++ [?GFOR(Vs, ForBlock)],St3}.
 
 %% local_assign_stmt(Local, State) -> {Ilocal,State}.
 %%  We must evaluate all expressions, even the unneeded ones.

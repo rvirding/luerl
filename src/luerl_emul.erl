@@ -60,9 +60,6 @@
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).
 
-%% Call frames on the stack.
--record(call_frame, {func,args,lvs,env}).	%Save these for the GC
-
 %% -compile(inline).				%For when we are optimising
 %% -compile({inline,[boolean_value/1,first_value/1]}).
 
@@ -841,8 +838,8 @@ do_op1(Is, Lvs, [A|Stk], Env, St0, Op) ->
 	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
     end.
 
-do_op2(Is, Lvs, [A2,A1|Stk], Env, St, Op) ->
-    case op(Op, A1, A2, St) of
+do_op2(Is, Lvs, [A2,A1|Stk], Env, St0, Op) ->
+    case op(Op, A1, A2, St0) of
 	{value,Res,St1} -> emul(Is, Lvs, [Res|Stk], Env, St1);
 	{meta,Meth,Args,St1} ->
 	    emul([?FCALL,?SINGLE|Is], Lvs, [Args,Meth|Stk], Env, St1)
@@ -899,7 +896,8 @@ do_tail_mcall(_Is, _Lvs, [Args,Obj|_Stk], _Env, St, Meth) ->
 %%  Setup environment for function and do the actual call.
 
 functioncall(#funref{env=Env}=Funref, Args, Stk, St0) ->
-    {Func,St1} = get_funcdef(Funref, St0),
+    %% Here we must save the stack in state as function may need it.
+    {Func,St1} = get_funcdef(Funref, St0#luerl{stk=Stk}),
     functioncall(Func, Args, Stk, Env, St1);
 functioncall(#erl_func{code=Func}, Args, Stk, #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stack in state as function may need it.
@@ -1006,7 +1004,7 @@ loop_block(Is, Lvs0, Stk, Env, St0, Do) ->
 		 catch
 		     throw:{break,Tag,Lvs1,_,_,St} -> {Lvs1,St}
 		 end,
-    %% Trim local variable stack.
+    %% Trim local variable stack down to original length.
     Lvs3 = lists:nthtail(length(Lvs2)-length(Lvs0), Lvs2),
     emul(Is, Lvs3, Stk, Env, St1).
 
@@ -1117,16 +1115,17 @@ numfor_loop(N, Limit, Step, Fis, Lvs0, Stk0, Env0, St0) ->
     end.
 
 %% do_genfor(Instrs, LocalVars, Stack, Env, State, Vars, FromInstrs) -> <emul>
+%%  The top of the stack will contain the return values from the explist.
 
 do_genfor(Is, Lvs, [Val|Stk], Env, St, _, Fis) ->
-    case Val of					%Sneaky, export F, T, V
-	[F] -> T = nil, V = nil;
-	[F,T] -> V = nil;
-	[F,T,V|_] -> ok;
-	F -> T = nil, V = nil
+    case Val of					%Sneaky, export Func, Data, Val
+	[Func] -> Data = nil, Var = nil;
+	[Func,Data] -> Var = nil;
+	[Func,Data,Var|_] -> ok;
+	Func -> Data = nil, Var = nil
     end,
     Do = fun (St_) ->
-		 genfor_loop(F, T, V, Fis, Lvs, Stk, Env, St_)
+		 genfor_loop(Func, Data, Var, Fis, Lvs, Stk, Env, St_)
 	 end,
     loop_block(Is, Lvs, Stk, Env, St, Do).
 
