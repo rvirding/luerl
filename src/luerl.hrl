@@ -43,6 +43,11 @@
 	       number=nil,
 	       string=nil}).
 
+%% Various type of frames stored on the stack.
+%% Save these for gc and debugging.
+
+-record(call_frame, {func,args,lvs,env}).	%% Call frames on the stack.
+
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
