@@ -67,14 +67,7 @@ Rules.
 %% more like the Lua parser.
 
 0[xX]{H}*\.?{H}*([pP][+-]?{D}+)? :
-        Tcs = string:substr(TokenChars, 3),
-	case lists:splitwith(fun (C) -> (C =/= $p) and (C =/= $P) end, Tcs) of
-	    {Mcs,[]} when Mcs /= [] ->
-		hex_float(Mcs, [], TokenLine);
-	    {Mcs,[_P|Ecs]} when Ecs /= [] ->
-		hex_float(Mcs, Ecs, TokenLine);
-	    _Other -> {error,"illegal based number"}
-	end.
+	hex_float_token(TokenChars, TokenLine).
 
 %% Strings. 
 %% Handle the illegal newlines in string_token.
@@ -131,7 +124,7 @@ Rules.
 --\[\n :	skip_token.
 --\[[^[\n].* :	skip_token.
 
-%% --aa([^y]|y[^zy])*y+z
+%% comment --ab ... yz  --ab([^y]|y[^z])*yz
 --\[\[([^]]|\][^]])*\]\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
 
@@ -156,23 +149,37 @@ name_token(Cs, L) ->
 name_string(Name) ->
     binary_to_atom(Name, latin1).		%Only latin1 in Lua
 
+%% hex_float_token(TokenChars, TokenLine) ->
+%%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
+%% Build a float form a hex float string.
+
+hex_float_token(TokenChars, TokenLine) ->
+    Tcs = string:substr(TokenChars, 3),
+    case lists:splitwith(fun (C) -> (C =/= $p) and (C =/= $P) end, Tcs) of
+	{Mcs,[]} when Mcs /= [] ->
+	    hex_float(Mcs, [], TokenLine);
+	{Mcs,[_P|Ecs]} when Ecs /= [] ->
+	    hex_float(Mcs, Ecs, TokenLine);
+	_Other -> {error,"malformed number"}
+    end.
+
 %% hex_float(Mantissa, Exponent) -> {token,{'NUMERAL',Line,Float}} | {error,E}.
-%% hex_mantissa(Chars) -> Float.
+%% hex_mantissa(Chars) -> {float,Float} | error.
 %% hex_fraction(Chars, Pow, SoFar) -> Fraction.
 
 hex_float(Mcs, [], Line) ->
     case hex_mantissa(Mcs) of
 	{float,M} -> {token,{'NUMERAL',Line,M}};
-	error -> {error,"illegal based number"}
+	error -> {error,"malformed number"}
     end;
 hex_float(Mcs, Ecs, Line) ->
     case hex_mantissa(Mcs) of
 	{float,M} ->
 	    case catch list_to_integer(Ecs, 10) of
-		{'EXIT',_} -> {error,"illegal based number"};
+		{'EXIT',_} -> {error,"malformed number"};
 		E -> {token,{'NUMERAL',Line,M * math:pow(2, E)}}
 	    end;
-	error -> {error,"illegal based number"}
+	error -> {error,"malformed number"}
     end.
 
 hex_mantissa(Mcs) ->
