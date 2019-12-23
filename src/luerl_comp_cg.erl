@@ -169,14 +169,14 @@ return_stmt(#return_stmt{exps=Es}, St0) ->
 
 block_stmt(#block_stmt{body=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(Lsz, Esz, Iss)],St1}.
+    {[?BLOCK(Lsz, Esz, Iss ++ [?BLOCK_CLOSE])],St1}.
 
 %% do_block(Block, State) -> {Block,State}.
 %%  Do_block never returns external new variables. Fits into stmt().
 
 do_block(#block{body=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(Lsz, Esz, Iss)],St1}.
+    {[?BLOCK(Lsz, Esz, Iss ++ [?BLOCK_CLOSE])],St1}.
 
 %% while_stmt(While, State) -> {WhileIs,State}.
 
@@ -429,7 +429,7 @@ prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
 functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz}, St0) ->
     Ps1 = func_pars(Ps0),
     {Iss,St1} = stmts(Ss, St0),
-    Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss),
+    Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss ++ [?RETURN(0)]),
     {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St1}.
 
 func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs

@@ -51,15 +51,21 @@
 
 %% Control instructions.
 -define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
--define(CLOSE, close).
+-define(BLOCK_OPEN(Lsz, Esz), {block_open,Lsz,Esz}).
+-define(BLOCK_CLOSE, block_close).
 -define(WHILE(E, B), {while,E,B}).
+-define(WHILE_LOOP(Eis, Wis), {while_loop,Eis,Wis}).
 -define(REPEAT(B), {repeat,B}).
+-define(REPEAT_LOOP(B), {repeat_loop,B}).
 -define(AND_THEN(T), {and_then,T}).
 -define(OR_ELSE(T), {or_else,T}).
 -define(IF_TRUE(T), {if_true,T}).
 -define(IF(T, F), {'if',T,F}).
 -define(NFOR(V, B), {nfor,V,B}).
+-define(NFOR_LOOP(N, Limit, Step, Fis), {nfor_loop,N,Limit,Step,Fis}).
 -define(GFOR(Vs, B), {gfor,Vs,B}).
+-define(GFOR_CALL(Func, Data, Val, Fis), {gfor_call,Func,Data,Val,Fis}).
+-define(GFOR_LOOP(Func, Data, Fis), {gfor_loop,Func,Data,Fis}).
 -define(BREAK, break).
 -define(RETURN(Ac), {return,Ac}).
 

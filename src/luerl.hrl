@@ -28,6 +28,7 @@
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
+		cs=[],				%Current call stack
 		%%
 		meta=[],			%Data type metatables
 		rand,				%Random state
@@ -43,10 +44,9 @@
 	       number=nil,
 	       string=nil}).
 
-%% Various type of frames stored on the stack.
-%% Save these for gc and debugging.
-
--record(call_frame, {func,args,lvs,env}).	%% Call frames on the stack.
+%% Frames for the call stack.
+-record(call_frame, {func,args,lvs,env,is=[],cont=[]}).     %Call return frame
+-record(loop_frame, {lvs,stk,env,is=[],cont=[]}).           %Loop break frame
 
 %% Data types.
 

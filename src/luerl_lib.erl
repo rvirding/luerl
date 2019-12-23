@@ -214,7 +214,7 @@ args_to_strings(As, Acc) ->
     to_loop(As, fun arg_to_string/1, Acc).
 
 %% to_loop(List, Convert, Acc) -> List | 'error'.
-%%  Step over list using foldl and return list or 'error'. Wee assume
+%%  Step over list using foldl and return list or 'error'. We assume
 %%  the list won't be very long so appending is ok.
 
 to_loop([A|As], Fun, Acc) ->
