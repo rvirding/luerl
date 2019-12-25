@@ -1495,7 +1495,7 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
 	  envs=#tstruct{data=Et0,free=Ef0}=Env0,
 	  usds=#tstruct{data=Ut0,free=Uf0}=Usd0,
 	  fncs=#tstruct{data=Ft0,free=Ff0}=Fnc0,
-          g=G,stk=Stk,meta=Meta}=St) ->
+          g=G,stk=Stk,cs=Cs,meta=Meta}=St) ->
     %% The root set consisting of global table and stack.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
 	    G|Stk],
@@ -1504,7 +1504,7 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
     GcE = #gct{t=Et0,s=[]},
     GcU = #gct{t=Ut0,s=[]},
     GcF = #gct{t=Ft0,s=[]},
-    {SeenT,SeenE,SeenU,SeenF} = mark(Root, [], GcT, GcE, GcU, GcF),
+    {SeenT,SeenE,SeenU,SeenF} = mark(Root, [Cs], GcT, GcE, GcU, GcF),
     %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
     %% Free unseen tables and add freed to free list.
     {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
@@ -1570,6 +1570,13 @@ mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
     end;
 mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, [Funrefs|More], GcT, GcE, GcU, GcF);
+%% The call stack.
+mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Env|More0],
+    mark(Todo, More1, GcT, GcE, GcU, GcF);
+mark([#loop_frame{lvs=Lvs,stk=Stk,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Stk,Env|More0],
+    mark(Todo, More1, GcT, GcE, GcU, GcF);
 %% Specifically catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
@@ -1577,9 +1584,6 @@ mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
 mark([#userdata{meta=Meta}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark([Meta|Todo], More, GcT, GcE, GcU, GcF);
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
-    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Env|More0],
-    mark(Todo, More1, GcT, GcE, GcU, GcF);
 mark([{K,V}|Todo], More, GcT, GcE, GcU, GcF) -> %Table key-value pair
     %%io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, GcT, GcE, GcU, GcF);
