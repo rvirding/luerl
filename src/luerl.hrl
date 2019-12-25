@@ -45,8 +45,16 @@
 	       string=nil}).
 
 %% Frames for the call stack.
--record(call_frame, {func,args,lvs,env,is=[],cont=[]}).     %Call return frame
--record(loop_frame, {lvs,stk,env,is=[],cont=[]}).           %Loop break frame
+%% Call return frame
+-record(call_frame, {func,args,			%Function, arguments
+		     lvs,			%Local variables
+		     env,			%Environment
+		     is=[],cont=[]}).		%Instructions, continuation
+%% Loop break frame
+-record(loop_frame, {lvs,			%Local variables
+		     stk,			%Stack
+		     env,			%Environment
+		     is=[],cont=[]}).		%Instructions, continuation
 
 %% Data types.
 

@@ -169,14 +169,18 @@ return_stmt(#return_stmt{exps=Es}, St0) ->
 
 block_stmt(#block_stmt{body=Ss,lsz=Lsz,esz=Esz}, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(Lsz, Esz, Iss ++ [?BLOCK_CLOSE])],St1}.
+    {[?BLOCK_OPEN(Lsz, Esz)] ++ Iss ++ [?BLOCK_CLOSE],St1}.
 
+%% do_block(Block, Prefix, Postfix, State) -> {Block,State}.
 %% do_block(Block, State) -> {Block,State}.
 %%  Do_block never returns external new variables. Fits into stmt().
 
-do_block(#block{body=Ss,lsz=Lsz,esz=Esz}, St0) ->
+do_block(Block, St) ->
+    do_block(Block, [], [], St).
+
+do_block(#block{body=Ss,lsz=Lsz,esz=Esz}, Pre, Post, St0) ->
     {Iss,St1} = stmts(Ss, St0),
-    {[?BLOCK(Lsz, Esz, Iss ++ [?BLOCK_CLOSE])],St1}.
+    {[?BLOCK_OPEN(Lsz, Esz)] ++ Pre ++ Iss ++ Post ++ [?BLOCK_CLOSE],St1}.
 
 %% while_stmt(While, State) -> {WhileIs,State}.
 
@@ -216,10 +220,8 @@ if_tests([], Else, St0) ->
 
 numfor_stmt(#nfor_stmt{var=V,init=I,limit=L,step=S,body=B}, St0) ->
     {Ies,St1} = explist([I,L,S], single, St0),
-    {Ib,St2} = do_block(B, St1),
-    [?BLOCK(Lsz, Esz, Is)] = Ib,
-    ForBlock = [?BLOCK(Lsz, Esz, set_var(V) ++ Is)],
-    {Ies ++ [?NFOR(V, ForBlock)],St2}.
+    {Ib,St2} = do_block(B, set_var(V), [], St1),
+    {Ies ++ [?NFOR(V, Ib)],St2}.
 
 %% %% An experiment to put the block *outside* the for loop.
 %% numfor_stmt(#nfor_stmt{v=V,init=I,limit=L,step=S,b=B}, St0) ->
@@ -240,10 +242,8 @@ genfor_stmt(Gfor, St) ->
 genfor_stmt_1(#gfor_stmt{vars=Vs,gens=Gs,body=B}, St0) ->
     {Igs,St1} = explist(Gs, multiple, St0),
     {Ias,St2} = assign_local_loop_var(Vs, 0, St1),
-    {Ib,St3} = do_block(B, St2),
-    [?BLOCK(Lsz, Esz, Is)] = Ib,
-    ForBlock = [?BLOCK(Lsz, Esz, Ias ++ Is)],
-    {Igs ++ [?POP_VALS(length(Gs))] ++ [?GFOR(Vs, ForBlock)],St3}.
+    {Ib,St3} = do_block(B, Ias, [], St2),
+    {Igs ++ [?POP_VALS(length(Gs))] ++ [?GFOR(Vs, Ib)],St3}.
 
 %% local_assign_stmt(Local, State) -> {Ilocal,State}.
 %%  We must evaluate all expressions, even the unneeded ones.

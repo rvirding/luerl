@@ -515,14 +515,14 @@ load_chunk_i(?BLOCK(Lsz, Esz, B0), Funrs0, St0) ->
 load_chunk_i(?REPEAT(B0), Funrs0, St0) ->
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?REPEAT(B1),Funrs1,St1};
-load_chunk_i(?REPEAT_LOOP(B0), Funrs0, St0) ->		%This is dynamic
+load_chunk_i(?REPEAT_LOOP(B0), Funrs0, St0) ->         %This is dynamic
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?REPEAT_LOOP(B1),Funrs1,St1};
 load_chunk_i(?WHILE(E0, B0), Funrs0, St0) ->
     {E1,Funrs1,St1} = load_chunk_is(E0, Funrs0, St0),
     {B1,Funrs2,St2} = load_chunk_is(B0, Funrs1, St1),
     {?WHILE(E1, B1),Funrs2,St2};
-load_chunk_i(?WHILE_LOOP(E0, B0), Funrs0, St0) ->	%This is dynamic
+load_chunk_i(?WHILE_LOOP(E0, B0), Funrs0, St0) ->
     {E1,Funrs1,St1} = load_chunk_is(E0, Funrs0, St0),
     {B1,Funrs2,St2} = load_chunk_is(B0, Funrs1, St1),
     {?WHILE_LOOP(E1, B1),Funrs2,St2};
@@ -542,16 +542,16 @@ load_chunk_i(?IF(T0, F0), Funrs0, St0) ->
 load_chunk_i(?NFOR(V, B0), Funrs0, St0) ->
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?NFOR(V, B1),Funrs1,St1};
-load_chunk_i(?NFOR_LOOP(N, L, S, B0), Funrs0, St0) ->	%This is dynamic
+load_chunk_i(?NFOR_LOOP(N, L, S, B0), Funrs0, St0) ->  %This is dynamic
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?NFOR_LOOP(N, L, S, B1),Funrs1,St1};
 load_chunk_i(?GFOR(Vs, B0), Funrs0, St0) ->
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?GFOR(Vs, B1),Funrs1,St1};
-load_chunk_i(?GFOR_CALL(F, D, V, B0), Funrs0, St0) ->	%This is dynamic
+load_chunk_i(?GFOR_CALL(F, D, V, B0), Funrs0, St0) ->  %This is dynamic
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?GFOR_CALL(F, D, V, B1),Funrs1,St1};
-load_chunk_i(?GFOR_LOOP(F, D, B0), Funrs0, St0) ->	%This is dynamic
+load_chunk_i(?GFOR_LOOP(F, D, B0), Funrs0, St0) ->     %This is dynamic
     {B1,Funrs1,St1} = load_chunk_is(B0, Funrs0, St0),
     {?GFOR_LOOP(F, D, B1),Funrs1,St1};
 
