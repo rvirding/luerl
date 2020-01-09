@@ -93,8 +93,10 @@ stmt(#expr_stmt{}=E, St) ->
 %% expr_stmt(Expr, State) -> State.
 
 assign_stmt(#assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
-    St1 = ?IF(length(Vs) =/= length(Es),
-              assign_mismatch_warning(Anno, St0), St0),
+    %% Must work more on this to get it right.
+    %% St1 = ?IF(length(Vs) =/= length(Es),
+    %%           assign_mismatch_warning(Anno, St0), St0),
+    St1 = St0,
     St2 = lists:foldl(fun (V, S) -> assign_var(V, S) end, St1, Vs),
     explist(Es, St2).
 
@@ -103,8 +105,7 @@ assign_var(#dot{e=Exp,r=Rest}, St0) ->
     assign_var_rest(Rest, St1);
 assign_var(#var{l=Anno,n='...'}, St) ->
     %% Not allowed to bind ... .
-    Err = {luerl_anno:line(Anno),?MODULE,illegal_varargs},
-    St#lint{errors=St#lint.errors ++ [Err]};
+    illegal_varargs_error(Anno, St);
 assign_var(_Var, St) -> St.
 
 assign_var_rest(#dot{e=Exp,r=Rest}, St0) ->
@@ -148,8 +149,10 @@ genfor_stmt(#gfor_stmt{gens=Gs,b=B}, St0) ->
     block(B, St1).
 
 local_assign_stmt(#local_assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
-    St1 = ?IF(length(Vs) =/= length(Es),
-              assign_mismatch_warning(Anno, St0), St0),
+    %% Must work more on this to get it right.
+    %% St1 = ?IF(length(Vs) =/= length(Es),
+    %%           assign_mismatch_warning(Anno, St0), St0),
+    St1 = St0,
     explist(Es, St1).
 
 local_fdef_stmt(#local_fdef_stmt{f=F}, St) ->
@@ -247,12 +250,12 @@ add_error(Anno, E, #lint{errors=Errs}=St) ->
     L = luerl_anno:line(Anno),
     St#lint{errors=Errs ++ [{L,?MODULE,E}]}.
 
-add_warning(Anno, W, #lint{warnings=Warns}=St) ->
-    L = luerl_anno:line(Anno),
-    St#lint{warnings=Warns ++ [{L,?MODULE,W}]}.
+%% add_warning(Anno, W, #lint{warnings=Warns}=St) ->
+%%     L = luerl_anno:line(Anno),
+%%     St#lint{warnings=Warns ++ [{L,?MODULE,W}]}.
 
 illegal_varargs_error(Anno, St) ->
     add_error(Anno, illegal_varargs, St).
 
-assign_mismatch_warning(Anno, St) ->
-    add_warning(Anno, assign_mismatch, St).
+%% assign_mismatch_warning(Anno, St) ->
+%%     add_warning(Anno, assign_mismatch, St).
