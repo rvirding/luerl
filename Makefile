@@ -66,5 +66,9 @@ debug:
 
 .PHONY: all examples clean
 
+.PHONY: test
+test:
+	rebar3 do eunit, ct --cover, cover
+
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
