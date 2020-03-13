@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -350,7 +350,13 @@ emul([I|_]=Is, Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
 	       end),
-    emul_1(Is, Cont, Lvs, Stk, Env, Cs, St);
+  try emul_1(Is, Cont, Lvs, Stk, Env, Cs, St)
+  catch
+    _Error:{lua_error, Cause, LuerlState}:_ST ->
+      lua_error(Cause, LuerlState);
+    _Error:Cause:Stack ->
+      lua_error({Cause, {erl_stack, Stack}}, St)
+  end;
 emul([], Cont, Lvs, Stk, Env, Cs, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("Is:  ~p\n", [[]]),
@@ -361,7 +367,13 @@ emul([], Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("Cs:  ~p\n", [Cs]),
 		   io:put_chars("--------\n")
 	       end),
-    emul_1([], Cont, Lvs, Stk, Env, Cs, St).
+    try emul_1([], Cont, Lvs, Stk, Env, Cs, St)
+    catch
+      _Error:{lua_error, Cause, LuerlState}:_ST ->
+        lua_error(Cause, LuerlState);
+      _Error:Cause:Stack ->
+        lua_error({Cause, {erl_stack, Stack}}, St)
+    end.
 
 %% itrace_print(Format, Args) ->
 %%     ?ITRACE_DO(io:fwrite(Format, Args)).
@@ -531,11 +543,17 @@ emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
     Cs1 = push_current_line(Cs0, Line),		%Push onto callstack
+    cover_hit_line(get(lua_cover_fun), {<<"--WHAT_FILE--">>, Line}),
     emul(Is, Cont, Lvs, Stk, Env, Cs1, St);
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([], [], Lvs, Stk, Env, Cs, St) ->
     {Lvs,Stk,Env,Cs,St}.
+
+cover_hit_line(undefined, _) ->
+  ok;
+cover_hit_line(Fun, Key) ->
+  Fun(hit_line, Key).
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
 %% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.

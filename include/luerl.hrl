@@ -25,14 +25,16 @@
                 envs,                           %Environment table
                 usds,                           %Userdata table
                 fncs,                           %Function table
-		g,				%Global table
-		%%
-		stk=[],				%Current stack
-		%%
-		meta=[],			%Data type metatables
-		rand,				%Random state
-		tag				%Unique tag
-	       }).
+                g,                              %Global table
+                %%
+                stk=[],                         %Current stack
+                cs=[],                          %Current call stack
+                %%
+                meta=[],                        %Data type metatables
+                rand,                           %Random state
+                tag,                            %Unique tag
+                source                          %{FileName, FuncName, LineNumber}
+         }).
 
 -record(tstruct, {data,free,next}).             %Table structure.
 
@@ -43,10 +45,18 @@
 	       number=nil,
 	       string=nil}).
 
-%% Various type of frames stored on the stack.
-%% Save these for gc and debugging.
-
--record(call_frame, {func,args,lvs,env}).	%% Call frames on the stack.
+%% Frames for the call stack.
+%% Call return frame
+-record(call_frame, {func,args,			%Function, arguments
+                     lvs,			%Local variables
+                     env,			%Environment
+                     is=[],cont=[],
+                     source}).		%Instructions, continuation
+%% Loop break frame
+-record(loop_frame, {lvs,			%Local variables
+		     stk,			%Stack
+		     env,			%Environment
+		     is=[],cont=[]}).		%Instructions, continuation
 
 %% Data types.
 

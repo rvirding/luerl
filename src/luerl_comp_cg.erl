@@ -57,8 +57,8 @@ get_var(#gvar{n=N}) -> [?PUSH_GVAR(N)].
 
 stmts([S0|Ss0], St0) ->
     %% We KNOW that the annotation is the second element.
-    Line = luerl_anno:line(element(2, S0)),
-    {CurLine,St1} = add_current_line(Line, St0),
+    Anno = element(2, S0),
+    {CurLine,St1} = add_current_line(Anno, St0),
     {S1,St2} = stmt(S0, nul, St1),
     %% io:format("ss1: ~p\n", [{Loc0,Free0,Used0}]),
     {Ss1,St3} = stmts(Ss0, St2),
@@ -69,8 +69,16 @@ stmts([], St) -> {[],St}.
 %%  Return currentline instruction and update state if new line.
 
 add_current_line(Line, #c_cg{line=Line}=St) -> {[],St};
-add_current_line(Line, St) ->
+add_current_line(Anno, St) ->
+    Line = cover_found_line(get(lua_cover_fun), Anno),
     {[?CURRENT_LINE(Line)],St#c_cg{line=Line}}.
+
+cover_found_line(undefined, Anno) ->
+    luerl_anno:line(Anno);
+cover_found_line(Fun, Anno) ->
+    LineMo = luerl_anno:line(Anno),
+    FileName = luerl_anno:file(Anno),
+    Fun(add_line, {FileName, LineMo}).
 
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
@@ -218,14 +226,14 @@ if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
 
 if_tests([{E,B}], #block{body=[]}, St0) ->
-    Line = luerl_anno:line(element(2, E)),
-    {CurLine,St1} = add_current_line(Line, St0),
+    Anno = element(2, E),
+    {CurLine,St1} = add_current_line(Anno, St0),
     {Ie,St2} = exp(E, single, St1),
     {Ib,St3} = do_block(B, St2),
     {CurLine ++ Ie ++ [?IF_TRUE(Ib)],St3};
 if_tests([{E,B}|Ts], Else, St0) ->
-    Line = luerl_anno:line(element(2, E)),
-    {CurLine,St1} = add_current_line(Line, St0),
+    Anno = element(2, E),
+    {CurLine,St1} = add_current_line(Anno, St0),
     {Ie,St2} = exp(E, single, St1),
     {Ib,St3} = do_block(B, St2),
     {Its,St4} = if_tests(Ts, Else, St3),

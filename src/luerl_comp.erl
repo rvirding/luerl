@@ -79,14 +79,16 @@ string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
     St0 = #comp{opts=Opts,code=Str},
-    St1 = filenames(?NOFILE, St0),
+    File = proplists:get_value(module_name, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
     compile(list_passes(), St1).
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
     St0 = #comp{opts=Opts,code=Forms},
-    St1 = filenames(?NOFILE, St0),
+    File = proplists:get_value(module_name, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
     compile(forms_passes(), St1).
 
 compile(Ps, St0) ->
