@@ -43,7 +43,8 @@
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
 
-lua_error(E, St) -> error({lua_error,E,St}).
+lua_error(E, St) ->
+	error({lua_error,E,St}).
 
 badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 
