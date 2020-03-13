@@ -52,11 +52,22 @@ get_var(#gvar{n=N}) -> [?PUSH_GVAR(N)].
 %% stmt(Stmts, State) -> {Istmts,State}.
 
 stmts([S0|Ss0], St0) ->
-    {S1,St1} = stmt(S0, nul, St0),
+    {S1,St1} = stmt_line(S0, nul, St0),
     %% io:format("ss1: ~p\n", [{Loc0,Free0,Used0}]),
     {Ss1,St2} = stmts(Ss0, St1),
     {S1 ++ Ss1,St2};
 stmts([], St) -> {[],St}.
+
+stmt_line(S, LVars, St) ->
+    {S1, St1} = stmt(S, LVars, St),
+    case get(lua_cover_fun) of
+        undefined ->
+            {S1, St1};
+        Fun ->
+            [LineNo, {file, FileName} | _] = element(2, S),
+            Fun(add_line, {FileName, LineNo}),
+            {[?CURRENT_LINE(LineNo) | S1], St1}
+    end.
 
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
@@ -206,12 +217,14 @@ if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
 if_tests([{E,B}], #block{body=[]}, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ib,St2} = do_block(B, St1),
-    {Ie ++ [?IF_TRUE(Ib)],St2};
+    Line = element(2, E),
+    {[?CURRENT_LINE(Line) | Ie ++ [?IF_TRUE(Ib)]],St2};
 if_tests([{E,B}|Ts], Else, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ib,St2} = do_block(B, St1),
     {Its,St3} = if_tests(Ts, Else, St2),
-    {Ie ++ [?IF(Ib, Its)],St3};
+    Line = element(2, E),
+    {[?CURRENT_LINE(Line) |Ie ++ [?IF(Ib, Its)]],St3};
 if_tests([], Else, St0) ->
     {Ie,St1} = do_block(Else, St0),
     {Ie,St1}.

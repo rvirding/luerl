@@ -615,7 +615,13 @@ emul([I|_]=Is, Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
 	       end),
-    emul_1(Is, Cont, Lvs, Stk, Env, Cs, St);
+  try emul_1(Is, Cont, Lvs, Stk, Env, Cs, St)
+  catch
+    _Error:{lua_error, Cause, LuerlState}:_ST ->
+      lua_error(Cause, LuerlState);
+    _Error:Cause:Stack ->
+      lua_error({Cause, {erl_stack, Stack}}, St)
+  end;
 emul([], Cont, Lvs, Stk, Env, Cs, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("Is:  ~p\n", [[]]),
@@ -626,7 +632,13 @@ emul([], Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("Cs:  ~p\n", [Cs]),
 		   io:put_chars("--------\n")
 	       end),
-    emul_1([], Cont, Lvs, Stk, Env, Cs, St).
+    try emul_1([], Cont, Lvs, Stk, Env, Cs, St)
+    catch
+      _Error:{lua_error, Cause, LuerlState}:_ST ->
+        lua_error(Cause, LuerlState);
+      _Error:Cause:Stack ->
+        lua_error({Cause, {erl_stack, Stack}}, St)
+    end.
 
 itrace_print(Format, Args) ->
     ?ITRACE_DO(io:fwrite(Format, Args)).
@@ -785,10 +797,19 @@ emul_1([?POP_ARGS(Ac)|Is], Cont, Lvs, Stk0, Env, Cs, St) ->
 emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     %% This just a comment which is ignored.
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
+emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
+  {File, FunName, _} = St#luerl.source,
+  cover_hit_line(get(lua_cover_fun), {File, Line}),
+  emul(Is, Cont, Lvs, Stk, Env, Cs, St#luerl{source = {File, FunName, Line}});
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([], [], Lvs, Stk, Env, Cs, St) ->
     {Lvs,Stk,Env,Cs,St}.
+
+cover_hit_line(undefined, _) ->
+  ok;
+cover_hit_line(Fun, Key) ->
+  Fun(hit_line, Key).
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
 %% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.
@@ -877,8 +898,8 @@ do_break(Lvs0, Cs0, St) ->
 do_return(Ac, Stk0, Cs0, St) ->
     {Cf,Cs1} = find_cf(Cs0, St),		%Find the first call frame
     {Ret,Stk1} = pop_vals(Ac, Stk0),
-    #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env} = Cf,
-    emul(Is, Cont, Lvs, [Ret|Stk1], Env, Cs1, St#luerl{cs=Cs1}).
+    #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env,source = Source} = Cf,
+    emul(Is, Cont, Lvs, [Ret|Stk1], Env, Cs1, St#luerl{cs=Cs1, source = Source}).
 
 find_cf([#call_frame{}=Cf|Cs], _St) -> {Cf,Cs};
 find_cf([_|Cs], St) -> find_cf(Cs, St).
@@ -899,7 +920,9 @@ do_fcall(Is, Cont, Lvs, [Args,Func|Stk], Env, Cs, St) ->
 %%  call. It must move everything into State.
 
 functioncall(Is, Cont, Lvs, Stk, Env, Cs0, St, Func, Args) ->
-    Fr = #call_frame{func=Func,args=Args,lvs=Lvs,env=Env,is=Is,cont=Cont},
+    Src = St#luerl.source,
+    Fr = #call_frame{func=Func,args=Args,lvs=Lvs,env=Env,is=Is,cont=Cont,
+                     source = Src},
     Cs1 = [Fr|Cs0],
     functioncall(Func, Args, Stk, Cs1, St).
 
@@ -937,15 +960,34 @@ do_tail_mcall(_Is, _Cont, _Lvs, [Args,Obj|_Stk], _Env, Cs, St, Meth) ->
 %% functioncall(Function, Args, Stack, CallStack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
+functioncall(#funref{env=Env}=Funref, Args, Stk, [Cs0 | Cs], St0) ->
     %% Here we must save the stack in state as function may need it.
     {Func,St1} = get_funcdef(Funref, St0#luerl{stk=Stk}),
-    call_luafunc(Func, Args, Stk, Env, Cs, St1);
+    [LineNo, {file, FileName} | NameList] = Func#lua_func.anno,
+    Source = {FileName, proplists:get_value(name, NameList), LineNo},
+    Cs1 = Cs0#call_frame{source = St0#luerl.source},
+    try call_luafunc(Func, Args, Stk, Env, [Cs1 | Cs], St1#luerl{cs = [Cs1 | Cs],
+                                                               source = Source})
+    catch
+      _Error:{lua_error, Cause, LuerlState}:ST ->
+        lua_error(Cause, LuerlState);
+      _Error:Cause:Stack ->
+        lua_error({Cause, {erl_stack, Stack}}, St1#luerl{cs = [Cs1 | Cs],
+                                                         source = Source})
+    end;
 functioncall(#erl_func{code=Func}, Args, Stk, [Cf|Cs], #luerl{stk=Stk0}=St0) ->
     %% Here we must save the stacks in state as function may need it.
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs}),
-    #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env} = Cf,
-    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs, St1#luerl{stk=Stk0,cs=Cs});
+    try Func(Args, St0#luerl{stk=Stk,cs=Cs}) of
+      {Ret,St1} ->
+        #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env,source = Src} = Cf,
+        emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs,
+             St1#luerl{stk=Stk0,cs=Cs,source = Src})
+    catch
+      _:{lua_error, Cause, LuerLState}:Stack ->
+       lua_error(Cause, LuerLState);
+      _Error:Cause:Stack ->
+        lua_error({Cause, {erl_stack, Stack}}, St0#luerl{cs = [Cf | Cs]})
+    end;
 functioncall(Func, Args, Stk, Cs, St) ->
     case get_metamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St);

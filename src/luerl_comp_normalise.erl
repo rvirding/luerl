@@ -51,7 +51,8 @@ stmt({assign,Line,Vs,Es}, St) ->
 stmt({return,Line,Es}, St) ->
     return_stmt(Line, Es, St);
 stmt({break,L}, St) ->				%Interesting
-    {#break_stmt{l=L},St};
+    Anno = line_file_anno(L, St),
+    {#break_stmt{l=Anno},St};
 stmt({block,Line,B}, St) ->
     block_stmt(Line, B, St);
 stmt({while,Line,Exp,B}, St) ->

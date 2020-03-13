@@ -82,3 +82,4 @@
 
 %% Comment instruction.
 -define(COMMENT(C), {comment,C}).
+-define(CURRENT_LINE(Line), {current_line, Line}).
