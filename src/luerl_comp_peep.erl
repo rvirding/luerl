@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@
 %%  A chunk is now a list of instructions to define the function.
 
 chunk(#code{code=Is0}=Code, Opts) ->
-    Is1 = instrs(Is0, nil),			%No local state
+    Is1 = instrs(Is0, nil),                     %No local state
     luerl_comp:debug_print(Opts, "cp: ~p\n", [Is1]),
     {ok,Code#code{code=Is1}}.
 
@@ -61,11 +61,9 @@ instrs([?POP,?POP|Is], St) ->
     instrs([?POP2|Is], St);
 
 %% Doing sub instructions.
-instrs([?PUSH_FDEF(Lsz,Esz,Pars,Fis0)|Is], St) ->
+instrs([?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
-    [?PUSH_FDEF(Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
-instrs([?BLOCK(0,0,Bis)|Is], St) ->		%No need for block
-    instrs(Bis ++ Is, St);
+    [?PUSH_FDEF(Anno,Lsz,Esz,Pars,Fis1)|instrs(Is, St)];
 instrs([?BLOCK(Lsz,Esz,Bis0)|Is], St) ->
     Bis1 = instrs(Bis0, St),
     [?BLOCK(Lsz,Esz,Bis1)|instrs(Is, St)];
@@ -85,13 +83,8 @@ instrs([?OR_ELSE(Fis0)|Is], St) ->
 instrs([?IF_TRUE(Tis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     [?IF_TRUE(Tis1)|instrs(Is, St)];
-instrs([?IF_FALSE(Fis0)|Is], St) ->
-    Fis1 = instrs(Fis0, St),
-    [?IF_FALSE(Fis1)|instrs(Is, St)];
 instrs([?IF(Tis, [])|Is], St) ->
     instrs([?IF_TRUE(Tis)|Is], St);
-instrs([?IF([], Fis)|Is], St) ->		%This should never happen
-    instrs([?IF_FALSE(Fis)|Is], St);
 instrs([?IF(Tis0, Fis0)|Is], St) ->
     Tis1 = instrs(Tis0, St),
     Fis1 = instrs(Fis0, St),
@@ -102,6 +95,12 @@ instrs([?NFOR(V, Fis0)|Is], St) ->
 instrs([?GFOR(Vs, Fis0)|Is], St) ->
     Fis1 = instrs(Fis0, St),
     [?GFOR(Vs, Fis1)|instrs(Is, St)];
+
+%% Tail calls for when they are implemented in the VM.
+%% instrs([?FCALL,?POP], _St) -> [?TAIL_FCALL];
+%% instrs([?FCALL,?RETURN(_)|_], _St) -> [?TAIL_FCALL];
+%% instrs([?MCALL(M),?POP], _St) -> [?TAIL_MCALL(M)];
+%% instrs([?MCALL(M),?RETURN(_)|_], _St) -> [?TAIL_MCALL(M)];
 
 %% Nothing to do.
 instrs([I|Is], St) -> [I|instrs(Is, St)];

@@ -29,7 +29,7 @@ ERLC = erlc
 
 all: compile
 
-.PHONY: compile clean echo examples
+.PHONY: all compile clean echo examples debug
 
 compile: comp_opts.mk $(addprefix $(EBINDIR)/, $(EBINS))
 
@@ -63,8 +63,6 @@ examples: all
 
 debug:
 	ERLCFLAGS="+debug_info" make all
-
-.PHONY: all examples clean
 
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)

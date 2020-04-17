@@ -63,11 +63,11 @@ stmt(#expr_stmt{}=E, St) ->
 
 %% assign_stmt(Assign, State) -> {Assign,LocalFunc,State}.
 
-assign_stmt(#assign_stmt{vs=Vs0,es=Es0}=A, St0) ->
+assign_stmt(#assign_stmt{vars=Vs0,exps=Es0}=A, St0) ->
     {Vs1,Vlocf,St1} = assign_loop(Vs0, St0),
     {Es1,Elocf,St2} = explist(Es0, St1),
     Locf = Vlocf or Elocf,
-    {A#assign_stmt{vs=Vs1,es=Es1},Locf,St2}.
+    {A#assign_stmt{vars=Vs1,exps=Es1},Locf,St2}.
 
 assign_loop([V0|Vs0], St0) ->
     {V1,Vlocf,St1} = var(V0, St0),
@@ -76,22 +76,22 @@ assign_loop([V0|Vs0], St0) ->
     {[V1|Vs1],Locf,St2};
 assign_loop([], St) -> {[],false,St}.
 
-var(#dot{e=Exp0,r=Rest0}=D, St0) ->
+var(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,Elocf,St1} = prefixexp_first(Exp0, St0),
     {Rest1,Rlocf,St2} = var_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},Elocf or Rlocf,St2};
+    {D#dot{exp=Exp1,rest=Rest1},Elocf or Rlocf,St2};
 var(V, St) ->
     {V,false,St}.
 
-var_rest(#dot{e=Exp0,r=Rest0}=D, St0) ->
+var_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,Elocf,St1} = prefixexp_element(Exp0, St0),
     {Rest1,Rlocf,St2} = var_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},Elocf or Rlocf,St2};
+    {D#dot{exp=Exp1,rest=Rest1},Elocf or Rlocf,St2};
 var_rest(Exp, St) -> var_last(Exp, St).
 
-var_last(#key{k=Exp0}=K, St0) ->
+var_last(#key{key=Exp0}=K, St0) ->
     {Exp1,Elocf,St1} = exp(Exp0, St0),
-    {K#key{k=Exp1},Elocf,St1}.
+    {K#key{key=Exp1},Elocf,St1}.
 
 %% call_stmt(Call, State) -> {Call,LocalFunc,State}.
 
@@ -101,37 +101,37 @@ call_stmt(#call_stmt{call=Exp0}=C, St0) ->
 
 %% return_stmt(Return, State) -> {Return,LocalFunc,State}.
 
-return_stmt(#return_stmt{es=Es0}=R, St0) ->
+return_stmt(#return_stmt{exps=Es0}=R, St0) ->
     {Es1,Locf,St1} = explist(Es0, St0),
-    {R#return_stmt{es=Es1},Locf,St1}.
+    {R#return_stmt{exps=Es1},Locf,St1}.
 
 %% block_stmt(Block, State) -> {Block,LocalFunc,State}.
 
-block_stmt(#block_stmt{ss=Ss0}=B, St0) ->
+block_stmt(#block_stmt{body=Ss0}=B, St0) ->
     {Ss1,Sslocf,St1} = stmts(Ss0, St0),
-    {B#block_stmt{ss=Ss1,locf=Sslocf},Sslocf,St1}.
+    {B#block_stmt{body=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% do_block(Block, State) -> {Block,LocalFunc,State}.
 
-do_block(#block{ss=Ss0}=B, St0) ->
+do_block(#block{body=Ss0}=B, St0) ->
     {Ss1,Sslocf,St1} = stmts(Ss0, St0),
-    {B#block{ss=Ss1,locf=Sslocf},Sslocf,St1}.
+    {B#block{body=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% while_stmt(While, State) -> {While,LocalFunc,State}.
 %%  The test expression is done in the context of the surrounding
 %%  block.
 
-while_stmt(#while_stmt{e=E0,b=B0}=W, St0) ->
+while_stmt(#while_stmt{exp=E0,body=B0}=W, St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
     {B1,Blocf,St2} = do_block(B0, St1),
-    {W#while_stmt{e=E1,b=B1},Elocf or Blocf,St2}.
+    {W#while_stmt{exp=E1,body=B1},Elocf or Blocf,St2}.
 
 %% repeat_stmt(Repeat, State) -> {Repeat,LocalFunc,State}.
 %%  The test expression is done in the context of the repeat block.
 
-repeat_stmt(#repeat_stmt{b=B0}=R, St0) ->
+repeat_stmt(#repeat_stmt{body=B0}=R, St0) ->
     {B1,Blocf,St1} = do_block(B0, St0),
-    {R#repeat_stmt{b=B1},Blocf,St1}.
+    {R#repeat_stmt{body=B1},Blocf,St1}.
 
 %% if_stmt(If, State) -> {If,LocalFunc,State}.
 %%  The block info includes anything from the test expressions even
@@ -153,31 +153,31 @@ if_tests([], St) -> {[],false,St}.
 
 %% numfor_stmt(For, State) -> {For,LocalFunc,State}.
 
-numfor_stmt(#nfor_stmt{init=I0,limit=L0,step=S0,b=B0}=For, St0) ->
+numfor_stmt(#nfor_stmt{init=I0,limit=L0,step=S0,body=B0}=For, St0) ->
     {[I1,L1,S1],Eslocf,St1} = explist([I0,L0,S0], St0),
     {B1,Blocf,St2} = do_block(B0, St1),
     Locf = Eslocf or Blocf,
-    {For#nfor_stmt{init=I1,limit=L1,step=S1,b=B1},Locf,St2}.
+    {For#nfor_stmt{init=I1,limit=L1,step=S1,body=B1},Locf,St2}.
 
 %% genfor_stmt(For, State) -> {For,LocalFunc,State}.
 
-genfor_stmt(#gfor_stmt{gens=Gs0,b=B0}=For, St0) ->
+genfor_stmt(#gfor_stmt{gens=Gs0,body=B0}=For, St0) ->
     {Gs1,Glocf,St1} = explist(Gs0, St0),
     {B1,Blocf,St2} = do_block(B0, St1),
     Locf = Glocf or Blocf,
-    {For#gfor_stmt{gens=Gs1,b=B1},Locf,St2}.
+    {For#gfor_stmt{gens=Gs1,body=B1},Locf,St2}.
 
 %% local_assign_stmt(Local, State) -> {Local,LocalFunc,State}.
 
-local_assign_stmt(#local_assign_stmt{es=Es0}=L, St0) ->
+local_assign_stmt(#local_assign_stmt{exps=Es0}=L, St0) ->
     {Es1,Eslocf,St1} = explist(Es0, St0),
-    {L#local_assign_stmt{es=Es1},Eslocf,St1}.
+    {L#local_assign_stmt{exps=Es1},Eslocf,St1}.
 
 %% local_fdef_stmt(Local, State) -> {Local,LocalFunc,State}.
 
-local_fdef_stmt(#local_fdef_stmt{f=F0}=L, St0) ->
+local_fdef_stmt(#local_fdef_stmt{func=F0}=L, St0) ->
     {F1,_,St1} = functiondef(F0, St0),		%Don't care what's in func
-    {L#local_fdef_stmt{f=F1},true,St1}.
+    {L#local_fdef_stmt{func=F1},true,St1}.
 
 %% expr_stmt(Expr, State) -> {Expr,LocalFunc,State}.
 %%  The expression pseudo statement. This will return a single value.
@@ -199,61 +199,61 @@ exp(#lit{}=L, St) -> {L,false,St};		%Nothing to do
 exp(#fdef{}=F0, St0) ->
     {F1,_,St1} = functiondef(F0, St0),		%Don't care what's in func
     {F1,true,St1};
-exp(#op{as=Es0}=Op, St0) ->
+exp(#op{args=Es0}=Op, St0) ->
     {Es1,Eslocf,St1} = explist(Es0, St0),
-    {Op#op{as=Es1},Eslocf,St1};
-exp(#tc{fs=Fs0}=T, St0) ->
+    {Op#op{args=Es1},Eslocf,St1};
+exp(#tabcon{fields=Fs0}=T, St0) ->
     {Fs1,Tlocf,St1} = tableconstructor(Fs0, St0),
-    {T#tc{fs=Fs1},Tlocf,St1};
+    {T#tabcon{fields=Fs1},Tlocf,St1};
 exp(E, St) ->
     prefixexp(E, St).
 
-prefixexp(#dot{e=Exp0,r=Rest0}=D, St0) ->
+prefixexp(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,Elocf,St1} = prefixexp_first(Exp0, St0),
     {Rest1,Rlocf,St2} = prefixexp_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},Elocf or Rlocf,St2};
+    {D#dot{exp=Exp1,rest=Rest1},Elocf or Rlocf,St2};
 prefixexp(Exp, St) -> prefixexp_first(Exp, St).
 
-prefixexp_first(#single{e=E0}=S, St0) ->
+prefixexp_first(#single{exp=E0}=S, St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
-    {S#single{e=E1},Elocf,St1};
+    {S#single{exp=E1},Elocf,St1};
 prefixexp_first(V, St) ->
     {V,false,St}.
 
-prefixexp_rest(#dot{e=Exp0,r=Rest0}=D, St0) ->
+prefixexp_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,Elocf,St1} = prefixexp_element(Exp0, St0),
     {Rest1,Rlocf,St2} = prefixexp_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},Elocf or Rlocf,St2};
+    {D#dot{exp=Exp1,rest=Rest1},Elocf or Rlocf,St2};
 prefixexp_rest(Exp, St) -> prefixexp_element(Exp, St).
 
-prefixexp_element(#key{k=E0}=K, St0) ->
+prefixexp_element(#key{key=E0}=K, St0) ->
     {E1,Elocf,St1} = exp(E0, St0),
-    {K#key{k=E1},Elocf,St1};
-prefixexp_element(#fcall{as=As0}=F, St0) ->
+    {K#key{key=E1},Elocf,St1};
+prefixexp_element(#fcall{args=As0}=F, St0) ->
     {As1,Aslocf,St1} = explist(As0, St0),
-    {F#fcall{as=As1},Aslocf,St1};
-prefixexp_element(#mcall{as=As0}=M, St0) ->
+    {F#fcall{args=As1},Aslocf,St1};
+prefixexp_element(#mcall{args=As0}=M, St0) ->
     {As1,Aslocf,St1} = explist(As0, St0),
-    {M#mcall{as=As1},Aslocf,St1}.
+    {M#mcall{args=As1},Aslocf,St1}.
 
 %% functiondef(Func, State) -> {Func,LocalFunc,State}.
 %%  We return if there are any internal function definitions within
 %%  the function.
 
-functiondef(#fdef{ss=Ss0}=F, St0) ->
+functiondef(#fdef{body=Ss0}=F, St0) ->
     {Ss1,Sslocf,St1} = stmts(Ss0, St0),
-    {F#fdef{ss=Ss1,locf=Sslocf},Sslocf,St1}.
+    {F#fdef{body=Ss1,locf=Sslocf},Sslocf,St1}.
 
 %% tableconstructor(Fields, State) -> {Fields,LocalFunc,State}.
 
 tableconstructor(Fs0, St0) ->
-    Fun = fun (#efield{v=V0}=F, {Locf,S0}) ->
+    Fun = fun (#efield{val=V0}=F, {Locf,S0}) ->
 		  {V1,Vlocf,S1} = exp(V0, S0),
-		  {F#efield{v=V1},{Locf or Vlocf,S1}};
-	      (#kfield{k=K0,v=V0}=F, {Locf,S0}) ->
+		  {F#efield{val=V1},{Locf or Vlocf,S1}};
+	      (#kfield{key=K0,val=V0}=F, {Locf,S0}) ->
 		  {K1,Klocf,S1} = exp(K0, S0),
 		  {V1,Vlocf,S2} = exp(V0, S1),
-		  {F#kfield{k=K1,v=V1},{Locf or Klocf or Vlocf,S2}}
+		  {F#kfield{key=K1,val=V1},{Locf or Klocf or Vlocf,S2}}
 	  end,
     {Fs1,{Locf,St1}} = lists:mapfoldl(Fun, {false,St0}, Fs0),
     {Fs1,Locf,St1}.

@@ -63,8 +63,9 @@ concat(As, St0) ->
     end.
 
 do_concat([#tref{i=N}|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
-    case luerl_lib:conv_list(concat_args(As), [lua_string,lua_integer,lua_integer]) of
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+    case luerl_lib:conv_list(concat_args(As),
+			     [lua_string,lua_integer,lua_integer]) of
 	[Sep,I] ->
 	    {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
@@ -79,12 +80,12 @@ do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 %%  Erlang.
 
 concat(#tref{i=N}, Sep, I, St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
     J = length_loop(Arr),
     do_concat(Arr, Dict, Sep, I, J).
 
 concat(#tref{i=N}, Sep, I, J, St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
     do_concat(Arr, Dict, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
@@ -138,21 +139,23 @@ concat_join([], _) -> <<>>.
 %% insert(Table, [Pos,] Value) -> []
 %%  Insert an element into a list shifting following elements.
 
-insert([#tref{i=N},V], St) ->
-    Ts0 = St#luerl.ttab,
+insert([#tref{i=N},V], #luerl{tabs=Tst0}=St) ->
+    Ts0 = Tst0#tstruct.data,
     #table{a=Arr0} = T = ?GET_TABLE(N, Ts0),
     Arr1 = do_insert_last(Arr0, V),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    {[],St#luerl{ttab=Ts1}};
-insert([#tref{i=N},P0,V]=As, St) ->
-    Ts0 = St#luerl.ttab,
+    Tst1 = Tst0#tstruct{data=Ts1},
+    {[],St#luerl{tabs=Tst1}};
+insert([#tref{i=N},P0,V]=As, #luerl{tabs=Tst0}=St) ->
+    Ts0 = Tst0#tstruct.data,
     #table{a=Arr0} = T = ?GET_TABLE(N, Ts0),
     Size = length_loop(Arr0),
     case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 >=1, P1 =< Size+1 ->
 	    Arr1 = do_insert(Arr0, P1, V),
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    {[],St#luerl{ttab=Ts1}};
+	    Tst1 = Tst0#tstruct{data=Ts1},
+	    {[],St#luerl{tabs=Tst1}};
 	_ -> badarg_error(insert, As, St)
     end;
 insert(As, St) -> badarg_error(insert, As, St).
@@ -185,21 +188,23 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 %% remove(Table [,Pos]) -> Value.
 %%  Remove an element from a list shifting following elements.
 
-remove([#tref{i=N}], St) ->
-    Ts0 = St#luerl.ttab,
+remove([#tref{i=N}], #luerl{tabs=Tst0}=St) ->
+    Ts0 = Tst0#tstruct.data,
     #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
     {Ret,Arr1,Dict1} = do_remove_last(Arr0, Dict0),
     Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
-    {Ret,St#luerl{ttab=Ts1}};
-remove([#tref{i=N},P0|_]=As, St) ->
-    Ts0 = St#luerl.ttab,
+    Tst1 = Tst0#tstruct{data=Ts1},
+    {Ret,St#luerl{tabs=Tst1}};
+remove([#tref{i=N},P0|_]=As, #luerl{tabs=Tst0}=St) ->
+    Ts0 = Tst0#tstruct.data,
     #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
     case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 =/= nil ->
 	    case do_remove(Arr0, Dict0, P1) of
 		{Ret,Arr1,Dict1} ->
 		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
-		    {Ret,St#luerl{ttab=Ts1}};
+		    Tst1 = Tst0#tstruct{data=Ts1},
+		    {Ret,St#luerl{tabs=Tst1}};
 		badarg -> badarg_error(remove, As, St)
 	    end;
 	_ -> badarg_error(remove, As, St)	%nil or P < 1
@@ -259,7 +264,7 @@ remove_array_1(Arr0, N) ->
 %% pack - pack arguments in to a table.
 
 pack(As, St0) ->
-    T = pack_loop(As, 0.0),			%Indexes are floats!
+    T = pack_loop(As, 0),			%Indexes are integers!
     {Tab,St1} = luerl_emul:alloc_table(T, St0),
     {[Tab],St1}.
 
@@ -270,7 +275,7 @@ pack_loop([], N) -> [{<<"n">>,N}].
 %% unpack - unpack table into return values.
 
 unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
     case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
 	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
@@ -315,8 +320,8 @@ unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
     [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
-%% raw_length(Table, State) -> Length.
 %% length(Table, State) -> {Length,State}.
+%% raw_length(Table, State) -> Length.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
@@ -330,8 +335,8 @@ length(#tref{}=T, St0) ->
     end.
 
 raw_length(#tref{i=N}, St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-    float(length_loop(Arr)).
+    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+    length_loop(Arr).
 
 length_loop(Arr) ->
     case {array:get(1, Arr),array:get(2, Arr)} of
@@ -363,7 +368,7 @@ sort([#tref{i=N},Func|_], St0) ->
 sort(As, St) -> badarg_error(sort, As, St).
 
 do_sort(Comp, St0, N) ->
-    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.ttab),
+    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.tabs#tstruct.data),
     case array:to_list(Arr0) of
 	[] -> St0;				%Nothing to do
 	[E0|Es0] ->
@@ -371,9 +376,11 @@ do_sort(Comp, St0, N) ->
 	    {Es1,St1} = merge_sort(Comp, St0, Es0),
 	    Arr2 = array:from_list([E0|Es1], nil),
 	    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
-	    Ts0 = St1#luerl.ttab,
+	    Tst0 = St1#luerl.tabs,
+	    Ts0 = Tst0#tstruct.data,
 	    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
-	    St1#luerl{ttab=Ts1}
+	    Tst1 = Tst0#tstruct{data=Ts1},
+	    St1#luerl{tabs=Tst1}
     end.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.

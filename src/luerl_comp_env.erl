@@ -28,34 +28,32 @@
 -import(ordsets, [is_element/2,intersection/2,subtract/2]).
 
 %% Local state.
--record(st, {lfs=[],				%Variable frames
-	     efs=[],				%Environment frames
-	     vars=none,
-	     fs=[],
-	     locv=false,			%Local variables
-	     locf				%Local frame
-	    }).
+-record(c_env, {lfs=[],				%Variable frames
+		efs=[],				%Environment frames
+		vars=none,
+		fs=[],
+		locv=false,			%Local variables
+		locf				%Local frame
+	      }).
 
 %% chunk(St0) -> {ok,St0};
 chunk(#code{code=C0}=Code, Opts) ->
-    St0 = #st{},				%Local state
+    St0 = #c_env{},				%Local state
     {C1,_} = functiondef(C0, St0),
     luerl_comp:debug_print(Opts, "ce: ~p\n", [C1]),
     {ok,Code#code{code=C1}}.
 
-%% push_frame(State) -> State.
+%% alloc_frame(State) -> State.
 %% pop_frame(State) -> State.
 %% get_frame(State) -> Frame.
 
-push_frame(#st{vars=#vars{local=Lo,fused=Fu},fs=Fs}=St) ->
-    Lsz = length(subtract(Lo, Fu)),
-    Esz = length(intersection(Lo, Fu)),
-    F = new_frame(Lsz, Esz),
-    St#st{fs=[F|Fs]}.
+alloc_frame(#c_env{vars=#vars{},fs=Fs}=St) ->
+    F = new_frame(),
+    St#c_env{fs=[F|Fs]}.
 
-pop_frame(#st{fs=[_|Fs]}=St) -> St#st{fs=Fs}.
+pop_frame(#c_env{fs=[_|Fs]}=St) -> St#c_env{fs=Fs}.
 
-get_frame(#st{fs=[F|_]}) -> F.
+get_frame(#c_env{fs=[F|_]}) -> F.
 
 %% new_frame(LocalSize, EnvSize) -> Frame.
 %%  We know frame will be tuples which we index from 1. Also Lua has
@@ -64,42 +62,35 @@ get_frame(#st{fs=[F|_]}) -> F.
 %%  them in reverse order and always pushing variable to front of
 %%  list.
 %%
-%%  The size parameters aren't the true size, they are only the number
-%%  of *different* variables. We will only use them as an indicator
-%%  whether each frame contains local and enviroment variables. The
-%%  true size we get at the end from the index value.
+%%  We get the size from the index of the last variable of each type added.
 %%
-%% {HasLocal,LocalIndex,HasEnv,EnvIndex,Vars}
+%%  NOTE: We can have empty frames here. The emulator knows about this
+%%  and can handle it.
+%%
+%% Frame :: {LocalIndex,EnvIndex,Vars}
+%% Var :: {Name,Type,Index}
 
-new_frame(Lsz, Esz) -> {Lsz>0,0,Esz>0,0,[]}.	%Use size to indicate presence
+new_frame() -> {0,0,[]}.
 
-find_frame_var(N, {_,_,_,_,Fs}) ->
+find_frame_var(N, {_,_,Fs}) ->
     find_frame_var_1(N, Fs).
 
 find_frame_var_1(N, [{N,Type,I}|_]) -> {yes,Type,I};
 find_frame_var_1(N, [_|F]) -> find_frame_var_1(N, F);
 find_frame_var_1(_, []) -> no.
 
-frame_depth_incr({false,_,false,_,_}, Ld, Ed) -> {Ld,Ed};   %No vars at all
-frame_depth_incr({false,_,true,_,_}, Ld, Ed) -> {Ld,Ed+1};  %No local variables
-frame_depth_incr({true,_,false,_,_}, Ld, Ed) -> {Ld+1,Ed};  %No env variables
-frame_depth_incr({true,_,true,_,_}, Ld, Ed) -> {Ld+1,Ed+1}. %Both variables
+frame_local_size({Li,_,_}) -> Li.
+frame_env_size({_,Ei,_}) -> Ei.
 
-frame_local_size({_,Li,_,_,_}) -> Li.		%Use the index for the size
-frame_env_size({_,_,_,Ei,_}) -> Ei.
+add_frame_local_var(N, {Li,Ei,Fs}) ->
+    {Li+1,Ei,[{N,lvar,Li+1}|Fs]}.
 
-add_frame_local_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
-    {Lsz,Li+1,Esz,Ei,[{N,lvar,Li+1}|Fs]}.
-
-add_frame_env_var(N, {Lsz,Li,Esz,Ei,Fs}) ->
-    {Lsz,Li,Esz,Ei+1,[{N,evar,Ei+1}|Fs]}.
+add_frame_env_var(N, {Li,Ei,Fs}) ->
+    {Li,Ei+1,[{N,evar,Ei+1}|Fs]}.
 
 %% find_fs_var(Name, FrameStack) -> {yes,Type,Depth,Index} | no.
 %%  Find a variable in the frame stack returning its depth and
-%%  index. N.B. that we DON'T increment the local or env depth for
-%%  unless their is actually any local or env variables
-%%  respectively. This ensures that there are no empty frames in the
-%%  stacks. The emulator assumes this.
+%%  index.
 
 find_fs_var(N, Fs) -> find_fs_var(N, Fs, 1, 1).
 
@@ -108,7 +99,8 @@ find_fs_var(N, [F|Fs], Ld, Ed) ->
 	{yes,lvar,Li} -> {yes,lvar,Ld,Li};
 	{yes,evar,Ei} -> {yes,evar,Ed,Ei};
 	no ->
-	    {Ld1,Ed1} = frame_depth_incr(F, Ld, Ed),
+	    Ld1 = Ld + 1,
+	    Ed1 = Ed + 1,
 	    find_fs_var(N, Fs, Ld1, Ed1)
     end;
 find_fs_var(_, [], _, _) -> no.
@@ -122,22 +114,22 @@ add_var(N, St) ->
 	env -> add_env_var(N, St)
     end.
 	    
-add_env_var(N, #st{fs=[F0|Fs]}=St) ->
+add_env_var(N, #c_env{fs=[F0|Fs]}=St) ->
     F1 = add_frame_env_var(N, F0),
-    St#st{fs=[F1|Fs]}.
+    St#c_env{fs=[F1|Fs]}.
 	    
-add_local_var(N, #st{fs=[F0|Fs]}=St) ->
+add_local_var(N, #c_env{fs=[F0|Fs]}=St) ->
     F1 = add_frame_local_var(N, F0),
-    St#st{fs=[F1|Fs]}.
+    St#c_env{fs=[F1|Fs]}.
 
-get_var(N, #st{fs=Fs}) ->
+get_var(N, #c_env{fs=Fs}) ->
     case find_fs_var(N, Fs) of
 	{yes,lvar,Ld,Li} -> #lvar{n=N,d=Ld,i=Li};
 	{yes,evar,Ed,Ei} -> #evar{n=N,d=Ed,i=Ei};
 	no -> #gvar{n=N}
     end.
 
-var_type(N, #st{vars=#vars{fused=Fused}}) ->
+var_type(N, #c_env{vars=#vars{fused=Fused}}) ->
     case is_element(N, Fused) of
 	true -> env;
 	false -> local
@@ -173,10 +165,10 @@ stmt(#expr_stmt{}=E, _, St) ->
 
 %% assign_stmt(Assign, State) -> {Assign,State}.
 
-assign_stmt(#assign_stmt{vs=Vs0,es=Es0}=A, St0) ->
+assign_stmt(#assign_stmt{vars=Vs0,exps=Es0}=A, St0) ->
     {Vs1,St1} = assign_loop(Vs0, St0),
     {Es1,St2} = explist(Es0, St1),
-    {A#assign_stmt{vs=Vs1,es=Es1},St2}.
+    {A#assign_stmt{vars=Vs1,exps=Es1},St2}.
 
 assign_loop([V0|Vs0], St0) ->
     {V1,St1} = var(V0, St0),
@@ -184,23 +176,23 @@ assign_loop([V0|Vs0], St0) ->
     {[V1|Vs1],St2};
 assign_loop([], St) -> {[],St}.
 
-var(#dot{e=Exp0,r=Rest0}=D, St0) ->
+var(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_first(Exp0, St0),
     {Rest1,St2} = var_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},St2};
-var(#var{n=N}, St) ->
+    {D#dot{exp=Exp1,rest=Rest1},St2};
+var(#var{name=N}, St) ->
     V = get_var(N, St),
     {V,St}.
 
-var_rest(#dot{e=Exp0,r=Rest0}=D, St0) ->
+var_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_element(Exp0, St0),
     {Rest1,St2} = var_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},St2};
+    {D#dot{exp=Exp1,rest=Rest1},St2};
 var_rest(Exp, St) -> var_last(Exp, St).
 
-var_last(#key{k=Exp0}=K, St0) ->
+var_last(#key{key=Exp0}=K, St0) ->
     {Exp1,St1} = exp(Exp0, St0),
-    {K#key{k=Exp1},St1}.
+    {K#key{key=Exp1},St1}.
 
 %% call_stmt(Call, State) -> {Call,State}.
 
@@ -210,52 +202,52 @@ call_stmt(#call_stmt{call=Exp0}=C, St0) ->
 
 %% return_stmt(Return, State) -> {Return,State}.
 
-return_stmt(#return_stmt{es=Es0}=R, St0) ->
+return_stmt(#return_stmt{exps=Es0}=R, St0) ->
     {Es1,St1} = explist(Es0, St0),
-    {R#return_stmt{es=Es1},St1}.
+    {R#return_stmt{exps=Es1},St1}.
 
 %% block_stmt(Block, State) -> {Block,State}.
 
-block_stmt(#block_stmt{ss=Ss0,vars=Vars}=B, St0) ->
+block_stmt(#block_stmt{body=Ss0,vars=Vars}=B, St0) ->
     Do = fun(S) -> stmts(Ss0, S) end,
     {Ss1,Fr,St1} = with_block(Do, Vars, St0),
     Lsz = frame_local_size(Fr),
     Esz = frame_env_size(Fr),
-    {B#block_stmt{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
+    {B#block_stmt{body=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% do_block(Block, State) -> {Block,State}.
 
-do_block(#block{ss=Ss0,vars=Vars}=B, St0) ->
+do_block(#block{body=Ss0,vars=Vars}=B, St0) ->
     Do = fun(S) -> stmts(Ss0, S) end,
     {Ss1,Fr,St1} = with_block(Do, Vars, St0),
     Lsz = frame_local_size(Fr),
     Esz = frame_env_size(Fr),
-    {B#block{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
+    {B#block{body=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% with_block(Do, Vars, State) -> {Ret,State}.
 %% with_block(Do, Env, Vars, State) -> {Ret,State}.
 %%  Do a block initialising/clearing frames. We always push a local
 %%  frame even if it not used.
 
-with_block(Do, Vars, #st{vars=OldVars}=St0) ->
-    St1 = push_frame(St0#st{vars=Vars}),
+with_block(Do, Vars, #c_env{vars=OldVars}=St0) ->
+    St1 = alloc_frame(St0#c_env{vars=Vars}),
     {Ret,St2} = Do(St1),
     Fr = get_frame(St2),
     St3 = pop_frame(St2),
-    {Ret,Fr,St3#st{vars=OldVars}}.
+    {Ret,Fr,St3#c_env{vars=OldVars}}.
 
 %% while_stmt(While, State) -> {While,State}.
 
-while_stmt(#while_stmt{e=E0,b=B0}=W, St0) ->
+while_stmt(#while_stmt{exp=E0,body=B0}=W, St0) ->
     {E1,St1} = exp(E0, St0),
     {B1,St2} = do_block(B0, St1),
-    {W#while_stmt{e=E1,b=B1},St2}.
+    {W#while_stmt{exp=E1,body=B1},St2}.
 
 %% repeat_stmt(Repeat, State) -> {Repeat,State}.
 
-repeat_stmt(#repeat_stmt{b=B0}=R, St0) ->
+repeat_stmt(#repeat_stmt{body=B0}=R, St0) ->
     {B1,St1} = do_block(B0, St0),
-    {R#repeat_stmt{b=B1},St1}.
+    {R#repeat_stmt{body=B1},St1}.
 
 %% if_stmt(If, State) -> {If,State}.
 
@@ -273,21 +265,21 @@ if_tests([], St) -> {[],St}.
 
 %% numfor_stmt(For, State) -> {For,State}.
 
-numfor_stmt(#nfor_stmt{v=V0,init=I0,limit=L0,step=S0,b=B0}=F, St0) ->
+numfor_stmt(#nfor_stmt{var=V0,init=I0,limit=L0,step=S0,body=B0}=F, St0) ->
     {[I1,L1,S1],St1} = explist([I0,L0,S0], St0),
     {[V1],B1,St2} = for_block([V0], B0, St1),
-    {F#nfor_stmt{v=V1,init=I1,limit=L1,step=S1,b=B1},St2}.
+    {F#nfor_stmt{var=V1,init=I1,limit=L1,step=S1,body=B1},St2}.
 
 %% genfor_stmt(For, State) -> {For,State}.
 
-genfor_stmt(#gfor_stmt{vs=Vs0,gens=Gs0,b=B0}=F, St0) ->
+genfor_stmt(#gfor_stmt{vars=Vs0,gens=Gs0,body=B0}=F, St0) ->
     {Gs1,St1} = explist(Gs0, St0),
     {Vs1,B1,St2} = for_block(Vs0, B0, St1),
-    {F#gfor_stmt{vs=Vs1,gens=Gs1,b=B1},St2}.
+    {F#gfor_stmt{vars=Vs1,gens=Gs1,body=B1},St2}.
 
-for_block(Vs0, #block{ss=Ss0,vars=Vars}=B, St0) ->
+for_block(Vs0, #block{body=Ss0,vars=Vars}=B, St0) ->
     Do = fun (S0) ->
-		 Fun = fun (#var{n=N}, Sa) ->
+		 Fun = fun (#var{name=N}, Sa) ->
 			       Sb = add_var(N, Sa),
 			       {get_var(N, Sb),Sb}
 		       end,
@@ -298,33 +290,33 @@ for_block(Vs0, #block{ss=Ss0,vars=Vars}=B, St0) ->
     {{Vs1,Ss1},Fr,St1} = with_block(Do, Vars, St0),
     Lsz = frame_local_size(Fr),
     Esz = frame_env_size(Fr),
-    {Vs1,B#block{ss=Ss1,lsz=Lsz,esz=Esz},St1}.
+    {Vs1,B#block{body=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% local_assign_stmt(Local, State) -> {Local,State}.
 
-local_assign_stmt(#local_assign_stmt{vs=Vs0,es=Es0}=L, St0) ->
+local_assign_stmt(#local_assign_stmt{vars=Vs0,exps=Es0}=L, St0) ->
     %% io:fwrite("las: ~p\n", [{Es0,St0}]),
     {Es1,St1} = explist(Es0, St0),
     %% io:fwrite("las> ~p\n", [{Es1,St1}]),
-    AddVar = fun (#var{n=N}, S0) ->
+    AddVar = fun (#var{name=N}, S0) ->
 		     S1 = add_var(N, S0),
 		     {get_var(N, S1),S1}
 	     end,
     {Vs1,St2} = lists:mapfoldl(AddVar, St1, Vs0),
     %% io:fwrite("las> ~p\n", [{Vs1,St2}]),
-    {L#local_assign_stmt{vs=Vs1,es=Es1},St2}.
+    {L#local_assign_stmt{vars=Vs1,exps=Es1},St2}.
 
 %% local_fdef_stmt(Local, State) -> {Local,State}.
 %%  Add function name first in case of recursive call.
 
-local_fdef_stmt(#local_fdef_stmt{v=#var{n=N},f=F0}=L, St0) ->
+local_fdef_stmt(#local_fdef_stmt{var=#var{name=N},func=F0}=L, St0) ->
     St1 = add_var(N, St0),
     {F1,St2} = functiondef(F0, St1),
     V1 = get_var(N, St2),
     %% io:fwrite("lf: ~p\n", [St0]),
     %% io:fwrite("lf: ~p\n", [St1]),
     %% io:fwrite("lf: ~p\n", [St2]),
-    {L#local_fdef_stmt{v=V1,f=F1},St2}.
+    {L#local_fdef_stmt{var=V1,func=F1},St2}.
 
 %% expr_stmt(Expr, State) -> {Call,State}.
 %%  The expression pseudo statement. This will return a single value.
@@ -345,49 +337,49 @@ explist([], St) -> {[],St}.			%No expressions at all
 
 exp(#lit{}=L, St) -> {L,St};			%Nothing to do
 exp(#fdef{}=F, St) -> functiondef(F, St);
-exp(#op{as=Es0}=Op, St0) ->
+exp(#op{args=Es0}=Op, St0) ->
     {Es1,St1} = explist(Es0, St0),
-    {Op#op{as=Es1},St1};
-exp(#tc{fs=Fs0}=T, St0) ->
+    {Op#op{args=Es1},St1};
+exp(#tabcon{fields=Fs0}=T, St0) ->
     {Fs1,St1} = tableconstructor(Fs0, St0),
-    {T#tc{fs=Fs1},St1};
+    {T#tabcon{fields=Fs1},St1};
 exp(E, St) ->
     prefixexp(E, St).
 
-prefixexp(#dot{e=Exp0,r=Rest0}=D, St0) ->
+prefixexp(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_first(Exp0, St0),
     {Rest1,St2} = prefixexp_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},St2};
+    {D#dot{exp=Exp1,rest=Rest1},St2};
 prefixexp(Exp, St) -> prefixexp_first(Exp, St).
 
-prefixexp_first(#single{e=E0}=S, St0) ->
+prefixexp_first(#single{exp=E0}=S, St0) ->
     {E1,St1} = exp(E0, St0),
-    {S#single{e=E1},St1};
-prefixexp_first(#var{n=N}, St) ->
+    {S#single{exp=E1},St1};
+prefixexp_first(#var{name=N}, St) ->
     V = get_var(N, St),
     {V,St}.
 
-prefixexp_rest(#dot{e=Exp0,r=Rest0}=D, St0) ->
+prefixexp_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_element(Exp0, St0),
     {Rest1,St2} = prefixexp_rest(Rest0, St1),
-    {D#dot{e=Exp1,r=Rest1},St2};
+    {D#dot{exp=Exp1,rest=Rest1},St2};
 prefixexp_rest(Exp, St) -> prefixexp_element(Exp, St).
 
-prefixexp_element(#key{k=E0}=K, St0) ->
+prefixexp_element(#key{key=E0}=K, St0) ->
     {E1,St1} = exp(E0, St0),
-    {K#key{k=E1},St1};
-prefixexp_element(#fcall{as=As0}=F, St0) ->
+    {K#key{key=E1},St1};
+prefixexp_element(#fcall{args=As0}=F, St0) ->
     {As1,St1} = explist(As0, St0),
-    {F#fcall{as=As1},St1};
-prefixexp_element(#mcall{as=As0}=M, St0) ->
+    {F#fcall{args=As1},St1};
+prefixexp_element(#mcall{args=As0}=M, St0) ->
     {As1,St1} = explist(As0, St0),
-    {M#mcall{as=As1},St1}.
+    {M#mcall{args=As1},St1}.
 
 %% functiondef(Func, State) -> {Func,State}.
 
-functiondef(#fdef{ps=Ps0,ss=Ss0,vars=Vars}=F, St0) ->
+functiondef(#fdef{pars=Ps0,body=Ss0,vars=Vars}=F, St0) ->
     Do = fun (S0) ->
-		 Fun = fun (#var{n=N}, Sa) ->
+		 Fun = fun (#var{name=N}, Sa) ->
 			       Sb = add_var(N, Sa),
 			       {get_var(N, Sb),Sb}
 		       end,
@@ -398,18 +390,18 @@ functiondef(#fdef{ps=Ps0,ss=Ss0,vars=Vars}=F, St0) ->
     {{Ps1,Ss1},Fr,St1} = with_block(Do, Vars, St0),
     Lsz = frame_local_size(Fr),
     Esz = frame_env_size(Fr),
-    {F#fdef{ps=Ps1,ss=Ss1,lsz=Lsz,esz=Esz},St1}.
+    {F#fdef{pars=Ps1,body=Ss1,lsz=Lsz,esz=Esz},St1}.
 
 %% tableconstructor(Fields, State) -> {Fields,State}.
 
 tableconstructor(Fs0, St0) ->
-    Fun = fun (#efield{v=V0}=F, S0) ->
+    Fun = fun (#efield{val=V0}=F, S0) ->
 		  {V1,S1} = exp(V0, S0),
-		  {F#efield{v=V1},S1};
-	      (#kfield{k=K0,v=V0}=F, S0) ->
+		  {F#efield{val=V1},S1};
+	      (#kfield{key=K0,val=V0}=F, S0) ->
 		  {K1,S1} = exp(K0, S0),
 		  {V1,S2} = exp(V0, S1),
-		  {F#kfield{k=K1,v=V1},S2}
+		  {F#kfield{key=K1,val=V1},S2}
 	  end,
     {Fs1,St1} = lists:mapfoldl(Fun, St0, Fs0),
     {Fs1,St1}.

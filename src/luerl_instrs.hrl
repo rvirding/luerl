@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 %% File    : luerl_instrs.hrl
 %% Author  : Robert Virding
-%% Purpose : Internal LUA 5.2 instructions.
+%% Purpose : Internal LUA 5.3 instructions.
 
 %% Expression instructions.
 -define(PUSH_LIT(L), {push_lit,L}).
@@ -40,28 +40,35 @@
 -define(MULTIPLE, multiple).			%Ensure multiple value
 
 -define(BUILD_TAB(Fc, I), {build_tab,Fc,I}).
--define(FCALL(Ac), {fcall,Ac}).
--define(TAIL_FCALL(Ac), {tail_fcall,Ac}).
--define(MCALL(M, Ac), {mcall,M,Ac}).
--define(TAIL_MCALL(M, Ac), {tail_mcall,M,Ac}).
+-define(FCALL, fcall).
+-define(TAIL_FCALL, tail_fcall).
+-define(MCALL(M), {mcall,M}).
+-define(TAIL_MCALL(M), {tail_mcall,M}).
 -define(OP(Op,Ac), {op,Op,Ac}).
--define(PUSH_FDEF(Lsz, Esz, Pars, Is), {push_fdef,Lsz,Esz,Pars,Is}).
+-define(PUSH_FDEF(Anno, Lsz, Esz, Pars, Is),
+	{push_fdef,Anno,Lsz,Esz,Pars,Is}).
+-define(PUSH_FDEF(FnRef), {push_fdef,FnRef}).
 
 %% Control instructions.
-
 -define(BLOCK(Lsz, Esz, Is), {block,Lsz,Esz,Is}).
-
+-define(BLOCK_OPEN(Lsz, Esz), {block_open,Lsz,Esz}).
+-define(BLOCK_CLOSE, block_close).
 -define(WHILE(E, B), {while,E,B}).
+-define(WHILE_LOOP(Eis, Wis), {while_loop,Eis,Wis}).
 -define(REPEAT(B), {repeat,B}).
+-define(REPEAT_LOOP(B), {repeat_loop,B}).
 -define(AND_THEN(T), {and_then,T}).
 -define(OR_ELSE(T), {or_else,T}).
 -define(IF_TRUE(T), {if_true,T}).
--define(IF_FALSE(T), {if_false,T}).
 -define(IF(T, F), {'if',T,F}).
 -define(NFOR(V, B), {nfor,V,B}).
+-define(NFOR_LOOP(N, Limit, Step, Fis), {nfor_loop,N,Limit,Step,Fis}).
 -define(GFOR(Vs, B), {gfor,Vs,B}).
+-define(GFOR_CALL(Func, Data, Val, Fis), {gfor_call,Func,Data,Val,Fis}).
+-define(GFOR_LOOP(Func, Data, Fis), {gfor_loop,Func,Data,Fis}).
 -define(BREAK, break).
 -define(RETURN(Ac), {return,Ac}).
+
 %% Stack instructions.
 -define(PUSH, push).
 -define(POP, pop).
@@ -70,3 +77,8 @@
 -define(DUP, dup).
 -define(PUSH_VALS(Vc), {push_vals,Vc}).
 -define(POP_VALS(Vc), {pop_vals,Vc}).
+-define(POP_ARGS(Ac), {pop_args,Ac}).
+-define(PUSH_ARGS(Al), {push_args,Al}).
+
+%% Comment instruction.
+-define(COMMENT(C), {comment,C}).

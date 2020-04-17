@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2018 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ eval(Chunk, St0) ->
     try do(Chunk, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+         _E:R:S -> {error,R,S} % {error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:evalfile(Path[, State]) -> {ok, Result} | {error,Reason}.
@@ -50,7 +50,7 @@ evalfile(Path, St0) ->
     try dofile(Path, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R -> {error, R} % {error, {E, R}} ? <- todo: decide
+         _E:R:S -> {error, R, S} % {error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
@@ -336,16 +336,16 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;		%Integers and floats
 decode(#tref{i=N}, St, In) ->
     decode_table(N, St, In);
-decode(#uref{i=N}, St, _) ->
+decode(#usdref{i=N}, St, _) ->
     decode_userdata(N, St);
-decode(#erl_func{code=Fun}, _, _) -> Fun;
-decode(#lua_func{}=Fun, State, _) ->
+decode(#funref{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
 		decode_list(Ret, State2)
 	end,
     F;						%Just a bare fun
+decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(N, St, In0) ->
@@ -353,7 +353,7 @@ decode_table(N, St, In0) ->
 	true -> error(recursive_data);		%Been here before
 	false ->
 	    In1 = [N|In0],			%We are in this as well
-	    case ?GET_TABLE(N, St#luerl.ttab) of
+	    case ?GET_TABLE(N, St#luerl.tabs#tstruct.data) of
 		#table{a=Arr,d=Dict} ->
 		    Fun = fun (K, V, Acc) ->
 				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
@@ -365,5 +365,5 @@ decode_table(N, St, In0) ->
     end.
 
 decode_userdata(N, St) ->
-    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.utab),
+    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.usds#tstruct.data),
     {userdata,Data}.

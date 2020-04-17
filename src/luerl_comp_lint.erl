@@ -92,7 +92,7 @@ stmt(#expr_stmt{}=E, St) ->
 %% local_fdef_stmt(Fdef, State) -> State.
 %% expr_stmt(Expr, State) -> State.
 
-assign_stmt(#assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
+assign_stmt(#assign_stmt{vars=Vs,exps=Es}, St0) ->
     %% Must work more on this to get it right.
     %% St1 = ?IF(length(Vs) =/= length(Es),
     %%           assign_mismatch_warning(Anno, St0), St0),
@@ -100,36 +100,36 @@ assign_stmt(#assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
     St2 = lists:foldl(fun (V, S) -> assign_var(V, S) end, St1, Vs),
     explist(Es, St2).
 
-assign_var(#dot{e=Exp,r=Rest}, St0) ->
+assign_var(#dot{exp=Exp,rest=Rest}, St0) ->
     St1 = prefixexp_first(Exp, St0),
     assign_var_rest(Rest, St1);
-assign_var(#var{l=Anno,n='...'}, St) ->
+assign_var(#var{l=Anno,name='...'}, St) ->
     %% Not allowed to bind ... .
     illegal_varargs_error(Anno, St);
 assign_var(_Var, St) -> St.
 
-assign_var_rest(#dot{e=Exp,r=Rest}, St0) ->
+assign_var_rest(#dot{exp=Exp,rest=Rest}, St0) ->
     St1 = prefixexp_element(Exp, St0),
     assign_var_rest(Rest, St1);
 assign_var_rest(Exp, St) -> assign_var_last(Exp, St).
 
-assign_var_last(#key{k=Exp}, St) ->
+assign_var_last(#key{key=Exp}, St) ->
     exp(Exp, St).
 
 call_stmt(#call_stmt{call=Exp}, St) ->
     exp(Exp, St).
 
-return_stmt(#return_stmt{es=Es}, St) ->
+return_stmt(#return_stmt{exps=Es}, St) ->
     explist(Es, St).
 
-block_stmt(#block_stmt{ss=Ss}, St) ->
+block_stmt(#block_stmt{body=Ss}, St) ->
     stmts(Ss, St).
 
-while_stmt(#while_stmt{e=Exp,b=Ss}, St0) ->
+while_stmt(#while_stmt{exp=Exp,body=Ss}, St0) ->
     St1 = exp(Exp, St0),
     block(Ss, St1).
 
-repeat_stmt(#repeat_stmt{b=Ss}, St) ->
+repeat_stmt(#repeat_stmt{body=Ss}, St) ->
     block(Ss, St).
 
 if_stmt(#if_stmt{tests=Ts,else=Else}, St0) ->
@@ -140,22 +140,22 @@ if_stmt(#if_stmt{tests=Ts,else=Else}, St0) ->
     St1 = lists:foldl(Fun, St0, Ts),
     block(Else, St1).
 
-numfor_stmt(#nfor_stmt{init=I,limit=L,step=S,b=B}, St0) ->
+numfor_stmt(#nfor_stmt{init=I,limit=L,step=S,body=B}, St0) ->
     St1 = explist([I,L,S], St0),
     block(B, St1).
 
-genfor_stmt(#gfor_stmt{gens=Gs,b=B}, St0) ->
+genfor_stmt(#gfor_stmt{gens=Gs,body=B}, St0) ->
     St1 = explist(Gs, St0),
     block(B, St1).
 
-local_assign_stmt(#local_assign_stmt{l=Anno,vs=Vs,es=Es}, St0) ->
+local_assign_stmt(#local_assign_stmt{exps=Es}, St0) ->
     %% Must work more on this to get it right.
     %% St1 = ?IF(length(Vs) =/= length(Es),
     %%           assign_mismatch_warning(Anno, St0), St0),
     St1 = St0,
     explist(Es, St1).
 
-local_fdef_stmt(#local_fdef_stmt{f=F}, St) ->
+local_fdef_stmt(#local_fdef_stmt{func=F}, St) ->
     functiondef(F, St).
 
 expr_stmt(#expr_stmt{exp=Exp}, St) ->
@@ -163,7 +163,7 @@ expr_stmt(#expr_stmt{exp=Exp}, St) ->
 
 %% block(Block, State) -> State.
 
-block(#block{ss=Ss}, St) ->
+block(#block{body=Ss}, St) ->
     stmts(Ss, St).
 
 %% explist(Exprs, State) -> State.
@@ -175,39 +175,39 @@ explist(Es, St) ->
 
 exp(#lit{}, St) -> St;
 exp(#fdef{}=F, St) -> functiondef(F, St);
-exp(#op{as=Es}, St) ->
+exp(#op{args=Es}, St) ->
     explist(Es, St);
-exp(#tc{fs=Fs}, St) ->
+exp(#tabcon{fields=Fs}, St) ->
     tableconstructor(Fs, St);
 exp(E, St) ->
     prefixexp(E, St).
 
-prefixexp(#dot{e=Exp,r=Rest}, St0) ->
+prefixexp(#dot{exp=Exp,rest=Rest}, St0) ->
     St1 = prefixexp_first(Exp, St0),
     prefixexp_rest(Rest, St1);
 prefixexp(Exp, St) -> prefixexp_first(Exp, St).
 
-prefixexp_first(#single{e=Exp}, St) ->
+prefixexp_first(#single{exp=Exp}, St) ->
     exp(Exp, St);
 prefixexp_first(#var{}=V, St) ->
     var(V, St).
 
-prefixexp_rest(#dot{e=Exp,r=Rest}, St0) ->
+prefixexp_rest(#dot{exp=Exp,rest=Rest}, St0) ->
     St1 = prefixexp_element(Exp, St0),
     prefixexp_rest(Rest, St1);
 prefixexp_rest(Exp, St) -> prefixexp_element(Exp, St).
 
-prefixexp_element(#key{k=Exp}, St) ->
+prefixexp_element(#key{key=Exp}, St) ->
     exp(Exp, St);
-prefixexp_element(#fcall{as=Es}, St) ->
+prefixexp_element(#fcall{args=Es}, St) ->
     explist(Es, St);
-prefixexp_element(#mcall{m=Lit,as=Es}, St0) ->
+prefixexp_element(#mcall{meth=Lit,args=Es}, St0) ->
     St1 = lit(Lit, St0),
     explist(Es, St1).
 
 %% functiondef(FuncDef, State) -> State.
 
-functiondef(#fdef{ps=Ps,ss=Ss}, #lint{pars=Pars}=St0) ->
+functiondef(#fdef{pars=Ps,body=Ss}, #lint{pars=Pars}=St0) ->
     St1 = St0#lint{pars=Ps},                    %Use current parameters
     St2 = stmts(Ss, St1),
     St2#lint{pars=Pars}.                        %Reset previous parameters
@@ -215,8 +215,8 @@ functiondef(#fdef{ps=Ps,ss=Ss}, #lint{pars=Pars}=St0) ->
 %% tableconstructor(Fields, State) -> State.
 
 tableconstructor(Fs, St) ->
-    Fun = fun (#efield{v=Exp}, S) -> exp(Exp, S);
-              (#kfield{k=Key,v=Val}, S0) ->
+    Fun = fun (#efield{val=Exp}, S) -> exp(Exp, S);
+              (#kfield{key=Key,val=Val}, S0) ->
                   S1 = exp(Key, S0),
                   exp(Val, S1)
           end,
@@ -224,8 +224,8 @@ tableconstructor(Fs, St) ->
 
 %% var(Var, State) -> State.
 
-var(#var{l=Anno,n='...'}, St) ->
-    case lists:keymember('...', #var.n, St#lint.pars) of
+var(#var{l=Anno,name='...'}, St) ->
+    case lists:keymember('...', #var.name, St#lint.pars) of
         true -> St;
         false ->
             illegal_varargs_error(Anno, St)
@@ -234,8 +234,8 @@ var(_Var, St) -> St.
 
 %% lit(Lit, State) -> State.
 
-lit(#lit{l=Anno,v='...'}, St) ->
-    case lists:keymember('...', #var.n, St#lint.pars) of
+lit(#lit{l=Anno,val='...'}, St) ->
+    case lists:keymember('...', #var.name, St#lint.pars) of
         true -> St;
         false ->
             illegal_varargs_error(Anno, St)

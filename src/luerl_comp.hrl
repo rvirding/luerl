@@ -46,86 +46,94 @@
 %% Statements.
 %%  The line number here, 'l', can be a line number or annotation list.
 
--record(assign_stmt, {l,vs,es}).
+-record(assign_stmt, {l,vars,exps}).
 
 -record(call_stmt, {l,call}).
 
--record(return_stmt, {l,es}).
+-record(return_stmt, {l,exps}).
 
 -record(break_stmt, {l}).
 
 -record(block_stmt, {l,
-		     ss=[],			%Block statements
+		     body=[],			%Block body statements
 		     vars=none,			%Variable info
 		     lsz=none,			%Local frame size
-		     lf=[],			%Local frame
+		     loc=not_used,		%Local var block template
 		     esz=none,			%Env frame size
-		     ef=[],			%Env frame
-		     local=none,		%Local variables
+		     env=not_used,		%Local env block template
+		     %%local=none,		%Local variables
 		     locf=false}).		%Local functions
 
--record(while_stmt, {l,e,b=[]}).
+-record(while_stmt, {l,exp,body=[]}).
 
--record(repeat_stmt, {l,b=[]}).
+-record(repeat_stmt, {l,body=[]}).
 
--record(nfor_stmt, {l,v,init,limit,step,b=[]}).
+-record(nfor_stmt, {l,
+		    var,			%Loop variable
+		    init,limit,step,		%The init, limit, step values
+		    body=[]}).			%Loop body
 
--record(gfor_stmt, {l,vs,gens,b=[]}).
+-record(gfor_stmt, {l,
+		    vars,			%Loop variables
+		    gens,			%Generators
+		    body=[]}).			%Loop body
 
 -record(if_stmt, {l,tests=[],else}).
 
--record(local_assign_stmt, {l,vs,es}).
+-record(local_assign_stmt, {l,vars,exps}).
 
--record(local_fdef_stmt, {l,v,f}).
+-record(local_fdef_stmt, {l,var,func}).
 
 -record(expr_stmt, {l,exp}).			%Pseudo stmt for expressions
 
 -record(block, {l,
-		ss=[],				%Sub-blocks
+		body=[],			%Block body statements
 		vars=none,			%Variable info
 		lsz=none,			%Local frame size
-		lf=[],				%Local frame
+		loc=not_used,			%Local var block template
 		esz=none,			%Env frame size
-		ef=[],
+		env=not_used,			%Local env block template
 		locf=false}).
 
 %% Expressions.
 %%  The line number here, 'l', can be a line number or annotation list.
 
 -record(fdef, {l,
-	       ps=[],				%Parameters
-	       ss=[],				%Statements
+	       pars=[],				%Parameters
+	       body=[],				%Function body statements
 	       vars=none,			%Variable info
 	       lsz=none,			%Local frame size
-	       lf=[],
+	       loc=not_used,			%Local var block template
 	       esz=none,			%Env frame size
-	       ef=[],
-	       local=none,			%Local variables
+	       env=not_used,			%Local env block template
+	       %%local=none,			%Local variables
 	       locf=false}).			%Local function
 
--record(lit, {l,v}).
+-record(lit, {l,val}).				%Literal value
 
--record(op, {l,op,as=[]}).
+-record(op, {l,op,args=[]}).
 
--record(single, {l,e}).
+-record(dot, {l,exp,rest}).
 
--record(dot, {l,e,r}).
+-record(single, {l,exp}).
 
--record(var, {l,n}).
+-record(var, {l,name}).
 
--record(fcall, {l,as=[]}).
+-record(fcall, {l,args=[]}).			%Function call
 
--record(mcall, {l,m,as=[]}).
+-record(mcall, {l,meth,args=[]}).		%Method call
 
--record(key, {l,k}).
+-record(key, {l,key}).
 
--record(tc, {l,fs=[]}).
+-record(tabcon, {l,fields=[]}).			%Table constructor
 
--record(efield, {l,v}).
+-record(efield, {l,val}).
 
--record(kfield, {l,k,v}).
+-record(kfield, {l,key,val}).
 
 %% Variable types.
+%% No line numbers here
+
 -record(lvar, {n,d,i}).				%Local name, depth, index
 -record(evar, {n,d,i}).				%Environment name, depth, index
 -record(gvar, {n}).				%Global name

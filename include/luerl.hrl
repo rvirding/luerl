@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2018 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -21,9 +21,10 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
--record(luerl, {ttab,tfree,tnext,		%Table table, free, next
-		ftab,ffree,fnext,		%Frame table, free, next
-                utab,ufree,unext,               %Userdata table, free, next
+-record(luerl, {tabs,                           %Table table
+                envs,                           %Environment table
+                usds,                           %Userdata table
+                fncs,                           %Function table
 		g,				%Global table
 		%%
 		stk=[],				%Current stack
@@ -33,13 +34,7 @@
 		tag				%Unique tag
 	       }).
 
--record(heap, {ttab,tfree,tnext,
-	       ftab,ffree,fnext,
-               utab,ufree,unext}).
-
-%% -record(etab, {tabs=[],free=[],next=0}).	%Tables structure
-%% -record(eenv, {env=[]}).			%Environment
-%% -record(luerl, {tabs,env}).			%Full state
+-record(tstruct, {data,free,next}).             %Table structure.
 
 %% Metatables for atomic datatypes.
 
@@ -48,29 +43,56 @@
 	       number=nil,
 	       string=nil}).
 
+%% Various type of frames stored on the stack.
+%% Save these for gc and debugging.
+
+-record(call_frame, {func,args,lvs,env}).	%% Call frames on the stack.
+
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index
--record(table, {a,d=[],m=nil}).			%Table type, array, dict, meta
--record(uref, {i}).                             %Userdata reference, index
--record(userdata, {d,m=nil}).			%Userdata type, data and meta
--record(thread, {}).				%Thread type
-%% There are two function types, the Lua one, and the Erlang one.
--record(lua_func,{anno=[],
-		  lsz,				%Local var size
-		  esz,				%Env var size
-		  env,				%Environment
-		  pars,				%Parameters
-		  b}).				%Code block
--record(erl_func,{code}).			%Erlang code (fun)
+-define(IS_TREF(T), is_record(T, tref)).
 
--record(fref, {i}).				%Frame reference, index
+-record(table, {a,d=[],meta=nil}).		%Table type, array, dict, meta
+
+-record(eref, {i}).				%Environment reference, index
+-define(IS_EREF(E), is_record(E, eref).
+
+-record(usdref, {i}).                           %Userdata reference, index
+-define(IS_USDREF(U), is_record(U, usdref)).
+
+-record(userdata, {d,meta=nil}).		%Userdata type, data and meta
+
+-record(thread, {}).				%Thread type
+
+%% There are two function types, the Lua one, and the Erlang one.
+
+%% The environment with upvalues is defined when the function is
+%% referenced and can vary if the function is referenced many
+%% times. Hence it is in the reference not in the the definition.
+
+-record(funref, {i,env=[]}).			%Function reference
+-define(IS_FUNREF(F), is_record(F, funref)).
+
+-record(lua_func,{anno=[],			%Annotation
+		  funrefs=[],			%Functions directly referenced
+		  lsz,				%Local var size
+		  %% loc=not_used,		%Local var block template
+		  esz,				%Env var size
+		  %% env=not_used,		%Local env block template
+		  pars,				%Parameter types
+		  b}).				%Code block
+-define(IS_LUAFUNC(F), is_record(F, lua_func)).
+
+-record(erl_func,{code}).			%Erlang code (fun)
+-define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
 %% Test if it a function, of either sort.
--define(IS_FUNCTION(F), (is_record(F, lua_func) orelse is_record(F, erl_func))).
+-define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F))).
 
--define(IS_FLOAT_INT(N), (float(round(N)) =:= N)).
--define(IS_FLOAT_INT(N,I), (float(I=round(N)) =:= N)).
+%% Testing for integers/integer floats or booleans.
+-define(IS_FLOAT_INT(N), (round(N) == N)).
+-define(IS_FLOAT_INT(N,I), ((I=round(N)) == N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
 %% Different methods for storing tables in the global data #luerl{}.
@@ -85,6 +107,7 @@
 -else.
 -define(TS_USE_ARRAY, true).
 -endif.
+%% -define(TS_USE_ARRAY, true).
 
 -ifdef(TS_USE_MAPS).
 -define(MAKE_TABLE(), maps:new()).
@@ -94,17 +117,6 @@
 -define(DEL_TABLE(N, Ts), maps:remove(N, Ts)).
 -define(FILTER_TABLES(Pred, Ts), maps:filter(Pred, Ts)).
 -define(FOLD_TABLES(Fun, Acc, Ts), maps:fold(Fun, Acc, Ts)).
--endif.
-
--ifdef(TS_USE_ORDDICT).
-%% Using orddict to handle tables.
--define(MAKE_TABLE(), orddict:new()).
--define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
--define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
--define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
--define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
--define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
--define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(TS_USE_ARRAY).
@@ -126,6 +138,17 @@
 		  array:sparse_map(___Fil, Ar)
 	  end)(array:default(Ar)))).
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
+-endif.
+
+-ifdef(TS_USE_ORDDICT).
+%% Using orddict to handle tables.
+-define(MAKE_TABLE(), orddict:new()).
+-define(GET_TABLE(N, Ts), orddict:fetch(N, Ts)).
+-define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
+-define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
+-define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
+-define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
+-define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(TS_USE_PD).
@@ -153,4 +176,3 @@
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
-
