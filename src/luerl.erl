@@ -22,7 +22,9 @@
 
 -export([eval/1,eval/2,evalfile/1,evalfile/2,
 	 do/1,do/2,dofile/1,dofile/2,
-	 load/1,load/2,loadfile/1,loadfile/2,path_loadfile/2,path_loadfile/3,
+	 load/1,load/2,load/3,
+	 loadfile/1,loadfile/2,loadfile/3,
+	 path_loadfile/2,path_loadfile/3,path_loadfile/4,
 	 load_module/3,load_module1/3,
 	 call/2,call/3,call_chunk/2,call_chunk/3,
 	 call_function/2,call_function/3,call_function1/3,function_list/2,
@@ -73,13 +75,17 @@ dofile(Path, St0) ->
     luerl_emul:call(Func, St1).
 
 %% load(String|Binary) -> {ok,Function,NewState}.
+%% load(String|Binary, State) -> {ok,Function,NewState}.
+%% load(String|Binary, Options, State) -> {ok,Function,NewState}.
 
 load(Str) -> load(Str, init()).
 
-load(Bin, St) when is_binary(Bin) ->
-    load(binary_to_list(Bin), St);
-load(Str, St0) when is_list(Str) ->
-    case luerl_comp:string(Str, [return]) of
+load(Bin, St) -> load(Bin, [return], St).
+
+load(Bin, Opts, St) when is_binary(Bin) ->
+    load(binary_to_list(Bin), Opts,  St);
+load(Str, Opts, St0) when is_list(Str) ->
+    case luerl_comp:string(Str, Opts) of
 	{ok,Chunk} ->
 	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
 	    {ok,Func,St1};
@@ -88,11 +94,14 @@ load(Str, St0) when is_list(Str) ->
 
 %% loadfile(FileName) -> {ok,Function,NewState}.
 %% loadfile(FileName, State) -> {ok,Function,NewState}.
+%% loadfile(FileName, Options, State) -> {ok,Function,NewState}.
 
 loadfile(Name) -> loadfile(Name, init()).
 
-loadfile(Name, St0) ->
-    case luerl_comp:file(Name, [return]) of
+loadfile(Name, St) -> loadfile(Name, [return], St).
+
+loadfile(Name, Opts, St0) ->
+    case luerl_comp:file(Name, Opts) of
 	{ok,Chunk} ->
 	    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
 	    {ok,Func,St1};
@@ -101,6 +110,9 @@ loadfile(Name, St0) ->
 
 %% path_loadfile(FileName, State) -> {ok,Function,FullName,State}.
 %% path_loadfile(Path, FileName, State) -> {ok,Function,FullName,State}.
+%% path_loadfile(Path, FileName, Options, State) ->
+%%     {ok,Function,FullName,State}.
+%%  When no path is given we use the value of LUA_LOAD_PATH.
 %%  We manually step down the path to get the correct handling of
 %%  filenames by the compiler.
 
@@ -115,18 +127,21 @@ path_loadfile(Name, St) ->
 			 end,
 		   string:tokens(Env, Sep)	%Split into path list
 	   end,
-    path_loadfile(Path, Name, St).
+    path_loadfile(Path, Name, [return], St).
 
-path_loadfile([Dir|Dirs], Name, St0) ->
+path_loadfile(Dirs, Name, St) ->
+    path_loadfile(Dirs, Name, [return], St).
+
+path_loadfile([Dir|Dirs], Name, Opts, St0) ->
     Full = filename:join(Dir, Name),
-    case loadfile(Full, St0) of
+    case loadfile(Full, Opts, St0) of
 	{ok,Func,St1} ->
 	    {ok,Func,Full,St1};
 	{error,[{_,_,enoent}],_} ->		%Couldn't find the file
 	    path_loadfile(Dirs, Name, St0);
 	Error -> Error
     end;
-path_loadfile([], _, _) ->
+path_loadfile([], _, _, _) ->
     {error,[{none,file,enoent}],[]}.
 
 %% load_module(TablePath, ModuleName, State) -> State.
