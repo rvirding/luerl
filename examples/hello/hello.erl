@@ -9,10 +9,10 @@
 run() ->
 
     % execute a string
-    luerl:do("print(\"Hello, Robert(o)!\")"),
+    luerl:do("print(\"Hello, Robert(o)!\")", luerl:init()),
 
     % execute a file
-    luerl:dofile("./hello.lua"),
+    luerl:dofile("./hello.lua", luerl:init()),
 
     % separately parse, then execute
     State0 = luerl:init(),

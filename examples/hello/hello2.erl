@@ -16,31 +16,32 @@ run() ->
     io:format("It's a comprehensive demo of the interface.~n"),
     io:format("Please check out the source to learn more.~n"),
 
+    St0A = luerl:init(),
     % execute a string
-    luerl:eval("print(\"(1) Hello, Robert!\")"),
-    luerl:eval(<<"print(\"(2) Hello, Roberto!\")">>),
-    luerl:do("print(\"(3) Hej, Robert!\")"),
-    luerl:do(<<"print(\"(4) Olà, Roberto!\")">>),
+    luerl:eval("print(\"(1) Hello, Robert!\")", St0A),
+    luerl:eval(<<"print(\"(2) Hello, Roberto!\")">>, St0A),
+    luerl:do("print(\"(3) Hej, Robert!\")", St0A),
+    luerl:do(<<"print(\"(4) Olà, Roberto!\")">>, St0A),
     
     % execute a string, get a result
-    {ok,A} = luerl:eval("return 1 + 1"),
-    {ok,A} = luerl:eval(<<"return 1 + 1">>),
+    {ok,A} = luerl:eval("return 1 + 1", St0A),
+    {ok,A} = luerl:eval(<<"return 1 + 1">>, St0A),
     io:format("(5) 1 + 1 = ~p!~n", [A]),
 
     % execute a file
-    luerl:evalfile("./hello2-1.lua"),
-    luerl:dofile("./hello2-1.lua"),
+    luerl:evalfile("./hello2-1.lua", St0A),
+    luerl:dofile("./hello2-1.lua", St0A),
 
     % execute a file, get a result
-    {ok,B} = luerl:evalfile("./hello2-2.lua"),
-    {B,_} = luerl:dofile("./hello2-2.lua"),
+    {ok,B} = luerl:evalfile("./hello2-2.lua", St0A),
+    {B,_} = luerl:dofile("./hello2-2.lua", St0A),
     io:format("(7) 2137 * 42 = ~p?~n", [B]),
 
 	% execute a standard function
-    luerl:call_function([print], [<<"(8) Hello, standard print function!">>]),
-    luerl:call_function([print], [<<"(9) Hello, standard print function!">>],  luerl:init()),
-    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42]),
-    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], luerl:init()),
+    luerl:call_function([print], [<<"(8) Hello, standard print function!">>], St0A),
+    luerl:call_function([print], [<<"(9) Hello, standard print function!">>], St0A),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], St0A),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], St0A),
     io:format("(10) ~p?~n", [Result1]),
 
     % separately parse, then execute (doubles (11) and Chunk1 as assertion)

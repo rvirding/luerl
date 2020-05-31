@@ -20,22 +20,20 @@
 
 -include("luerl.hrl").
 
--export([eval/1,eval/2,evalfile/1,evalfile/2,
-	 do/1,do/2,dofile/1,dofile/2,
-	 load/1,load/2,load/3,
-	 loadfile/1,loadfile/2,loadfile/3,
+-export([eval/2,evalfile/2,
+	 do/2,dofile/2,
+	 load/2,load/3,
+	 loadfile/2,loadfile/3,
 	 path_loadfile/2,path_loadfile/3,path_loadfile/4,
 	 load_module/3,load_module1/3,
-	 call/2,call/3,call_chunk/2,call_chunk/3,
-	 call_function/2,call_function/3,call_function1/3,function_list/2,
+	 call/3,call_chunk/3,
+	 call_function/3,call_function1/3,function_list/2,
+	 call_method/3,call_method1/3,method_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
-	 call_method/2,call_method/3,call_method1/3,method_list/2,
 	 init/0,stop/1,gc/1,
 	 encode/2,encode_list/2,decode/2,decode_list/2]).
 
-%% luerl:eval(String|Binary|Form[, State]) -> Result.
-eval(Chunk) ->
-    eval(Chunk, init()).
+%% luerl:eval(String|Binary|Form, State) -> Result.
 
 eval(Chunk, St0) ->
     try do(Chunk, St0) of
@@ -44,9 +42,7 @@ eval(Chunk, St0) ->
          _E:R:S -> {error,R,S} % {error, {E, R}} ? <- todo: decide
     end.
 
-%% luerl:evalfile(Path[, State]) -> {ok, Result} | {error,Reason}.
-evalfile(Path) ->
-    evalfile(Path, init()).
+%% luerl:evalfile(Path, State) -> {ok, Result} | {error,Reason}.
 
 evalfile(Path, St0) ->
     try dofile(Path, St0) of
@@ -55,9 +51,7 @@ evalfile(Path, St0) ->
          _E:R:S -> {error, R, S} % {error, {E, R}} ? <- todo: decide
     end.
 
-%% luerl:do(String|Binary|Form[, State]) -> {Result, NewState}
-
-do(SBC) -> do(SBC, init()).
+%% luerl:do(String|Binary|Form, State) -> {Result, NewState}
 
 do(S, St0) when is_binary(S); is_list(S) ->
     {ok,Func,St1} = load(S, St0),
@@ -65,20 +59,14 @@ do(S, St0) when is_binary(S); is_list(S) ->
 do(Func, St) ->
     luerl_emul:call(Func, St).
 
-%% luerl:dofile(Path[, State]) -> {Result, NewState}.
-
-dofile(Path) ->
-    dofile(Path, init()).
+%% luerl:dofile(Path, State) -> {Result, NewState}.
 
 dofile(Path, St0) ->
     {ok,Func,St1} = loadfile(Path, St0),
     luerl_emul:call(Func, St1).
 
-%% load(String|Binary) -> {ok,Function,NewState}.
 %% load(String|Binary, State) -> {ok,Function,NewState}.
 %% load(String|Binary, Options, State) -> {ok,Function,NewState}.
-
-load(Str) -> load(Str, init()).
 
 load(Bin, St) -> load(Bin, [return], St).
 
@@ -92,11 +80,8 @@ load(Str, Opts, St0) when is_list(Str) ->
 	{error,_,_}=E -> E
     end.
 
-%% loadfile(FileName) -> {ok,Function,NewState}.
 %% loadfile(FileName, State) -> {ok,Function,NewState}.
 %% loadfile(FileName, Options, State) -> {ok,Function,NewState}.
-
-loadfile(Name) -> loadfile(Name, init()).
 
 loadfile(Name, St) -> loadfile(Name, [return], St).
 
@@ -162,11 +147,7 @@ init() -> luerl_emul:init().
 
 %% call(Chunk, Args, State) -> {Result,State}
 
-call(C, As) -> call_chunk(C, As).
-
 call(C, As, St) -> call_chunk(C, As, St).
-
-call_chunk(C, As) -> call_chunk(C, As, init()).
 
 call_chunk(C, As, St0) ->
     {Las,St1} = encode_list(As, St0),
@@ -174,12 +155,8 @@ call_chunk(C, As, St0) ->
     Rs = decode_list(Lrs, St2),
     {Rs,St2}.
 
-%% call_function(Table, Args) -> {Result,State}.
 %% call_function(TablePath, Args, State) -> {Result,State}.
 %% call_function1(LuaTablePath | Func, LuaArgs, State) -> {LuaResult,State}.
-
-call_function(Fp, As) ->
-    call_function(Fp, As, init()).
 
 call_function(Fp, As, St0) ->
     %% Encode the input arguments.
@@ -201,12 +178,8 @@ call_function1(F, Las, St) ->
 
 function_list(Ks, St) -> luerl_emul:get_table_keys(Ks, St).
 
-%% call_method(FuncPath, Args) -> {Result,State}.
 %% call_method(FuncPath, Args, State) -> {Result,State}.
 %% call_method1(FuncPath | FuncPath, Args, State) -> {Result,State}.
-
-call_method(Fp, As) ->
-    call_method(Fp, As, init()).
 
 call_method(Fp, As, St0) ->
     %% Encode the input arguments.
