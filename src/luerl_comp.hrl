@@ -132,8 +132,8 @@
 -record(kfield, {l,key,val}).
 
 %% Variable types.
-%% No line numbers here
+%%  The line number here, 'l', can be a line number or annotation list.
 
--record(lvar, {n,d,i}).				%Local name, depth, index
--record(evar, {n,d,i}).				%Environment name, depth, index
--record(gvar, {n}).				%Global name
+-record(lvar, {l,n,d,i}).			%Local name, depth, index
+-record(evar, {l,n,d,i}).			%Environment name, depth, index
+-record(gvar, {l,n}).				%Global name
