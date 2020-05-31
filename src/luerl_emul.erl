@@ -64,7 +64,7 @@
 %% -compile({inline,[boolean_value/1,first_value/1]}).
 
 %% -define(ITRACE_DO(Expr), ok).
--define(ITRACE_DO(Expr), (get(luerl_itrace) /= undefined) andalso Expr).
+-define(ITRACE_DO(Expr), begin (get(luerl_itrace) /= undefined) andalso Expr end).
 
 %% init() -> State.
 %% Initialise the basic state.
@@ -235,7 +235,9 @@ set_table_key(Tref, Key, Val, St0) ->
 	{value,_Val,St1} -> St1;
 	{meta,Meth,Args,St1} ->
 	    {_Ret,St2} = functioncall(Meth, Args, St1),
-	    St2
+	    St2;
+	{error,Error,St1} ->
+	    lua_error(Error, St1)
     end.
 
 get_table_key(Tref, Key, St0) ->
@@ -243,13 +245,17 @@ get_table_key(Tref, Key, St0) ->
 	{value,Val,St1} -> {Val,St1};
 	{meta,Meth,Args,St1} ->
 	    {Ret,St2} = functioncall(Meth, Args, St1),
-	    {first_value(Ret),St2}
+	    {first_value(Ret),St2};
+	{error,Error,St1} ->
+	    lua_error(Error, St1)
     end.
 
 %% flat_set_table(Table, Key, Val, State) ->
-%%     {value,Value,State} | {meta,Method,Args,State}.
+%%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}.
 %% flat_get_table(Table, Key, State) ->
-%%     {value,Value,State} | {meta,Method,Args,State}.
+%%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}.
+%%  We don't make calls to meta methods or generate errors but return
+%%  value indicating this.
 
 flat_set_table(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
     flat_set_table_int(Tref, Key, Key, Val, St);
@@ -259,11 +265,11 @@ flat_set_table(#tref{}=Tref, Key, Val, St) when is_float(Key) ->
 	_NegFalse -> flat_set_table_key(Tref, Key, Val, St)
     end;
 flat_set_table(Tab, nil=Key, _, St) ->
-    lua_error({illegal_index,Tab,Key}, St);
+    {error,{illegal_index,Tab,Key},St};
 flat_set_table(#tref{}=Tref, Key, Val, St) ->
     flat_set_table_key(Tref, Key, Val, St);
 flat_set_table(Tab, Key, _, St) ->
-    lua_error({illegal_index,Tab,Key}, St).
+    {error,{illegal_index,Tab,Key},St}.
 
 flat_set_table_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
     Ts0 = Tst0#tstruct.data,
@@ -329,7 +335,8 @@ flat_get_table(#tref{}=Tref, Key, St) ->
     flat_get_table_key(Tref, Key, St);
 flat_get_table(Tab, Key, St) ->			%Just find the metamethod
     case get_metamethod(Tab, <<"__index">>, St) of
-	nil -> lua_error({illegal_index,Tab,Key}, St);
+	nil ->
+	    {error,{illegal_index,Tab,Key},St};
 	Meth when ?IS_FUNCTION(Meth) ->
 	    {meta,Meth,[Tab,Key],St};
 	Meth ->					%Recurse down the metatable
@@ -785,6 +792,9 @@ emul_1([?POP_ARGS(Ac)|Is], Cont, Lvs, Stk0, Env, Cs, St) ->
 emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     %% This just a comment which is ignored.
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
+emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
+    Cs1 = push_current_line(Cs0, Line),		%Push onto callstack
+    emul(Is, Cont, Lvs, Stk, Env, Cs1, St);
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([], [], Lvs, Stk, Env, Cs, St) ->
@@ -853,20 +863,23 @@ do_op1(Is, Cont, Lvs, [A|Stk], Env, Cs, St0, Op) ->
     case op(Op, A, St0) of
 	{value,Res,St1} -> emul(Is, Cont, Lvs, [Res|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end.
 
 do_op2(Is, Cont, Lvs, [A2,A1|Stk], Env, Cs, St0, Op) ->
     case op(Op, A1, A2, St0) of
 	{value,Res,St1} -> emul(Is, Cont, Lvs, [Res|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end.
 
 %% do_break(LocalVars, CallStack, State) -> <emul>.
-
 do_break(Lvs0, Cs0, St) ->
-    {Bf,Cs1} = find_bf(Cs0, St),
+    {Bf,Cs1} = find_loop_frame(Cs0, St),
     #loop_frame{is=Is,cont=Cont,lvs=Lvs1,stk=Stk,env=Env} = Bf,
     %% Trim the new local variable stack down to original length.
     Lvs2 = lists:nthtail(length(Lvs0)-length(Lvs1), Lvs0),
@@ -875,17 +888,27 @@ do_break(Lvs0, Cs0, St) ->
 %% do_return(ArgCount, Stack, Callstack, State) -> <emul>.
 
 do_return(Ac, Stk0, Cs0, St) ->
-    {Cf,Cs1} = find_cf(Cs0, St),		%Find the first call frame
+    {Cf,Cs1} = find_call_frame(Cs0, St),	%Find the first call frame
     {Ret,Stk1} = pop_vals(Ac, Stk0),
     #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env} = Cf,
     emul(Is, Cont, Lvs, [Ret|Stk1], Env, Cs1, St#luerl{cs=Cs1}).
 
-find_cf([#call_frame{}=Cf|Cs], _St) -> {Cf,Cs};
-find_cf([_|Cs], St) -> find_cf(Cs, St).
+find_call_frame([#call_frame{}=Cf|Cs], _St) -> {Cf,Cs};
+find_call_frame([_|Cs], St) -> find_call_frame(Cs, St).
 
-find_bf([#loop_frame{}=Bf|Cs], _St) -> {Bf,Cs};
-find_bf(_Cs, St) ->
-    lua_error({illegal_op,break}, St).
+find_loop_frame([#current_line{}|Cs], St) ->	%Skip current line info
+    find_loop_frame(Cs, St);
+find_loop_frame([#loop_frame{}=Bf|Cs], _St) -> {Bf,Cs};
+find_loop_frame(Cs, St) ->
+    lua_error({illegal_op,break}, St#luerl{cs=Cs}).
+
+%% push_current_line(CallStack, CurrLine) -> CallStack.
+%%  Push the current line info on the stack replacing as existing one
+%%  on the top.
+
+push_current_line([#current_line{}|Cs], Line) ->
+    [#current_line{line=Line}|Cs];
+push_current_line(Cs, Line) -> [#current_line{line=Line}|Cs].
 
 %% do_fcall(Instrs, LocalVars, Stack, Env, State) -> ReturnFromEmul.
 %%  Pop arg list and function from stack and do call.
@@ -923,7 +946,7 @@ methodcall(Is, Cont, Lvs, Stk, Env, Cs, St0, Obj, Meth, Args) ->
     %% Get the function to call from object and method.
     case get_table_key(Obj, Meth, St0) of
 	{nil,St1} ->				%No method
-	    lua_error({undef_method,Obj,Meth}, St1);
+	    lua_error({undef_method,Obj,Meth}, St1#luerl{stk=Stk,cs=Cs});
 	{Func,St1} ->
 	    functioncall(Is, Cont, Lvs, Stk, Env, Cs, St1, Func, [Obj|Args])
     end.
@@ -941,14 +964,11 @@ functioncall(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
     %% Here we must save the stack in state as function may need it.
     {Func,St1} = get_funcdef(Funref, St0#luerl{stk=Stk}),
     call_luafunc(Func, Args, Stk, Env, Cs, St1);
-functioncall(#erl_func{code=Func}, Args, Stk, [Cf|Cs], #luerl{stk=Stk0}=St0) ->
-    %% Here we must save the stacks in state as function may need it.
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs}),
-    #call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env} = Cf,
-    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs, St1#luerl{stk=Stk0,cs=Cs});
+functioncall(#erl_func{code=Func}, Args, Stk, Cs, St) ->
+    call_erlfunc(Func, Args, Stk, Cs, St);
 functioncall(Func, Args, Stk, Cs, St) ->
     case get_metamethod(Func, <<"__call">>, St) of
-	nil -> lua_error({undef_function,Func}, St);
+	nil -> lua_error({undef_function,Func}, St#luerl{stk=Stk,cs=Cs});
 	Meta ->
 	    {Ret,Cs,St1} = functioncall(Meta, [Func|Args], Stk, Cs, St),
 	    {Ret,St1}
@@ -968,6 +988,16 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,b=Fis},
     %% Tag = St0#luerl.tag,
     %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     emul(Fis, [], Lvs, Stk1, Env1, Cs, St1).
+
+%% call_erlfunc(ErlFunc, Args, Stack, Env, State) -> {Return,State}.
+%%  Here we must save the stacks in state as function may need it.
+%%  Note we leave the call frame to the erlang function on the call
+%%  stack. It is popped when we return.
+
+call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
+    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs0}),
+    [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
+    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1}).
 
 %% do_block(Instrs, LocalVars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> <emul>.
@@ -1115,7 +1145,8 @@ do_numfor(Is, Cont, Lvs, [Step,Limit,Init|Stk], Env, Cs0, St, _, Fis) ->
 	    Fr = #loop_frame{lvs=Lvs,stk=Stk,env=Env,is=Is,cont=Cont},
 	    Cs1 = [Fr|Cs0],
 	    do_numfor_loop(Is, Cont, Lvs, Stk, Env, Cs1, St, I, L, S, Fis);
-	error -> badarg_error(loop, [Init,Limit,Step], St)
+	error ->
+	    badarg_error(loop, [Init,Limit,Step], St#luerl{cs=Cs0})
     end.
 
 do_numfor_loop(Is, Cont, Lvs, Stk, Env, Cs, St, N, Limit, Step, Fis) ->
@@ -1240,8 +1271,13 @@ build_tab_loop(0, Stk, Fs) -> {Fs,Stk};
 build_tab_loop(C, [V,K|Stk], Fs) ->
     build_tab_loop(C-1, Stk, [{K,V}|Fs]).
 
-%% op(Op, Arg, State) -> {value,Ret,State} | {meta,Method,Args,State}.
-%% op(Op, Arg1, Arg2, State) -> {value,Ret,State} | {meta,Method,Args,State}.
+%% op(Op, Arg, State) -> OpReturn.
+%% op(Op, Arg1, Arg2, State) -> OpReturn.
+%%
+%%  OpReturn = {value,Ret,State} |
+%%             {meta,Method,Args,State} |
+%%             {error,Error,State}.
+%%
 %%  The built-in operators. Always return a single value!
 
 op('-', A, St) ->
@@ -1251,7 +1287,8 @@ op('~', A, St) ->
     integer_op('~', A, St, <<"__bnot">>, fun (N) -> bnot(N) end);
 op('#', A, St) ->
     length_op('#', A, St);
-op(Op, A, St) -> badarg_error(Op, [A], St).
+op(Op, A, St) ->
+    {error,{badarg_error,Op,[A]},St}.
 
 %% Numeric operators.
 op('+', A1, A2, St) ->
@@ -1319,7 +1356,8 @@ op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 %% String operator.
 op('..', A1, A2, St) -> concat_op(A1, A2, St);
 %% Bad args here.
-op(Op, A1, A2, St) -> badarg_error(Op, [A1,A2], St).
+op(Op, A1, A2, St) ->
+    {error,{badarg_error,Op,[A1,A2]}, St}.
 
 -ifndef(HAS_FLOOR).
 %% floor(Number) -> integer().
@@ -1339,6 +1377,11 @@ floor(N) when is_float(N) -> round(N - 0.5).
 %% lt_op(Op, Arg, Arg, State) -> OpReturn.
 %% le_op(Op, Arg, Arg, State) -> OpReturn.
 %% concat_op(Arg, Arg, State) -> OpReturn.
+%%
+%%  OpReturn = {value,Ret,State} |
+%%             {meta,Method,Args,State} |
+%%             {error,Error,State}.
+%%
 %%  Together with their metas straight out of the reference
 %%  manual. Note that:
 %%  - numeric_op string args are always floats
@@ -1352,7 +1395,7 @@ length_op(_Op, A, St) ->
 	    if ?IS_TREF(A) ->
 		    {value,luerl_lib_table:raw_length(A, St),St};
 	       true ->
-		    badarg_error('#', [A], St)
+		    {error,{badarg_error,'#',[A]}, St}
 	    end;
 	Meth -> {meta,Meth,[A],St}
     end.
@@ -1436,7 +1479,8 @@ le_op(Op, A1, A2, St) ->
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
 	    case get_metamethod(A1, A2, <<"__lt">>, St) of
-		nil -> badarg_error(Op, [A1,A2], St);
+		nil ->
+		    {error,{badarg_error,Op,[A1,A2]}, St};
 		Meth ->
 		    {meta,Meth,[A2,A1],St}
 	    end;
@@ -1453,13 +1497,13 @@ concat_op(A1, A2, St) ->
 
 op_meta(Op, A, E, St) ->
     case get_metamethod(A, E, St) of
-	nil -> badarg_error(Op, [A], St);
+	nil -> {error,{badarg_error,Op,[A]}, St};
 	Meth -> {meta,Meth,[A],St}
     end.
 
 op_meta(Op, A1, A2, E, St) ->
     case get_metamethod(A1, A2, E, St) of
-	nil -> badarg_error(Op, [A1,A2], St);
+	nil -> {error,{badarg_error,Op,[A1,A2]},St};
 	Meth -> {meta,Meth,[A1,A2],St}
     end.
 
