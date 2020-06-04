@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -40,20 +40,15 @@
 -export([call/2,call/3,emul/2]).
 -export([load_chunk/2,load_chunk/3]).
 
-%% Internal functions which can be useful "outside".
--export([alloc_table/1,alloc_table/2,free_table/2,
-	 functioncall/3,methodcall/4,
+-export([functioncall/3,methodcall/4,
+	 set_global_key/3,get_global_key/2,
 	 get_table_keys/2,get_table_keys/3,
 	 set_table_keys/3,set_table_keys/4,
-	 get_table_key/3,set_table_key/4,
-         alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
-	 alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
-         get_metatable/2, set_metatable/3,
-         get_metamethod/3,get_metamethod/4]).
+	 get_table_key/3,set_table_key/4
+	]).
 
-%% Currently unused internal functions, to suppress warnings.
--export([set_global_name/3,get_global_name/2,
-         set_global_key/3,get_global_key/2]).
+%% Temporary shadow calls.
+%% -export([alloc_table/2,set_userdata/3,get_metamethod/3]).
 
 %% For testing.
 -export([pop_vals/2,push_vals/3]).
@@ -66,14 +61,20 @@
 %% -define(ITRACE_DO(Expr), ok).
 -define(ITRACE_DO(Expr), begin (get(luerl_itrace) /= undefined) andalso Expr end).
 
+%% Temporary shadow calls.
+%% alloc_table(Itab, St) -> luerl_heap:alloc_table(Itab, St).
+%% set_userdata(Ref, Data, St) ->
+%%     luerl_heap:set_userdata(Ref, Data, St).
+%% get_metamethod(Obj, Event, St) ->
+%%     luerl_heap:get_metamethod(Obj, Event, St).
+
+
+
 %% init() -> State.
 %% Initialise the basic state.
 
 init() ->
-    %% Initialise the general stuff.
-    St0 = #luerl{meta=#meta{},tag=make_ref()},
-    %% Initialise the tables.
-    St1 = init_tables(St0),
+    St1 = luerl_heap:init(),
     %% Allocate the _G table and initialise the environment
     {_G,St2} = luerl_lib_basic:install(St1),	%Global environment
     St3 = St2#luerl{g=_G},
@@ -94,20 +95,6 @@ init() ->
     St6 = set_global_key(<<"_G">>, _G, St5),
     set_table_keys([<<"package">>,<<"loaded">>,<<"_G">>], _G, St6).
 
-init_tables(St) ->
-    %% Initialise the table handling.
-    Tst = init_table(),
-    %% Initialise the environment handling.
-    Est = init_table(),
-    %% Initialise the userdata handling.
-    Ust = init_table(),
-    %% Initialise the function def handling.
-    Fst = init_table(),
-    St#luerl{tabs=Tst,envs=Est,usds=Ust,fncs=Fst}.
-
-init_table() ->
-    #tstruct{data=?MAKE_TABLE(),free=[],next=0}.
-
 load_libs(Libs, St) ->
     Fun = fun ({Key,Mod}, S) -> load_lib(Key, Mod, S) end,
     lists:foldl(Fun, St, Libs).
@@ -120,83 +107,15 @@ load_lib(Key, Mod, St0) ->
     St2 = set_global_key(Key, Tab, St1),
     set_table_keys([<<"package">>,<<"loaded">>,Key], Tab, St2).
 
-%% set_global_name(Name, Value, State) -> State.
 %% set_global_key(Key, Value, State) -> State.
-%% get_global_name(Name, State) -> {[Val],State}.
 %% get_global_key(Key, State) -> {[Val],State}.
 %%  Access elements in the global name table, _G.
-
-set_global_name(Name, Val, St) ->
-    set_global_key(atom_to_binary(Name, latin1), Val, St).
 
 set_global_key(Key, Val, #luerl{g=G}=St) ->
     set_table_key(G, Key, Val, St).
 
-get_global_name(Name, St) ->
-    get_global_key(atom_to_binary(Name, latin1), St).
-
 get_global_key(Key, #luerl{g=G}=St) ->
     get_table_key(G, Key, St).
-
-%% alloc_environment(Env, State) -> {Fref,State}.
-%%  Allocate the environment in the environemnt table and return its eref.
-
-alloc_environment(Fr, #luerl{envs=Est0}=St) ->
-    {Eref,Est1} = alloc_environment_tab(Fr, Est0),
-    {Eref,St#luerl{envs=Est1}}.
-
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[N|Ns]}=Est) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Est#tstruct{data=Es1,free=Ns}};
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[],next=N}=Est) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Est#tstruct{data=Es1,next=N+1}}.
-
-%% alloc_table(State) -> {Tref,State}.
-%% alloc_table(InitialTable, State) -> {Tref,State}.
-%% free_table(Tref, State) -> State.
-%%  The InitialTable is [{Key,Value}], there is no longer any need to
-%%  have it as an orddict.
-
-alloc_table(St) -> alloc_table([], St).
-
-alloc_table(Itab, #luerl{tabs=Tst0}=St) ->
-    Tab = create_table(Itab),
-    {Tref,Tst1} = alloc_table_tab(Tab, Tst0),
-    {Tref,St#luerl{tabs=Tst1}}.
-
-alloc_table_tab(Tab, #tstruct{data=Ts0,free=[N|Ns]}=Tst0) ->
-    %% io:fwrite("it1: ~p\n", [{N,Tab}]),
-    Ts1 = ?SET_TABLE(N, Tab, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,free=Ns},
-    {#tref{i=N},Tst1};
-alloc_table_tab(Tab, #tstruct{data=Ts0,free=[],next=N}=Tst0) ->
-    %% io:fwrite("it2: ~p\n", [{N,Tab}]),
-    Ts1 = ?SET_TABLE(N, Tab, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,next=N+1},
-    {#tref{i=N},Tst1}.
-
-create_table(Itab) ->
-    D0 = ttdict:new(),
-    A0 = array:new([{default,nil}]),		%Arrays with 'nil' as default
-    Init = fun ({_,nil}, {D,A}) -> {D,A};	%Ignore nil values
-	       ({K,V}, {D,A}) when is_integer(K), K >= 1 ->
-		   {D,array:set(K, V, A)};
-	       ({K,V}, {D,A}) when is_float(K) ->
-		   case ?IS_FLOAT_INT(K, I) of
-		       true when I >= 1 -> {D,array:set(I, V, A)};
-		       _NegFalse -> {ttdict:store(K, V, D),A}
-		   end;
-	       ({K,V}, {D,A}) -> {ttdict:store(K, V, D),A}
-	   end,
-    {D1,A1} = lists:foldl(Init, {D0,A0}, Itab),
-    #table{a=A1,d=D1,meta=nil}.
-
-free_table(#tref{i=N}, #luerl{tabs=#tstruct{data=Ts0,free=Ns}=Tst0}=St) ->
-    %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
-    Ts1 = ?DEL_TABLE(N, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,free=[N|Ns]},
-    St#luerl{tabs=Tst1}.
 
 %% get_table_keys(Keys, State) -> {Value,State}.
 %% get_table_keys(Tab, Keys, State) -> {Value,State}.
@@ -206,7 +125,7 @@ get_table_keys(Keys, St) ->
     get_table_keys(St#luerl.g, Keys, St).
 
 get_table_keys(Tab, [K|Ks], St0) ->
-    {Val,St1} = luerl_emul:get_table_key(Tab, K, St0),
+    {Val,St1} = get_table_key(Tab, K, St0),
     get_table_keys(Val, Ks, St1);
 get_table_keys(Val, [], St) -> {Val,St}.
 
@@ -218,9 +137,9 @@ set_table_keys(Keys, Val, St) ->
     set_table_keys(St#luerl.g, Keys, Val, St).
 
 set_table_keys(Tab, [K], Val, St) ->
-    luerl_emul:set_table_key(Tab, K, Val, St);
+    set_table_key(Tab, K, Val, St);
 set_table_keys(Tab0, [K|Ks], Val, St0) ->
-    {Tab1,St1} = luerl_emul:get_table_key(Tab0, K, St0),
+    {Tab1,St1} = get_table_key(Tab0, K, St0),
     set_table_keys(Tab1, Ks, Val, St1).
 
 %% set_table_key(Tref, Key, Value, State) -> State.
@@ -231,7 +150,7 @@ set_table_keys(Tab0, [K|Ks], Val, St0) ->
 %%  NOTE: WE ALWAYS RETURN A SINGLE VALUE!
 
 set_table_key(Tref, Key, Val, St0) ->
-    case flat_set_table(Tref, Key, Val, St0) of
+    case luerl_heap:set_table_key(Tref, Key, Val, St0) of
 	{value,_Val,St1} -> St1;
 	{meta,Meth,Args,St1} ->
 	    {_Ret,St2} = functioncall(Meth, Args, St1),
@@ -241,7 +160,7 @@ set_table_key(Tref, Key, Val, St0) ->
     end.
 
 get_table_key(Tref, Key, St0) ->
-    case flat_get_table(Tref, Key, St0) of
+    case luerl_heap:get_table_key(Tref, Key, St0) of
 	{value,Val,St1} -> {Val,St1};
 	{meta,Meth,Args,St1} ->
 	    {Ret,St2} = functioncall(Meth, Args, St1),
@@ -249,181 +168,6 @@ get_table_key(Tref, Key, St0) ->
 	{error,Error,St1} ->
 	    lua_error(Error, St1)
     end.
-
-%% flat_set_table(Table, Key, Val, State) ->
-%%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}.
-%% flat_get_table(Table, Key, State) ->
-%%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}.
-%%  We don't make calls to meta methods or generate errors but return
-%%  value indicating this.
-
-flat_set_table(#tref{}=Tref, Key, Val, St) when is_integer(Key), Key >= 1 ->
-    flat_set_table_int(Tref, Key, Key, Val, St);
-flat_set_table(#tref{}=Tref, Key, Val, St) when is_float(Key) ->
-    case ?IS_FLOAT_INT(Key, I) of
-	true when I >= 1 -> flat_set_table_int(Tref, Key, I, Val, St);
-	_NegFalse -> flat_set_table_key(Tref, Key, Val, St)
-    end;
-flat_set_table(Tab, nil=Key, _, St) ->
-    {error,{illegal_index,Tab,Key},St};
-flat_set_table(#tref{}=Tref, Key, Val, St) ->
-    flat_set_table_key(Tref, Key, Val, St);
-flat_set_table(Tab, Key, _, St) ->
-    {error,{illegal_index,Tab,Key},St}.
-
-flat_set_table_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
-    Ts0 = Tst0#tstruct.data,
-    #table{d=Dict0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
-    case ttdict:find(Key, Dict0) of
-	{ok,_} ->				%Key exists
-	    Dict1 = if Val =:= nil -> ttdict:erase(Key, Dict0);
-		       true -> ttdict:store(Key, Val, Dict0)
-		    end,
-	    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-	    Tst1 = Tst0#tstruct{data=Ts1},
-	    {value,[],St#luerl{tabs=Tst1}};
-	error ->				%Key does not exist
-	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
-		nil ->
-		    %% Only add non-nil value.
-		    Dict1 = if Val =:= nil -> Dict0;
-			       true -> ttdict:store(Key, Val, Dict0)
-			    end,
-		    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-		    Tst1 = Tst0#tstruct{data=Ts1},
-		    {value,[],St#luerl{tabs=Tst1}};
-		Meth when ?IS_FUNCTION(Meth) ->
-		    {meta,Meth,[Tab,Key,Val],St};
-		Meth -> flat_set_table(Meth, Key, Val, St)
-	    end
-    end.
-
-flat_set_table_int(#tref{i=N}=Tab, Key, I, Val, #luerl{tabs=Tst0}=St) ->
-    Ts0 = Tst0#tstruct.data,
-    #table{a=Arr0,meta=Meta}=T = ?GET_TABLE(N, Ts0),
-    case array:get(I, Arr0) of
-	nil ->					%Key does not exist
-	    case get_metamethod_tab(Meta, <<"__newindex">>, Ts0) of
-		nil ->
-		    %% Only add non-nil value, slightly faster (?)
-		    Arr1 = if Val =:= nil -> Arr0;
-			      true -> array:set(I, Val, Arr0)
-			   end,
-		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-		    Tst1 = Tst0#tstruct{data=Ts1},
-		    {value,[],St#luerl{tabs=Tst1}};
-		Meth when ?IS_FUNCTION(Meth) ->
-		    {meta,Meth,[Tab,Key,Val],St};
-		Meth -> flat_set_table(Meth, Key, Val, St)
-	    end;
-	_ ->					%Key exists
-	    %% Can do this as 'nil' is default value of array.
-	    Arr1 = array:set(I, Val, Arr0),
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    Tst1 = Tst0#tstruct{data=Ts1},
-	    {value,[],St#luerl{tabs=Tst1}}
-    end.
-
-flat_get_table(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
-    flat_get_table_int(Tref, Key, Key, St);
-flat_get_table(#tref{}=Tref, Key, St) when is_float(Key) ->
-    case ?IS_FLOAT_INT(Key, I) of
-	true when I >= 1 -> flat_get_table_int(Tref, Key, I, St);
-	_NegFalse -> flat_get_table_key(Tref, Key, St)
-    end;
-flat_get_table(#tref{}=Tref, Key, St) ->
-    flat_get_table_key(Tref, Key, St);
-flat_get_table(Tab, Key, St) ->			%Just find the metamethod
-    case get_metamethod(Tab, <<"__index">>, St) of
-	nil ->
-	    {error,{illegal_index,Tab,Key},St};
-	Meth when ?IS_FUNCTION(Meth) ->
-	    {meta,Meth,[Tab,Key],St};
-	Meth ->					%Recurse down the metatable
-	    flat_get_table(Meth, Key, St)
-    end.
-
-flat_get_table_key(#tref{i=N}=T, Key, #luerl{tabs=#tstruct{data=Ts}}=St) ->
-    #table{d=Dict,meta=Meta} = ?GET_TABLE(N, Ts),
-    case ttdict:find(Key, Dict) of
-	{ok,Val} -> {value,Val,St};
-	error ->
-	    %% Key not present so try metamethod
-	    flat_get_table_metamethod(T, Meta, Key, Ts, St)
-    end.
-
-flat_get_table_int(#tref{i=N}=T, Key, I, #luerl{tabs=#tstruct{data=Ts}}=St) ->
-    #table{a=A,meta=Meta} = ?GET_TABLE(N, Ts),	%Get the table.
-    case array:get(I, A) of
-	nil ->
-	    %% Key not present so try metamethod
-	    flat_get_table_metamethod(T, Meta, Key, Ts, St);
-	Val -> {value,Val,St}
-    end.
-
-flat_get_table_metamethod(T, Meta, Key, Ts, St) ->
-    case get_metamethod_tab(Meta, <<"__index">>, Ts) of
-	nil -> {value,nil,St};
-	Meth when ?IS_FUNCTION(Meth) ->
-	    {meta,Meth,[T,Key],St};
-	Meth ->				%Recurse down the metatable
-	    flat_get_table(Meth, Key, St)
-    end.
-
-%% alloc_userdata(Data, State) -> {Usdref,State}.
-%% alloc_userdata(Data, Meta, State) -> {Usdref,State}.
-%% set_userdata(Usdref, UserData, State) -> State.
-%% get_userdata(Usdref, State) -> {UserData,State}.
-
-alloc_userdata(Data, St) ->
-    alloc_userdata(Data, nil, St).
-
-alloc_userdata(Data, Meta, #luerl{usds=Ust}=St) ->
-    alloc_userdata_map(Data, Meta, St, Ust).
-
-alloc_userdata_map(Data, Meta, St, #tstruct{data=Us0,free=[N|Ns]}=Ust0) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    Ust1 = Ust0#tstruct{data=Us1,free=Ns},
-    {#usdref{i=N},St#luerl{usds=Ust1}};
-alloc_userdata_map(Data, Meta, St, #tstruct{data=Us0,free=[],next=N}=Ust0) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    Ust1 = Ust0#tstruct{data=Us1,next=N+1},
-    {#usdref{i=N},St#luerl{usds=Ust1}}.
-
-set_userdata(#usdref{i=N}, Data, #luerl{usds=#tstruct{data=Us0}=Ust}=St) ->
-    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{d=Data} end, Us0),
-    St#luerl{usds=Ust#tstruct{data=Us1}}.
-
-get_userdata(#usdref{i=N}, #luerl{usds=#tstruct{data=Us}}=St) ->
-    #userdata{} = Udata = ?GET_TABLE(N, Us),
-    {Udata,St}.
-
-%% make_userdata(Data) -> make_userdata(Data, nil).
-%% make_userdata(Data, Meta) -> #userdata{d=Data,meta=Meta}.
-
-%% alloc_funcdef(Def, State) -> {FunRef,State}.
-%% set_funcdef(Funref, Fdef, State) -> State.
-%% get_funcdef(Funref, State) -> {Fdef,State}.
-
-alloc_funcdef(Func, #luerl{fncs=Fst}=St) ->
-    alloc_funcdef(Func, St, Fst).
-
-alloc_funcdef(Func, St, #tstruct{data=Fs0,free=[N|Ns]}=Fst0) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    Fst1 = Fst0#tstruct{data=Fs1,free=Ns},
-    {#funref{i=N},St#luerl{fncs=Fst1}};
-alloc_funcdef(Func, St, #tstruct{data=Fs0,free=[],next=N}=Fst0) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    Fst1 = Fst0#tstruct{data=Fs1,next=N+1},
-    {#funref{i=N},St#luerl{fncs=Fst1}}.
-
-set_funcdef(#funref{i=N}, Func, #luerl{fncs=#tstruct{data=Fs0}=Fst}=St) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    St#luerl{fncs=Fst#tstruct{data=Fs1}}.
-
-get_funcdef(#funref{i=N}, #luerl{fncs=#tstruct{data=Fs}}=St) ->
-    Fdef = ?GET_TABLE(N, Fs),
-    {Fdef,St}.
 
 %% set_local_var(Depth, Index, Var, Frames) -> Frames.
 %% get_local_var(Depth, Index, Frames) -> Val.
@@ -470,17 +214,6 @@ get_env_var_1(D, I, Fps, Es) ->
     #eref{i=N} = lists:nth(D, Fps),
     element(I, ?GET_TABLE(N, Es)).
 
-%% flat_set_global(Var, Val, State) -> State.
-%% flat_get_global(Var, State) -> {Val,State}.
-%%  _G a normal table with metatable so we must use the table
-%%  functions.
-
-flat_set_global(Var, Val, #luerl{g=G}=St) ->
-    flat_set_table(G, Var, Val, St).
-
-flat_get_global(Var, #luerl{g=G}=St) ->
-    flat_get_table(G, Var, St).
-
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
 %% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
 %%  Load a chunk from the compiler which a compilefunction definition
@@ -513,7 +246,7 @@ load_chunk_is([], Funrs, St) -> {[],Funrs,St}.
 load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), Funrs0, St0) ->
     {B1,Funrs,St1} = load_chunk_is(B0, [], St0),
     Fdef = #lua_func{anno=Anno,funrefs=Funrs,lsz=Lsz,esz=Esz,pars=Pars,b=B1},
-    {Funref,St2} = alloc_funcdef(Fdef, St1),
+    {Funref,St2} = luerl_heap:alloc_funcdef(Fdef, St1),
     Funrs1 = ordsets:add_element(Funref, Funrs0),
     {?PUSH_FDEF(Funref),Funrs1,St2};
 load_chunk_i(?BLOCK(Lsz, Esz, B0), Funrs0, St0) ->
@@ -648,10 +381,13 @@ emul_1([?PUSH_EVAR(D, I)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     Val = get_env_var(D, I, Env, St),
     emul(Is, Cont, Lvs, [Val|Stk], Env, Cs, St);
 emul_1([?PUSH_GVAR(Key)|Is], Cont, Lvs, Stk, Env, Cs, St0) ->
-    case flat_get_global(Key, St0) of
+    %% We must handle the metamethod and error here.
+    case luerl_heap:get_global_key(Key, St0) of
 	{value,Val,St1} -> emul(Is, Cont, Lvs, [Val|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end;
 
 emul_1([?PUSH_LAST_LIT(L)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
@@ -663,10 +399,13 @@ emul_1([?PUSH_LAST_EVAR(D, I)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     Val = get_env_var(D, I, Env, St),
     emul(Is, Cont, Lvs, [[Val]|Stk], Env, Cs, St);
 emul_1([?PUSH_LAST_GVAR(Key)|Is], Cont, Lvs, Stk, Env, Cs, St0) ->
-    case flat_get_global(Key, St0) of
+    %% We must handle the metamethod and error here.
+    case luerl_heap:get_global_key(Key, St0) of
 	{value,Val,St1} -> emul(Is, Cont, Lvs, [[Val]|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end;
 
 emul_1([?STORE_LVAR(D, I)|Is], Cont, Lvs0, [Val|Stk], Env, Cs, St) ->
@@ -676,10 +415,13 @@ emul_1([?STORE_EVAR(D, I)|Is], Cont, Lvs, [Val|Stk], Env, Cs, St0) ->
     St1 = set_env_var(D, I, Val, Env, St0),
     emul(Is, Cont, Lvs, Stk, Env, Cs, St1);
 emul_1([?STORE_GVAR(Key)|Is], Cont, Lvs, [Val|Stk], Env, Cs, St0) ->
-    case flat_set_global(Key, Val, St0) of
+    %% We must handle the metamethod and error here.
+    case luerl_heap:set_global_key(Key, Val, St0) of
 	{value,_,St1} -> emul(Is, Cont, Lvs, Stk, Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?POP|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?POP|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end;
 
 emul_1([?GET_KEY|Is], Cont, Lvs, [Key,Tab|Stk], Env, Cs, St) ->
@@ -843,17 +585,23 @@ push_args(_V, As, Stk) ->			%Varargs ... save as list
 %%  ReturnFromEmul.
 
 do_set_key(Is, Cont, Lvs, Stk, Env, Cs, St0, Tab, Key, Val) ->
-    case flat_set_table(Tab, Key, Val, St0) of
+    %% We must handle the metamethod and error here.
+    case luerl_heap:set_table_key(Tab, Key, Val, St0) of
 	{value,_,St1} -> emul(Is, Cont, Lvs, Stk, Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?POP|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?POP|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end.
 
 do_get_key(Is, Cont, Lvs, Stk, Env, Cs, St0, Tab, Key) ->
-    case flat_get_table(Tab, Key, St0) of
+    %% We must handle the metamethod and error here.
+    case luerl_heap:get_table_key(Tab, Key, St0) of
 	{value,Val,St1} -> emul(Is, Cont, Lvs, [Val|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
-	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1)
+	    emul([?FCALL,?SINGLE|Is], Cont, Lvs, [Args,Meth|Stk], Env, Cs, St1);
+	{error,Error,St1} ->
+	    lua_error(Error, St1#luerl{stk=Stk,cs=Cs})
     end.
 
 %% do_op1(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
@@ -962,12 +710,12 @@ do_tail_mcall(_Is, _Cont, _Lvs, [Args,Obj|_Stk], _Env, Cs, St, Meth) ->
 
 functioncall(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
     %% Here we must save the stack in state as function may need it.
-    {Func,St1} = get_funcdef(Funref, St0#luerl{stk=Stk}),
+    {Func,St1} = luerl_heap:get_funcdef(Funref, St0#luerl{stk=Stk}),
     call_luafunc(Func, Args, Stk, Env, Cs, St1);
 functioncall(#erl_func{code=Func}, Args, Stk, Cs, St) ->
     call_erlfunc(Func, Args, Stk, Cs, St);
 functioncall(Func, Args, Stk, Cs, St) ->
-    case get_metamethod(Func, <<"__call">>, St) of
+    case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St#luerl{stk=Stk,cs=Cs});
 	Meta ->
 	    {Ret,Cs,St1} = functioncall(Meta, [Func|Args], Stk, Cs, St),
@@ -1024,7 +772,7 @@ do_block_open(Is, Cont, Lvs, Stk, Env, Cs, St0, Lsz, Esz) ->
 make_env_frame(0, St) -> {not_used,St};
 make_env_frame(Esz, St) ->
     E = erlang:make_tuple(Esz, nil),
-    alloc_environment(E, St).			%{Eref,St}.
+    luerl_heap:alloc_environment(E, St).	%{Eref,St}.
 
 make_loc_frame(0) -> not_used;
 make_loc_frame(Lsz) ->
@@ -1191,66 +939,6 @@ do_genfor_loop(Is, Cont, Lvs, [Vals|Stk], Env, Cs, St, Func, Data, Fis) ->
 	    emul([?BREAK|Is], Cont, Lvs, Stk, Env, Cs, St)
     end.
 
-%% get_metamethod(Object1, Object2, Event, State) -> Metod | nil.
-%% get_metamethod(Object, Event, State) -> Method | nil.
-%% Get the metamethod for object(s).
-
-get_metamethod(O1, O2, E, St) ->
-    case get_metamethod(O1, E, St) of
-	nil -> get_metamethod(O2, E, St);
-	M -> M
-    end.
-
-get_metamethod(O, E, St) ->
-    Meta = get_metatable(O, St),			%Can be nil
-    get_metamethod_tab(Meta, E, St#luerl.tabs#tstruct.data).
-
-get_metamethod_tab(#tref{i=M}, E, Ts) ->
-    #table{d=Mdict} = ?GET_TABLE(M, Ts),
-    case ttdict:find(E, Mdict) of
-	{ok,Mm} -> Mm;
-	error -> nil
-    end;
-get_metamethod_tab(_, _, _) -> nil.		%Other types have no metatables
-
-get_metatable(#tref{i=T}, #luerl{tabs=#tstruct{data=Ts}}) ->
-    (?GET_TABLE(T, Ts))#table.meta;
-get_metatable(#usdref{i=U}, #luerl{usds=#tstruct{data=Us}}) ->
-    (?GET_TABLE(U, Us))#userdata.meta;
-get_metatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
-get_metatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
-    Meta#meta.boolean;
-get_metatable(N, #luerl{meta=Meta}) when is_number(N) ->
-    Meta#meta.number;
-get_metatable(S, #luerl{meta=Meta}) when is_binary(S) ->
-    Meta#meta.string;
-get_metatable(_, _) -> nil.			%Other types have no metatables
-
-set_metatable(#tref{i=N}, M, #luerl{tabs=Tst0}=St) ->
-    Ts0 = Tst0#tstruct.data,
-    Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1},
-    St#luerl{tabs=Tst1};
-set_metatable(#usdref{i=N}, M, #luerl{usds=Ust0}=St) ->
-    Us0 = Ust0#tstruct.data,
-    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{meta=M} end, Us0),
-    Ust1 = Ust0#tstruct{data=Us1},
-    St#luerl{usds=Ust1};
-set_metatable(nil, M, #luerl{meta=Meta0}=St) ->
-    Meta1 = Meta0#meta{nil=M},
-    St#luerl{meta=Meta1};
-set_metatable(B, M, #luerl{meta=Meta0}=St) when is_boolean(B) ->
-    Meta1 = Meta0#meta{boolean=M},
-    St#luerl{meta=Meta1};
-set_metatable(N, M, #luerl{meta=Meta0}=St) when is_number(N) ->
-    Meta1 = Meta0#meta{number=M},
-    St#luerl{meta=Meta1};
-set_metatable(B, M, #luerl{meta=Meta0}=St) when is_binary(B) ->
-    Meta1 = Meta0#meta{string=M},
-    St#luerl{meta=Meta1};
-set_metatable(_, _, St) ->			%Do nothing for the rest
-    St.
-
 %% build_tab(FieldCount, Index, Stack, State) -> {TableRef,Stack,State}.
 %%  FieldCount is how many Key/Value pairs are on the stack, Index is
 %%  the index of the next value in the acc.
@@ -1259,7 +947,7 @@ build_tab(Fc, I, [Last|Stk0], St0) ->
     Fs0 = build_tab_last(I, Last),
     {Fs1,Stk1} = build_tab_loop(Fc, Stk0, Fs0),
     %% io:fwrite("bt: ~p\n", [{Fc,I,Acc,Fs0,Fs1}]),
-    {Tref,St1} = alloc_table(Fs1, St0),
+    {Tref,St1} = luerl_heap:alloc_table(Fs1, St0),
     {Tref,Stk1,St1}.
 
 build_tab_last(I, [V|Vs]) ->
@@ -1390,7 +1078,7 @@ floor(N) when is_float(N) -> round(N - 0.5).
 
 length_op(_Op, A, St) when is_binary(A) -> {value,byte_size(A),St};
 length_op(_Op, A, St) ->
-    case get_metamethod(A, <<"__len">>, St) of
+    case luerl_heap:get_metamethod(A, <<"__len">>, St) of
 	nil ->
 	    if ?IS_TREF(A) ->
 		    {value,luerl_lib_table:raw_length(A, St),St};
@@ -1457,10 +1145,10 @@ neq_op(_, _, _, St) -> {value,true,St}.
 
 get_eqmetamethod(A1, A2, St) ->
     %% Must have "same" metamethod here. How do we test?
-    case get_metamethod(A1, <<"__eq">>, St) of
+    case luerl_heap:get_metamethod(A1, <<"__eq">>, St) of
 	nil -> nil;
 	Meth ->
-	    case get_metamethod(A2, <<"__eq">>, St) of
+	    case luerl_heap:get_metamethod(A2, <<"__eq">>, St) of
 		Meth -> Meth;			%Must be the same method
 		_ -> nil
 	    end
@@ -1475,10 +1163,10 @@ le_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {value,A1 =< A2,St};
 le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {value,A1 =< A2,St};
 le_op(Op, A1, A2, St) ->
     %% Must check for first __le then __lt metamethods.
-    case get_metamethod(A1, A2, <<"__le">>, St) of
+    case luerl_heap:get_metamethod(A1, A2, <<"__le">>, St) of
 	nil ->
 	    %% Try for not (Op2 < Op1) instead.
-	    case get_metamethod(A1, A2, <<"__lt">>, St) of
+	    case luerl_heap:get_metamethod(A1, A2, <<"__lt">>, St) of
 		nil ->
 		    {error,{badarg_error,Op,[A1,A2]}, St};
 		Meth ->
@@ -1496,13 +1184,13 @@ concat_op(A1, A2, St) ->
     end.
 
 op_meta(Op, A, E, St) ->
-    case get_metamethod(A, E, St) of
+    case luerl_heap:get_metamethod(A, E, St) of
 	nil -> {error,{badarg_error,Op,[A]}, St};
 	Meth -> {meta,Meth,[A],St}
     end.
 
 op_meta(Op, A1, A2, E, St) ->
-    case get_metamethod(A1, A2, E, St) of
+    case luerl_heap:get_metamethod(A1, A2, E, St) of
 	nil -> {error,{badarg_error,Op,[A1,A2]},St};
 	Meth -> {meta,Meth,[A1,A2],St}
     end.

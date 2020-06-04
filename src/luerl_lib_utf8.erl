@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 table() ->
     [{<<"char">>,#erl_func{code=fun utf8_char/2}},

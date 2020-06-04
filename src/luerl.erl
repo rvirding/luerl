@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -281,7 +281,7 @@ encode(L, St0) when is_list(L) ->
 					  {V1,S1} = encode(V0, S0),
 					  {{I,V1},{I+1,S1}}
 			      end, {1,St0}, L),
-    {T,St2} = luerl_emul:alloc_table(Es, St1),
+    {T,St2} = luerl_heap:alloc_table(Es, St1),
     {T,St2};					%No more to do for now
 encode(F, St) when is_function(F, 2) ->
     F1 = fun(Args, State) ->
@@ -298,7 +298,7 @@ encode(F, St) when is_function(F, 1) ->
 	 end,
     {#erl_func{code=F1}, St};
 encode({userdata,Data}, St) ->
-    luerl_emul:alloc_userdata(Data, St);
+    luerl_heap:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).			%Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].

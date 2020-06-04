@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -38,10 +38,10 @@
 install(St0) ->
     St1 = luerl_emul:set_global_key(<<"require">>,
 				    #erl_func{code=fun require/2}, St0),
-    {S,St2} = luerl_emul:alloc_table(searchers_table(), St1),
-    {L,St3} = luerl_emul:alloc_table(loaded_table(), St2),
-    {P,St4} = luerl_emul:alloc_table(preload_table(), St3),
-    {T,St5} = luerl_emul:alloc_table(table(S, L, P), St4),
+    {S,St2} = luerl_heap:alloc_table(searchers_table(), St1),
+    {L,St3} = luerl_heap:alloc_table(loaded_table(), St2),
+    {P,St4} = luerl_heap:alloc_table(preload_table(), St3),
+    {T,St5} = luerl_heap:alloc_table(table(S, L, P), St4),
     {T,St5}.
 
 %% table() -> [{FuncName,Function}].

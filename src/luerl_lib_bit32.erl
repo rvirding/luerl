@@ -33,7 +33,7 @@
 -define(DEFAULT_BXOR, 0).
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 table() ->
     [{<<"band">>,#erl_func{code=fun fband/2}},
