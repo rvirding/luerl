@@ -34,7 +34,7 @@
          get_table_key/3,set_table_key/4,
          alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
          alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
-         alloc_environment/2,
+         alloc_environment/2,get_env_var/3,set_env_var/4,
          get_metamethod/3,get_metamethod/4,
          get_metatable/2, set_metatable/3
         ]).
@@ -62,22 +62,6 @@ init_tables(St) ->
 
 init_table() ->
     #tstruct{data=?MAKE_TABLE(),free=[],next=0}.
-
-%% alloc_environment(Env, State) -> {Fref,State}
-%%
-%% Allocate the environment in the environemnt table and return
-%% its eref.
-
-alloc_environment(Fr, #luerl{envs=Est0}=St) ->
-    {Eref,Est1} = alloc_environment_tab(Fr, Est0),
-    {Eref,St#luerl{envs=Est1}}.
-
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[N|Ns]}=Est) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Est#tstruct{data=Es1,free=Ns}};
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[],next=N}=Est) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Est#tstruct{data=Es1,next=N+1}}.
 
 %% alloc_table(State) -> {Tref,State}
 %%
@@ -430,3 +414,30 @@ set_metatable(B, M, #luerl{meta=Meta0}=St) when is_binary(B) ->
     St#luerl{meta=Meta1};
 set_metatable(_, _, St) ->                      %Do nothing for the rest
     St.
+
+%% alloc_environment(Size, State) -> {Fref,State}
+%%
+%% Allocate the environment in the environemnt table and return
+%% its eref.
+
+alloc_environment(Size, #luerl{envs=Etab0}=St) ->
+    Fr = erlang:make_tuple(Size, nil),
+    {Eref,Etab1} = alloc_environment_tab(Fr, Etab0),
+    {Eref,St#luerl{envs=Etab1}}.
+
+alloc_environment_tab(Fr, #tstruct{data=Es0,free=[N|Ns]}=Etab) ->
+    Es1 = ?SET_TABLE(N, Fr, Es0),
+    {#eref{i=N},Etab#tstruct{data=Es1,free=Ns}};
+alloc_environment_tab(Fr, #tstruct{data=Es0,free=[],next=N}=Etab) ->
+    Es1 = ?SET_TABLE(N, Fr, Es0),
+    {#eref{i=N},Etab#tstruct{data=Es1,next=N+1}}.
+
+%% set_env_var(Eref, Index, Val, State) -> State.
+%% get_env_var(Eref, Index, State) -> Value.
+
+set_env_var(#eref{i=N}, Index, Val, #luerl{envs=#tstruct{data=Es0}=Etab}=St) ->
+    Es1 = ?UPD_TABLE(N, fun (Fr) -> setelement(Index, Fr, Val) end, Es0),
+    St#luerl{envs=Etab#tstruct{data=Es1}}.
+
+get_env_var(#eref{i=N}, Index, #luerl{envs=Etab}) ->
+    element(Index, ?GET_TABLE(N, Etab#tstruct.data)).

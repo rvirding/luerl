@@ -48,7 +48,7 @@
 	]).
 
 %% Temporary shadow calls.
-%% -export([alloc_table/2,set_userdata/3,get_metamethod/3]).
+-export([alloc_table/2,set_userdata/3,get_metamethod/3]).
 
 %% For testing.
 -export([pop_vals/2,push_vals/3]).
@@ -62,13 +62,11 @@
 -define(ITRACE_DO(Expr), begin (get(luerl_itrace) /= undefined) andalso Expr end).
 
 %% Temporary shadow calls.
-%% alloc_table(Itab, St) -> luerl_heap:alloc_table(Itab, St).
-%% set_userdata(Ref, Data, St) ->
-%%     luerl_heap:set_userdata(Ref, Data, St).
-%% get_metamethod(Obj, Event, St) ->
-%%     luerl_heap:get_metamethod(Obj, Event, St).
-
-
+alloc_table(Itab, St) -> luerl_heap:alloc_table(Itab, St).
+set_userdata(Ref, Data, St) ->
+    luerl_heap:set_userdata(Ref, Data, St).
+get_metamethod(Obj, Event, St) ->
+    luerl_heap:get_metamethod(Obj, Event, St).
 
 %% init() -> State.
 %% Initialise the basic state.
@@ -181,38 +179,34 @@ get_local_var(1, I, [F|_]) -> element(I, F);
 get_local_var(D, I, [_|Fs]) ->
     get_local_var(D-1, I, Fs).
 
-%% set_env_var(Depth, Index, Val, Env, State) -> State.
-%% get_env_var(Depth, Index, Env, State) -> Val.
+%% set_env_var(Depth, Index, Val, EnvStack, State) -> State.
+%% get_env_var(Depth, Index, EnvStack, State) -> Val.
 %%  We must have the state as the environments are global in the
 %%  state.
 
-set_env_var(D, I, Val, Env, #luerl{envs=Est0}=St) ->
-    Es0 = Est0#tstruct.data,
-    Es1 = set_env_var_1(D, I, Val, Env, Es0),
-    Est1 = Est0#tstruct{data=Es1},
-    St#luerl{envs=Est1}.
+set_env_var(D, I, Val, Estk, St) ->
+    St1 = set_env_var_1(D, I, Val, Estk, St),
+    %% io:format("******** SEV DONE ~w ~w ********\n", [D,I]),
+    St1.
 
-set_env_var_1(1, I, V, [#eref{i=N}|_], Et) ->
-    F = setelement(I, ?GET_TABLE(N, Et), V),
-    ?SET_TABLE(N, F, Et);
-set_env_var_1(2, I, V, [_,#eref{i=N}|_], Et) ->
-    F = setelement(I, ?GET_TABLE(N, Et), V),
-    ?SET_TABLE(N, F, Et);
-set_env_var_1(D, I, V, Fps, Et) ->
-    #eref{i=N} = lists:nth(D, Fps),
-    F = setelement(I, ?GET_TABLE(N, Et), V),
-    ?SET_TABLE(N, F, Et).
+set_env_var_1(1, I, Val, [Eref|_], St) ->
+    luerl_heap:set_env_var(Eref, I, Val, St);
+set_env_var_1(2, I, Val, [_,Eref|_], St) ->
+    luerl_heap:set_env_var(Eref, I, Val, St);
+set_env_var_1(D, I, Val, Env, St) ->
+    luerl_heap:set_env_var(lists:nth(D, Env), I, Val, St).
 
-get_env_var(D, I, Env, #luerl{envs=#tstruct{data=Es}}) ->
-    get_env_var_1(D, I, Env, Es).
+get_env_var(D, I, Env, St) ->
+    Val = get_env_var_1(D, I,  Env, St),
+    %% io:format("******** GEV DONE ~w ~w ********\n", [D, I]),
+    Val.
 
-get_env_var_1(1, I, [#eref{i=N}|_], Es) ->
-    element(I, ?GET_TABLE(N, Es));
-get_env_var_1(2, I, [_,#eref{i=N}|_], Es) ->
-    element(I, ?GET_TABLE(N, Es));
-get_env_var_1(D, I, Fps, Es) ->
-    #eref{i=N} = lists:nth(D, Fps),
-    element(I, ?GET_TABLE(N, Es)).
+get_env_var_1(1, I, [Eref|_], St) ->
+    luerl_heap:get_env_var(Eref, I, St);
+get_env_var_1(2, I, [_,Eref|_], St) ->
+    luerl_heap:get_env_var(Eref, I, St);
+get_env_var_1(D, I, Env, St) ->
+    luerl_heap:get_env_var(lists:nth(D, Env), I, St).
 
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
 %% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
@@ -467,8 +461,8 @@ emul_1([?BLOCK(Lsz, Esz, Bis)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     do_block(Is, Cont, Lvs, Stk, Env, Cs, St, Lsz, Esz, Bis);
 emul_1([?BLOCK_OPEN(Lsz, Esz)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     do_block_open(Is, Cont, Lvs, Stk, Env, Cs, St, Lsz, Esz);
-emul_1([?BLOCK_CLOSE|Is], Cont, [_|Lvs], Stk, [_|Env], Cs, St) ->
-    emul(Is, Cont, Lvs, Stk, Env, Cs, St);
+emul_1([?BLOCK_CLOSE|Is], Cont, Lvs, Stk, Env, Cs, St) ->
+    do_block_close(Is, Cont, Lvs, Stk, Env, Cs, St);
 
 emul_1([?WHILE(Eis, Wis)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     do_while(Is, Cont, Lvs, Stk, Env, Cs, St, Eis, Wis);
@@ -769,10 +763,16 @@ do_block_open(Is, Cont, Lvs, Stk, Env, Cs, St0, Lsz, Esz) ->
     {Eref,St1} = make_env_frame(Esz, St0),
     emul(Is, Cont, [L|Lvs], Stk, [Eref|Env], Cs, St1).
 
+%% do_block_close(Instrs, LocalVars, Stack, Env, State,
+%%                LocalSize, EnvSize) -> <emul>.
+%%  Pop the block local variables and environment variables.
+
+do_block_close(Is, Cont, [_|Lvs], Stk, [_|Env], Cs, St) ->
+    emul(Is, Cont, Lvs, Stk, Env, Cs, St).
+
 make_env_frame(0, St) -> {not_used,St};
 make_env_frame(Esz, St) ->
-    E = erlang:make_tuple(Esz, nil),
-    luerl_heap:alloc_environment(E, St).	%{Eref,St}.
+    luerl_heap:alloc_environment(Esz, St).	%{Eref,St}.
 
 make_loc_frame(0) -> not_used;
 make_loc_frame(Lsz) ->
