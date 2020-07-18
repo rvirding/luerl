@@ -362,8 +362,8 @@ emul([], Cont, Lvs, Stk, Env, Cs, St) ->
 	       end),
     emul_1([], Cont, Lvs, Stk, Env, Cs, St).
 
-itrace_print(Format, Args) ->
-    ?ITRACE_DO(io:fwrite(Format, Args)).
+%% itrace_print(Format, Args) ->
+%%     ?ITRACE_DO(io:fwrite(Format, Args)).
 
 %% Expression instructions.
 emul_1([?PUSH_LIT(L)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
@@ -712,8 +712,7 @@ functioncall(Func, Args, Stk, Cs, St) ->
     case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
 	nil -> lua_error({undef_function,Func}, St#luerl{stk=Stk,cs=Cs});
 	Meta ->
-	    {Ret,Cs,St1} = functioncall(Meta, [Func|Args], Stk, Cs, St),
-	    {Ret,St1}
+	    functioncall(Meta, [Func|Args], Stk, Cs, St)
     end.
 
 %% call_luafunc(LuaFunc, Args, Stack, Env, State) -> {Return,State}.
