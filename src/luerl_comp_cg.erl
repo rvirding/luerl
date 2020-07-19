@@ -66,7 +66,7 @@ stmts([S0|Ss0], St0) ->
 stmts([], St) -> {[],St}.
 
 %% add_current_line(Line, State) -> {CurLine,State}.
-%%  Return currentline instrcution and update state if new line.
+%%  Return currentline instruction and update state if new line.
 
 add_current_line(Line, #c_cg{line=Line}=St) -> {[],St};
 add_current_line(Line, St) ->
@@ -442,13 +442,17 @@ prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
     {single_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
-%%  This will return a single value which we leave on the stack.
+%%  This will return a single value which we leave on the stack. Set
+%%  the local current line to 0 to get correct line numbers inside the
+%%  function. Reset to the original afterwards.
 
-functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz}, St0) ->
+functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz},
+            #c_cg{line=Line}=St0) ->
+    St1 = St0#c_cg{line=0},                     %Set current line to 0
     Ps1 = func_pars(Ps0),
-    {Iss,St1} = stmts(Ss, St0),
+    {Iss,St2} = stmts(Ss, St1),
     Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss ++ [?RETURN(0)]),
-    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St1}.
+    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St2#c_cg{line=Line}}.
 
 func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n='...',i=I}]) -> I;
