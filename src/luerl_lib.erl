@@ -51,28 +51,21 @@ badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St).
 %%  Some of these use same text as Lua error string, so be careful if
 %%  modifying them.
 
-format_error({undefined_method, Name, Args0, Line}) ->
-    io_lib:format("undefined_method ~w with args: ~p on line ~p",
-                  [Name, Args0, Line]);
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
-format_error({method_on_nil, Key}) ->
-    io_lib:format("undefined method ~w on nil", [Key]);
-format_error({illegal_key,Tab,Key}) ->
-    io_lib:format("invalid key in ~w: ~w", [Tab,Key]);
 format_error({illegal_index,Where,I}) ->
     io_lib:format("invalid index in ~w: ~w", [Where,I]);
-format_error({illegal_val,Where,Val}) ->
+format_error({illegal_value,Where,Val}) ->
     io_lib:format("invalid value in ~w: ~w", [Where,Val]);
-format_error({illegal_val,Val}) ->
+format_error({illegal_value,Val}) ->
     io_lib:format("invalid value: ~w", [Val]);
 format_error({illegal_comp,Where}) ->
     io_lib:format("illegal comparison in ~w", [Where]);
 format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
-format_error({undef_function,Name}) ->
+format_error({undefined_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
-format_error({undef_method,Obj,Name}) ->
+format_error({undefined_method,Obj,Name}) ->
     io_lib:format("undefined method in ~w: ~w", [Obj,Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
@@ -86,8 +79,6 @@ format_error(invalid_char_set) ->		%Keep text!
 %% Illegal or undefined ops.
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);
-format_error({undefined_op,Op}) ->
-    io_lib:format("undefined op: ~w", [Op]);
 format_error({no_module,Mod}) ->
     io_lib:format("module '~s' not found", [Mod]).
 

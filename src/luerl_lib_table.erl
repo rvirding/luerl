@@ -119,17 +119,17 @@ concat_tab(Arr, Dict, N, J) ->
     case ttdict:find(N, Dict) of
 	{ok,V} ->
 	    case luerl_lib:arg_to_list(V) of
-		error -> throw({error,{illegal_val,concat,V}});
+		error -> throw({error,{illegal_value,concat,V}});
 		S -> [S|concat_tab(Arr, Dict, N+1, J)]
 	    end;
-	error -> throw({error,{illegal_val,concat,nil}})
+	error -> throw({error,{illegal_value,concat,nil}})
     end.
 
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
     V = array:get(N, Arr),
     case luerl_lib:arg_to_list(V) of
-	error -> throw({error,{illegal_val,concat,V}});
+	error -> throw({error,{illegal_value,concat,V}});
 	S -> [S|concat_arr(Arr, N+1, J)]
     end.
 

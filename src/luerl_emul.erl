@@ -321,7 +321,7 @@ methodcall(Obj, Meth, Args, St0) ->
     %% Get the function to call from object and method.
     case get_table_key(Obj, Meth, St0) of
 	{nil,St1} ->				%No method
-	    lua_error({undef_method,Obj,Meth}, St1);
+	    lua_error({undefined_method,Obj,Meth}, St1);
 	{Func,St1} ->
 	    functioncall(Func, [Obj|Args], St1)
     end.
@@ -689,7 +689,7 @@ methodcall(Is, Cont, Lvs, Stk, Env, Cs, St0, Obj, Meth, Args) ->
     %% Get the function to call from object and method.
     case get_table_key(Obj, Meth, St0) of
 	{nil,St1} ->				%No method
-	    lua_error({undef_method,Obj,Meth}, St1#luerl{stk=Stk,cs=Cs});
+	    lua_error({undefined_method,Obj,Meth}, St1#luerl{stk=Stk,cs=Cs});
 	{Func,St1} ->
 	    functioncall(Is, Cont, Lvs, Stk, Env, Cs, St1, Func, [Obj|Args])
     end.
@@ -711,7 +711,7 @@ functioncall(#erl_func{code=Func}, Args, Stk, Cs, St) ->
     call_erlfunc(Func, Args, Stk, Cs, St);
 functioncall(Func, Args, Stk, Cs, St) ->
     case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
-	nil -> lua_error({undef_function,Func}, St#luerl{stk=Stk,cs=Cs});
+	nil -> lua_error({undefined_function,Func}, St#luerl{stk=Stk,cs=Cs});
 	Meta ->
 	    functioncall(Meta, [Func|Args], Stk, Cs, St)
     end.
@@ -976,7 +976,7 @@ op('~', A, St) ->
 op('#', A, St) ->
     length_op('#', A, St);
 op(Op, A, St) ->
-    {error,{badarg_error,Op,[A]},St}.
+    {error,{badarg,Op,[A]},St}.
 
 %% Numeric operators.
 op('+', A1, A2, St) ->
@@ -1045,7 +1045,7 @@ op('>', A1, A2, St) -> lt_op('>', A2, A1, St);
 op('..', A1, A2, St) -> concat_op(A1, A2, St);
 %% Bad args here.
 op(Op, A1, A2, St) ->
-    {error,{badarg_error,Op,[A1,A2]}, St}.
+    {error,{badarg,Op,[A1,A2]}, St}.
 
 -ifndef(HAS_FLOOR).
 %% floor(Number) -> integer().
@@ -1083,7 +1083,7 @@ length_op(_Op, A, St) ->
 	    if ?IS_TREF(A) ->
 		    {value,luerl_lib_table:raw_length(A, St),St};
 	       true ->
-		    {error,{badarg_error,'#',[A]}, St}
+		    {error,{badarg,'#',[A]}, St}
 	    end;
 	Meth -> {meta,Meth,[A],St}
     end.
@@ -1168,7 +1168,7 @@ le_op(Op, A1, A2, St) ->
 	    %% Try for not (Op2 < Op1) instead.
 	    case luerl_heap:get_metamethod(A1, A2, <<"__lt">>, St) of
 		nil ->
-		    {error,{badarg_error,Op,[A1,A2]}, St};
+		    {error,{badarg,Op,[A1,A2]}, St};
 		Meth ->
 		    {meta,Meth,[A2,A1],St}
 	    end;
@@ -1185,13 +1185,13 @@ concat_op(A1, A2, St) ->
 
 op_meta(Op, A, E, St) ->
     case luerl_heap:get_metamethod(A, E, St) of
-	nil -> {error,{badarg_error,Op,[A]}, St};
+	nil -> {error,{badarg,Op,[A]}, St};
 	Meth -> {meta,Meth,[A],St}
     end.
 
 op_meta(Op, A1, A2, E, St) ->
     case luerl_heap:get_metamethod(A1, A2, E, St) of
-	nil -> {error,{badarg_error,Op,[A1,A2]},St};
+	nil -> {error,{badarg,Op,[A1,A2]},St};
 	Meth -> {meta,Meth,[A1,A2],St}
     end.
 
