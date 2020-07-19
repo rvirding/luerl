@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -51,7 +51,7 @@
 
 install(St0) ->
     St1 = St0#luerl{rand=?RAND_SEED()},		%Default initial random seed
-    luerl_emul:alloc_table(table(), St1).
+    luerl_heap:alloc_table(table(), St1).
 
 table() ->
     [{<<"abs">>,#erl_func{code=fun abs/2}},

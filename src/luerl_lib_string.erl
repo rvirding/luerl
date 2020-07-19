@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -32,8 +32,8 @@
 %%-compile([bin_opt_info]).			%For when we are optimising
 
 install(St0) ->
-    {T,St1} = luerl_emul:alloc_table(table(), St0),
-    {M,St2} = luerl_emul:alloc_table(metatable(T), St1),
+    {T,St1} = luerl_heap:alloc_table(table(), St0),
+    {M,St2} = luerl_heap:alloc_table(metatable(T), St1),
     Meta0 = St2#luerl.meta,
     Meta1 = Meta0#meta{string=M},
     {T,St2#luerl{meta=Meta1}}.

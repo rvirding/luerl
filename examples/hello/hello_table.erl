@@ -7,7 +7,7 @@
 
 run() ->
     LuaScript = <<"hello_table = { hello=\"world\" }; return hello_table">>,
-    {[_Table], Lua0} = luerl:do(LuaScript),
+    {[_Table], Lua0} = luerl:do(LuaScript, luerl:init()),
 
     {World, Lua1} = luerl:get_table([hello_table, hello], Lua0),
     Lua2 = luerl:set_table([hello_table, hello], there, Lua1),

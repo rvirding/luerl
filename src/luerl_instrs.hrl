@@ -80,5 +80,6 @@
 -define(POP_ARGS(Ac), {pop_args,Ac}).
 -define(PUSH_ARGS(Al), {push_args,Al}).
 
-%% Comment instruction.
+%% Comment nad line instructiond.
 -define(COMMENT(C), {comment,C}).
+-define(CURRENT_LINE(L), {current_line,L}).

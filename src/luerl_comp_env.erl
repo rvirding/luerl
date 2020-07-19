@@ -105,28 +105,28 @@ find_fs_var(N, [F|Fs], Ld, Ed) ->
     end;
 find_fs_var(_, [], _, _) -> no.
 
-%% add_var(Name, State) -> State.
-%% get_var(Name, State) -> #lvar{} | #evar{} | #gvar{}.
+%% add_var(Var, State) -> State.
+%% get_var(Var, State) -> #lvar{} | #evar{} | #gvar{}.
 
-add_var(N, St) ->
+add_var(#var{name=N}, St) ->
     case var_type(N, St) of
 	local -> add_local_var(N, St);
 	env -> add_env_var(N, St)
     end.
 	    
-add_env_var(N, #c_env{fs=[F0|Fs]}=St) ->
-    F1 = add_frame_env_var(N, F0),
+add_env_var(V, #c_env{fs=[F0|Fs]}=St) ->
+    F1 = add_frame_env_var(V, F0),
     St#c_env{fs=[F1|Fs]}.
 	    
 add_local_var(N, #c_env{fs=[F0|Fs]}=St) ->
     F1 = add_frame_local_var(N, F0),
     St#c_env{fs=[F1|Fs]}.
 
-get_var(N, #c_env{fs=Fs}) ->
+get_var(#var{l=Line,name=N}, #c_env{fs=Fs}) ->
     case find_fs_var(N, Fs) of
-	{yes,lvar,Ld,Li} -> #lvar{n=N,d=Ld,i=Li};
-	{yes,evar,Ed,Ei} -> #evar{n=N,d=Ed,i=Ei};
-	no -> #gvar{n=N}
+	{yes,lvar,Ld,Li} -> #lvar{l=Line,n=N,d=Ld,i=Li};
+	{yes,evar,Ed,Ei} -> #evar{l=Line,n=N,d=Ed,i=Ei};
+	no -> #gvar{l=Line,n=N}
     end.
 
 var_type(N, #c_env{vars=#vars{fused=Fused}}) ->
@@ -180,9 +180,9 @@ var(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_first(Exp0, St0),
     {Rest1,St2} = var_rest(Rest0, St1),
     {D#dot{exp=Exp1,rest=Rest1},St2};
-var(#var{name=N}, St) ->
-    V = get_var(N, St),
-    {V,St}.
+var(#var{}=V0, St) ->
+    V1 = get_var(V0, St),
+    {V1,St}.
 
 var_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_element(Exp0, St0),
@@ -279,9 +279,9 @@ genfor_stmt(#gfor_stmt{vars=Vs0,gens=Gs0,body=B0}=F, St0) ->
 
 for_block(Vs0, #block{body=Ss0,vars=Vars}=B, St0) ->
     Do = fun (S0) ->
-		 Fun = fun (#var{name=N}, Sa) ->
-			       Sb = add_var(N, Sa),
-			       {get_var(N, Sb),Sb}
+		 Fun = fun (V, Sa) ->
+			       Sb = add_var(V, Sa),
+			       {get_var(V, Sb),Sb}
 		       end,
 		 {Vs1,S1} = lists:mapfoldl(Fun, S0, Vs0),
 		 {Ss1,S2} = stmts(Ss0, S1),
@@ -298,9 +298,9 @@ local_assign_stmt(#local_assign_stmt{vars=Vs0,exps=Es0}=L, St0) ->
     %% io:fwrite("las: ~p\n", [{Es0,St0}]),
     {Es1,St1} = explist(Es0, St0),
     %% io:fwrite("las> ~p\n", [{Es1,St1}]),
-    AddVar = fun (#var{name=N}, S0) ->
-		     S1 = add_var(N, S0),
-		     {get_var(N, S1),S1}
+    AddVar = fun (V, S0) ->
+		     S1 = add_var(V, S0),
+		     {get_var(V, S1),S1}
 	     end,
     {Vs1,St2} = lists:mapfoldl(AddVar, St1, Vs0),
     %% io:fwrite("las> ~p\n", [{Vs1,St2}]),
@@ -309,10 +309,10 @@ local_assign_stmt(#local_assign_stmt{vars=Vs0,exps=Es0}=L, St0) ->
 %% local_fdef_stmt(Local, State) -> {Local,State}.
 %%  Add function name first in case of recursive call.
 
-local_fdef_stmt(#local_fdef_stmt{var=#var{name=N},func=F0}=L, St0) ->
-    St1 = add_var(N, St0),
+local_fdef_stmt(#local_fdef_stmt{var=V,func=F0}=L, St0) ->
+    St1 = add_var(V, St0),
     {F1,St2} = functiondef(F0, St1),
-    V1 = get_var(N, St2),
+    V1 = get_var(V, St2),
     %% io:fwrite("lf: ~p\n", [St0]),
     %% io:fwrite("lf: ~p\n", [St1]),
     %% io:fwrite("lf: ~p\n", [St2]),
@@ -355,9 +355,9 @@ prefixexp(Exp, St) -> prefixexp_first(Exp, St).
 prefixexp_first(#single{exp=E0}=S, St0) ->
     {E1,St1} = exp(E0, St0),
     {S#single{exp=E1},St1};
-prefixexp_first(#var{name=N}, St) ->
-    V = get_var(N, St),
-    {V,St}.
+prefixexp_first(#var{}=V0, St) ->
+    V1 = get_var(V0, St),
+    {V1,St}.
 
 prefixexp_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_element(Exp0, St0),
@@ -379,9 +379,9 @@ prefixexp_element(#mcall{args=As0}=M, St0) ->
 
 functiondef(#fdef{pars=Ps0,body=Ss0,vars=Vars}=F, St0) ->
     Do = fun (S0) ->
-		 Fun = fun (#var{name=N}, Sa) ->
-			       Sb = add_var(N, Sa),
-			       {get_var(N, Sb),Sb}
+		 Fun = fun (V, Sa) ->
+			       Sb = add_var(V, Sa),
+			       {get_var(V, Sb),Sb}
 		       end,
 		 {Ps1,S1} = lists:mapfoldl(Fun, S0, Ps0),
 		 {Ss1,S2} = stmts(Ss0, S1),

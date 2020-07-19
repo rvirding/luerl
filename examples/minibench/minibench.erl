@@ -30,7 +30,7 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Init state, and execute pre-parsed '1 + 1'~n"),
     I2 = 100000,
-    {ok, Chunk2, State2} = luerl:load("return 1 + 1"),
+    {ok, Chunk2, State2} = luerl:load("return 1 + 1", luerl:init()),
     
     {T2,_State21} = timer:tc(fun() -> do_loop_state(I2, Chunk2, State2) end),
 
@@ -79,7 +79,9 @@ run() ->
     io:format("----------------------------------------------------------~n"),
     io:format("Pure parsing~n"),
     I6 = 100000,
-    {T6,_State61} = timer:tc(fun() -> [luerl:load("return 1 + 1") || _ <- lists:seq(1,I6)] end),
+    {T6,_State61} = timer:tc(fun() -> [luerl:load("return 1 + 1",
+						  luerl:init()) ||
+					  _ <- lists:seq(1,I6)] end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of 1 + 1.~n", [T6,I6]),
     io:format("Per call: ~p microseconds.~n", [T6/I6]),
@@ -100,7 +102,7 @@ run() ->
 
 % helper
 do_loop(N, Chunk) when N > 0 ->
-    luerl:do(Chunk),
+    luerl:do(Chunk, luerl:init()),
     do_loop(N-1, Chunk);
 do_loop(0, _) -> ok.
 

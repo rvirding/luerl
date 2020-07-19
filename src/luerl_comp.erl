@@ -212,10 +212,8 @@ do_init_comp(#comp{}=St) ->
     {ok,St#comp{code=C1}}.
 
 do_comp_normalise(#comp{code=C0,opts=Opts}=St) ->
-    case luerl_comp_normalise:chunk(C0, Opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    {ok,C1} = luerl_comp_normalise:chunk(C0, Opts),
+    {ok,St#comp{code=C1}}.
 
 do_comp_lint(St) ->
     case luerl_comp_lint:chunk(St#comp.code, St#comp.opts) of
@@ -224,10 +222,8 @@ do_comp_lint(St) ->
     end.
 
 do_comp_vars(St) ->
-    case luerl_comp_vars:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    {ok,C1} = luerl_comp_vars:chunk(St#comp.code, St#comp.opts),
+    {ok,St#comp{code=C1}}.
 
 %% do_comp_locf(St) ->
 %%     case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
@@ -237,22 +233,16 @@ do_comp_vars(St) ->
 %%     end.
 
 do_comp_env(St) ->
-    case luerl_comp_env:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    {ok,C1} = luerl_comp_env:chunk(St#comp.code, St#comp.opts),
+    {ok,St#comp{code=C1}}.
 
 do_code_gen(St) ->
-    case luerl_comp_cg:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    {ok,C1} = luerl_comp_cg:chunk(St#comp.code, St#comp.opts),
+    {ok,St#comp{code=C1}}.
 
 do_peep_op(St) ->
-    case luerl_comp_peep:chunk(St#comp.code, St#comp.opts) of
-	{ok,C1} -> {ok,St#comp{code=C1}};
-	{error,Es} -> {error,St#comp{errors=Es}}
-    end.
+    {ok,C1} = luerl_comp_peep:chunk(St#comp.code, St#comp.opts),
+    {ok,St#comp{code=C1}}.
 
 do_ok_return(#comp{lfile=Lfile,opts=Opts,code=C,warnings=Ws}) ->
     Report = lists:member(report, Opts),

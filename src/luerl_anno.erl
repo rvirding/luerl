@@ -78,6 +78,6 @@ get(_Key, Anno) when is_integer(Anno) ->        %This is untagged so not Key
     undefined;
 get(Key, Anno) -> get1(Key, Anno).
 
-get1(Key, [{Key,Val}|Anno]) -> Val;
+get1(Key, [{Key,Val}|_Anno]) -> Val;
 get1(Key, [_|Anno]) -> get1(Key, Anno);
 get1(_Key, []) -> undefined.

@@ -45,5 +45,5 @@ run_tests(Config, Tests) ->
 run_and_check(Config, Script, Expected) ->
   DataDir = ?config(data_dir, Config),
   ScriptFile = DataDir ++ Script,
-  {Result, _St} = luerl:dofile(ScriptFile),
+  {Result, _St} = luerl:dofile(ScriptFile, luerl:init()),
   Expected = Result.

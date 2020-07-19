@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 %% Caller will convert this list to the correct format.
@@ -92,7 +92,7 @@ eprint(Args, St) ->
 -spec basic_error(_, _) -> no_return().
 
 basic_error([{tref, _}=T|_], St0) ->
-    case luerl_emul:get_metamethod(T, <<"__tostring">>, St0) of
+    case luerl_heap:get_metamethod(T, <<"__tostring">>, St0) of
         nil -> lua_error({error_call, T}, St0);
         Meta ->
             {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
@@ -106,7 +106,7 @@ basic_error(As, St) -> badarg_error(error, As, St).
 %%  key-value pairs of integer keys.
 
 ipairs([#tref{}=Tref|_], St) ->
-    case luerl_emul:get_metamethod(Tref, <<"__ipairs">>, St) of
+    case luerl_heap:get_metamethod(Tref, <<"__ipairs">>, St) of
 	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
@@ -126,7 +126,7 @@ ipairs_next([#tref{i=T},K|_], St) ->
 %%  Return a function to step over all the key-value pairs in a table.
 
 pairs([#tref{}=Tref|_], St) ->
-    case luerl_emul:get_metamethod(Tref, <<"__pairs">>, St) of
+    case luerl_heap:get_metamethod(Tref, <<"__pairs">>, St) of
 	nil -> {[#erl_func{code=fun next/2},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
@@ -313,7 +313,7 @@ tonumber(Num) when is_number(Num) -> Num;
 tonumber(_) -> nil.
 
 tostring([Arg|_], St) ->
-    case luerl_emul:get_metamethod(Arg, <<"__tostring">>, St) of
+    case luerl_heap:get_metamethod(Arg, <<"__tostring">>, St) of
 	nil -> {[tostring(Arg)],St};
 	M when ?IS_FUNCTION(M) ->
 	    luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
@@ -358,7 +358,7 @@ type(_) -> <<"unknown">>.
 %%  else the metatable for the type.
 
 getmetatable([O|_], St) ->
-    case luerl_emul:get_metatable(O, St) of
+    case luerl_heap:get_metatable(O, St) of
 	#tref{i=N}=Meta ->
 	    #table{d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
 	    case ttdict:find(<<"__metatable">>, Dict) of
@@ -375,7 +375,7 @@ setmetatable([#tref{}=T,nil|_], St) ->
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
 do_setmetatable(#tref{i=N}=T, M, St) ->
-    case luerl_emul:get_metamethod(T, <<"__metatable">>, St) of
+    case luerl_heap:get_metamethod(T, <<"__metatable">>, St) of
 	nil ->
 	    Tst = St#luerl.tabs,
 	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end,

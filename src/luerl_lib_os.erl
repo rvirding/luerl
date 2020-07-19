@@ -32,7 +32,7 @@
 -define(TMPNAM_TEMPLATE(S), "/tmp/lua_" ++ S).
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 table() ->
     [{<<"clock">>,#erl_func{code=fun clock/2}},

@@ -1,4 +1,4 @@
-%% Copyright (c) 2015-2018 Robert Virding
+%% Copyright (c) 2015-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -47,11 +47,11 @@ table() ->
 %%  else the metatable for the type.
 
 getmetatable([O|_], St) ->
-    {[luerl_emul:get_metatable(O, St)],St};
+    {[luerl_heap:get_metatable(O, St)],St};
 getmetatable(As, St) -> badarg_error(getmetatable, As, St).
 
 setmetatable([T,M|_], St0) ->
-    St1 = luerl_emul:set_metatable(T, M, St0),
+    St1 = luerl_heap:set_metatable(T, M, St0),
     {[T],St1};
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 

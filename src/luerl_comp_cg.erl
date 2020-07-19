@@ -29,11 +29,15 @@
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,
 		  subtract/2,intersection/2,new/0]).
 
+-record(c_cg, {line				%Current line
+	      }).
+
 %% chunk(St0, Opts) -> {ok,St0}.
 %%  Return a list of instructions to define the chunk function.
 
 chunk(#code{code=C0}=Code, Opts) ->
-    {Is,nul} = functiondef(C0, nul),		%No local state
+    St0 = #c_cg{line=0},
+    {Is,_} = functiondef(C0, St0),
     luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
     {ok,Code#code{code=Is}}.
 
@@ -52,11 +56,21 @@ get_var(#gvar{n=N}) -> [?PUSH_GVAR(N)].
 %% stmt(Stmts, State) -> {Istmts,State}.
 
 stmts([S0|Ss0], St0) ->
-    {S1,St1} = stmt(S0, nul, St0),
+    %% We KNOW that the annotation is the second element.
+    Line = luerl_anno:line(element(2, S0)),
+    {CurLine,St1} = add_current_line(Line, St0),
+    {S1,St2} = stmt(S0, nul, St1),
     %% io:format("ss1: ~p\n", [{Loc0,Free0,Used0}]),
-    {Ss1,St2} = stmts(Ss0, St1),
-    {S1 ++ Ss1,St2};
+    {Ss1,St3} = stmts(Ss0, St2),
+    {CurLine ++ S1 ++ Ss1,St3};
 stmts([], St) -> {[],St}.
+
+%% add_current_line(Line, State) -> {CurLine,State}.
+%%  Return currentline instruction and update state if new line.
+
+add_current_line(Line, #c_cg{line=Line}=St) -> {[],St};
+add_current_line(Line, St) ->
+    {[?CURRENT_LINE(Line)],St#c_cg{line=Line}}.
 
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
@@ -204,17 +218,21 @@ if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
     if_tests(Ts, E, St).
 
 if_tests([{E,B}], #block{body=[]}, St0) ->
-    {Ie,St1} = exp(E, single, St0),
-    {Ib,St2} = do_block(B, St1),
-    {Ie ++ [?IF_TRUE(Ib)],St2};
+    Line = luerl_anno:line(element(2, E)),
+    {CurLine,St1} = add_current_line(Line, St0),
+    {Ie,St2} = exp(E, single, St1),
+    {Ib,St3} = do_block(B, St2),
+    {CurLine ++ Ie ++ [?IF_TRUE(Ib)],St3};
 if_tests([{E,B}|Ts], Else, St0) ->
-    {Ie,St1} = exp(E, single, St0),
-    {Ib,St2} = do_block(B, St1),
-    {Its,St3} = if_tests(Ts, Else, St2),
-    {Ie ++ [?IF(Ib, Its)],St3};
+    Line = luerl_anno:line(element(2, E)),
+    {CurLine,St1} = add_current_line(Line, St0),
+    {Ie,St2} = exp(E, single, St1),
+    {Ib,St3} = do_block(B, St2),
+    {Its,St4} = if_tests(Ts, Else, St3),
+    {CurLine ++ Ie ++  [?IF(Ib, Its)],St4};
 if_tests([], Else, St0) ->
-    {Ie,St1} = do_block(Else, St0),
-    {Ie,St1}.
+    {Ielse,St1} = do_block(Else, St0),
+    {Ielse,St1}.
 
 %% numfor_stmt(For, State) -> {ForIs,State}.
 
@@ -424,13 +442,17 @@ prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
     {single_value(S, Ims),St1}.			%Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
-%%  This will return a single value which we leave on the stack.
+%%  This will return a single value which we leave on the stack. Set
+%%  the local current line to 0 to get correct line numbers inside the
+%%  function. Reset to the original afterwards.
 
-functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz}, St0) ->
+functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz},
+            #c_cg{line=Line}=St0) ->
+    St1 = St0#c_cg{line=0},                     %Set current line to 0
     Ps1 = func_pars(Ps0),
-    {Iss,St1} = stmts(Ss, St0),
+    {Iss,St2} = stmts(Ss, St1),
     Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss ++ [?RETURN(0)]),
-    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St1}.
+    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St2#c_cg{line=Line}}.
 
 func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n='...',i=I}]) -> I;
