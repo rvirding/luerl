@@ -25,8 +25,10 @@
 	 load_module/3,
 	 do/2,dofile/2,
 	 call/3,call_chunk/3,call_function/3,call_method/4,
-	 get_table_keys/2,set_table_keys/3
+	 get_table_keys/2,set_table_keys/3,
+	 get_stacktrace/1
 	]).
+
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
@@ -151,6 +153,31 @@ set_table_keys(Keys, Val, St0) ->
 	error:{lua_error,_E,_St} = LuaErr ->
 	    LuaErr
     end.
+
+%% get_stacktrace(State) -> [{FuncName,[{file,FileName},{line,Line}]}].
+
+get_stacktrace(#luerl{cs=Stack}=St) ->
+    Fun = fun (Frame, Acc) -> do_stackframe(Frame, Acc, St) end,
+    {_,Trace} = lists:foldl(Fun, {1,[]}, Stack),
+    lists:reverse(Trace).
+
+do_stackframe(#call_frame{func=Funref}, {Line,Trace}, St) ->
+    case Funref of
+        #funref{} ->
+            {Func,_} = luerl_heap:get_funcdef(Funref, St),
+            Anno = Func#lua_func.anno,
+            Name = case luerl_anno:get(name, Anno) of
+                       undefined -> <<"-no-name-">>;
+                       N -> N
+                   end,
+            File = luerl_anno:get(file, Anno),
+            {Line,[{Name,[{file,File},{line,Line}]} | Trace]};
+        #erl_func{} -> {Line,Trace}             %Skip these for now
+    end;
+do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
+    {Line,Trace};
+do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
+    Acc.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
