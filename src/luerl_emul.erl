@@ -59,7 +59,8 @@
 %% -compile({inline,[boolean_value/1,first_value/1]}).
 
 %% -define(ITRACE_DO(Expr), ok).
--define(ITRACE_DO(Expr), begin (get(luerl_itrace) /= undefined) andalso Expr end).
+-define(ITRACE_DO(Expr),
+	begin (get(luerl_itrace) /= undefined) andalso Expr end).
 
 %% Temporary shadow calls.
 alloc_table(Itab, St) -> luerl_heap:alloc_table(Itab, St).
@@ -501,9 +502,9 @@ emul_1([?RETURN(Ac)|_], _Cont, _Lvs, Stk, _Env, Cs, St) ->
     do_return(Ac, Stk, Cs, St);
 
 %% Stack instructions
-emul_1([?POP|Is], Cont, Lvs, [_|Stk], Env, Cs, St) ->	%Pop top off stack
+emul_1([?POP|Is], Cont, Lvs, [_|Stk], Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
-emul_1([?POP2|Is], Cont, Lvs, [_,_|Stk], Env, Cs, St) ->	%Pop top 2 off stack
+emul_1([?POP2|Is], Cont, Lvs, [_,_|Stk], Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([?SWAP|Is], Cont, Lvs, [S1,S2|Stk], Env, Cs, St) ->
     emul(Is, Cont, Lvs, [S2,S1|Stk], Env, Cs, St);
@@ -1300,11 +1301,14 @@ mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
 	    mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
 mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
+    %% io:format("push funrefs ~p\n", [Funrefs]),
     mark(Todo, [Funrefs|More], GcT, GcE, GcU, GcF);
 %% The call stack.
-mark([#call_frame{lvs=Lvs,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
+mark([#call_frame{func=Funref,lvs=Lvs,env=Env}|Todo],
+     More0, GcT, GcE, GcU, GcF) ->
+    %% io:format("cf ~p\n", [Funref]),
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Env|More0],
-    mark(Todo, More1, GcT, GcE, GcU, GcF);
+    mark([Funref|Todo], More1, GcT, GcE, GcU, GcF);
 mark([#loop_frame{lvs=Lvs,stk=Stk,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
     More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Stk,Env|More0],
     mark(Todo, More1, GcT, GcE, GcU, GcF);
@@ -1316,7 +1320,7 @@ mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
 mark([#userdata{meta=Meta}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark([Meta|Todo], More, GcT, GcE, GcU, GcF);
 mark([{K,V}|Todo], More, GcT, GcE, GcU, GcF) -> %Table key-value pair
-    %%io:format("mt: ~p\n", [{K,V}]),
+    %% io:format("mt: ~p\n", [{K,V}]),
     mark([K,V|Todo], More, GcT, GcE, GcU, GcF);
 mark([_|Todo], More, GcT, GcE, GcU, GcF) ->
     %% Can ignore everything else.
