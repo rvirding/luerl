@@ -234,7 +234,7 @@ get_table_key(#tref{}=Tref, Key, St) when is_integer(Key), Key >= 1 ->
 get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
     case ?IS_FLOAT_INT(Key, I) of
         true when I >= 1 -> get_table_key_int(Tref, Key, I, St);
-        _NegFalse -> get_table_key(Tref, Key, St)
+        _NegFalse -> get_table_key_key(Tref, Key, St)
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
