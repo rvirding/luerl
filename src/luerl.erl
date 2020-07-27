@@ -31,8 +31,7 @@
 	 call_method/3,call_method1/3,method_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
 	 init/0,stop/1,gc/1,
-	 encode/2,encode_list/2,decode/2,decode_list/2,
-   get_stack_trace/1]).
+	 encode/2,encode_list/2,decode/2,decode_list/2]).
 
 %% luerl:eval(String|Binary|Form, State) -> Result.
 
@@ -356,7 +355,3 @@ decode_table(N, St, In0) ->
 decode_userdata(N, St) ->
     #userdata{d=Data} = ?GET_TABLE(N, St#luerl.usds#tstruct.data),
     {userdata,Data}.
-
-get_stack_trace(#luerl{source = Source, cs = CallFrames}) ->
-  [Source | [ CSSource || #call_frame{source = CSSource} <- CallFrames,
-                          CSSource =/= undefined]].

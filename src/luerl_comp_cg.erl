@@ -68,7 +68,8 @@ stmts([], St) -> {[],St}.
 %% add_current_line(Line, State) -> {CurLine,State}.
 %%  Return currentline instruction and update state if new line.
 
-add_current_line(Line, #c_cg{line=Line}=St) -> {[],St};
+add_current_line(Line, #c_cg{line=Line}=St) ->
+    {[],St};
 add_current_line(Anno, St) ->
     Line = cover_found_line(get(lua_cover_fun), Anno),
     {[?CURRENT_LINE(Line)],St#c_cg{line=Line}}.
@@ -76,9 +77,14 @@ add_current_line(Anno, St) ->
 cover_found_line(undefined, Anno) ->
     luerl_anno:line(Anno);
 cover_found_line(Fun, Anno) ->
-    LineMo = luerl_anno:line(Anno),
-    FileName = luerl_anno:file(Anno),
-    Fun(add_line, {FileName, LineMo}).
+    LineNo = luerl_anno:line(Anno),
+    case luerl_anno:file(Anno) of
+      <<"-no-file-">> ->
+          LineNo;
+      File ->
+          Fun(add_line, {File, LineNo}),
+          LineNo
+    end.
 
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
