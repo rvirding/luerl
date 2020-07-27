@@ -24,7 +24,7 @@
 
 -module(luerl_anno).
 
--export([new/0,new/1,new/2,set_line/2,line/1,set/3,get/2]).
+-export([new/0,new/1,new/2,set_line/2,line/1,file/1,set/3,get/2]).
 
 %% new() -> Anno.
 %% new(Line) -> Anno.
@@ -52,6 +52,9 @@ set_line1(Line, []) -> [Line].
 
 line(Anno) when is_integer(Anno) -> Anno;
 line(Anno) -> line1(Anno).
+
+file(Anno) when is_integer(Anno) -> <<"-no-file-">>;
+file([_LineNo, {file, FileName} | _]) -> FileName.
 
 line1([Line|_]) when is_integer(Line) -> Line;
 line1([_|Anno]) -> line1(Anno);
