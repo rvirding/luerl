@@ -217,9 +217,15 @@ get_env_var_1(D, I, Env, St) ->
 
 load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-load_chunk(#code{code=[Code]}, [], St0) ->
-    {?PUSH_FDEF(Funref),_,St1} = load_chunk_i(Code, [], St0),
-    {Funref,St1}.
+load_chunk(#code{code=[Code],cst = #cst{opts = Opts}}, [], St0) ->
+    St1 = case proplists:get_value(cover_fun, Opts, undefined) of
+            undefined ->
+              St0;
+            CoverFun ->
+              St0#luerl{cover_fun = CoverFun}
+          end,
+    {?PUSH_FDEF(Funref),_,St2} = load_chunk_i(Code, [], St1),
+    {Funref,St2}.
 
 %% load_chunk_i(Instr, FuncRefs, Status) -> {Instr,FuncRefs,State}.
 %% load_chunk_is(Instrs, FuncRefs, Status) -> {Instrs,FuncRefs,State}.
@@ -350,13 +356,7 @@ emul([I|_]=Is, Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("I: ~p\n", [I]),
 		   io:put_chars("--------\n")
 	       end),
-  try emul_1(Is, Cont, Lvs, Stk, Env, Cs, St)
-  catch
-    _Error:{lua_error, Cause, LuerlState}:_ST ->
-      lua_error(Cause, LuerlState);
-    _Error:Cause:Stack ->
-      lua_error({Cause, {erl_stack, Stack}}, St)
-  end;
+    emul_1(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul([], Cont, Lvs, Stk, Env, Cs, St) ->
     ?ITRACE_DO(begin
 		   io:fwrite("Is:  ~p\n", [[]]),
@@ -367,13 +367,7 @@ emul([], Cont, Lvs, Stk, Env, Cs, St) ->
 		   io:fwrite("Cs:  ~p\n", [Cs]),
 		   io:put_chars("--------\n")
 	       end),
-    try emul_1([], Cont, Lvs, Stk, Env, Cs, St)
-    catch
-      _Error:{lua_error, Cause, LuerlState}:_ST ->
-        lua_error(Cause, LuerlState);
-      _Error:Cause:Stack ->
-        lua_error({Cause, {erl_stack, Stack}}, St)
-    end.
+    emul_1([], Cont, Lvs, Stk, Env, Cs, St).
 
 %% itrace_print(Format, Args) ->
 %%     ?ITRACE_DO(io:fwrite(Format, Args)).
@@ -543,7 +537,7 @@ emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
     Cs1 = push_current_line(Cs0, Line),		%Push onto callstack
-    St1 = cover_hit_line(get(lua_cover_fun), Cs0, Line, St),
+    St1 = cover_hit_line(St#luerl.cover_fun, Cs0, Line, St),
     emul(Is, Cont, Lvs, Stk, Env, Cs1, St1);
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
@@ -759,9 +753,17 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,b=Fis},
 %%  stack. It is popped when we return.
 
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs0}),
-    [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
-    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1}).
+    St1 = St0#luerl{stk=Stk,cs=Cs0},
+    try Func(Args, St1) of
+      {Ret,St2} ->
+          [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
+          emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St2#luerl{stk=Stk0,cs=Cs1})
+    catch
+        _:{lua_error, Cause, LuerLState}:Stack ->
+            lua_error(Cause, LuerLState);
+        _Error:Cause:Stack ->
+            lua_error({Cause, {erl_stack, Stack}}, St1)
+    end.
 
 %% do_block(Instrs, LocalVars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> <emul>.
