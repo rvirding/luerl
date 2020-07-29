@@ -29,14 +29,15 @@
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,
 		  subtract/2,intersection/2,new/0]).
 
--record(c_cg, {line				%Current line
+-record(c_cg, {line,				%Current line
+               cover_fun
 	      }).
 
 %% chunk(St0, Opts) -> {ok,St0}.
 %%  Return a list of instructions to define the chunk function.
 
 chunk(#code{code=C0}=Code, Opts) ->
-    St0 = #c_cg{line=0},
+    St0 = #c_cg{line=0, cover_fun = proplists:get_value(cover_fun,Opts,undefined)},
     {Is,_} = functiondef(C0, St0),
     luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
     {ok,Code#code{code=Is}}.
@@ -71,7 +72,7 @@ stmts([], St) -> {[],St}.
 add_current_line(Line, #c_cg{line=Line}=St) ->
     {[],St};
 add_current_line(Anno, St) ->
-    Line = cover_found_line(get(lua_cover_fun), Anno),
+    Line = cover_found_line(St#c_cg.cover_fun, Anno),
     {[?CURRENT_LINE(Line)],St#c_cg{line=Line}}.
 
 cover_found_line(undefined, Anno) ->
