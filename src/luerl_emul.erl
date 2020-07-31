@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2019 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -217,9 +217,15 @@ get_env_var_1(D, I, Env, St) ->
 
 load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-load_chunk(#code{code=[Code]}, [], St0) ->
-    {?PUSH_FDEF(Funref),_,St1} = load_chunk_i(Code, [], St0),
-    {Funref,St1}.
+load_chunk(#code{code=[Code],cst = #cst{opts = Opts}}, [], St0) ->
+    St1 = case proplists:get_value(cover_fun, Opts, undefined) of
+            undefined ->
+              St0;
+            CoverFun ->
+              St0#luerl{cover_fun = CoverFun}
+          end,
+    {?PUSH_FDEF(Funref),_,St2} = load_chunk_i(Code, [], St1),
+    {Funref,St2}.
 
 %% load_chunk_i(Instr, FuncRefs, Status) -> {Instr,FuncRefs,State}.
 %% load_chunk_is(Instrs, FuncRefs, Status) -> {Instrs,FuncRefs,State}.
@@ -531,11 +537,21 @@ emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
     Cs1 = push_current_line(Cs0, Line),		%Push onto callstack
-    emul(Is, Cont, Lvs, Stk, Env, Cs1, St);
+    St1 = cover_hit_line(St#luerl.cover_fun, Cs0, Line, St),
+    emul(Is, Cont, Lvs, Stk, Env, Cs1, St1);
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
 emul_1([], [], Lvs, Stk, Env, Cs, St) ->
     {Lvs,Stk,Env,Cs,St}.
+
+cover_hit_line(undefined, _, _, St) ->
+    St;
+cover_hit_line(Fun, Cs, Line, St) ->
+    {#call_frame{func = FunRef},_} = find_call_frame(Cs, St),
+    {#lua_func{anno = Anno}, St1} = luerl_heap:get_funcdef(FunRef, St),
+    File = luerl_anno:file(Anno),
+    Fun(hit_line, {File, Line}),
+    St1.
 
 %% pop_vals(Count, Stack) -> {ValList,Stack}.
 %% pop_vals(Count, Stack, ValList) -> {ValList,Stack}.
@@ -737,9 +753,17 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,b=Fis},
 %%  stack. It is popped when we return.
 
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs0}),
-    [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
-    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1}).
+    St1 = St0#luerl{stk=Stk,cs=Cs0},
+    try Func(Args, St1) of
+      {Ret,St2} ->
+          [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
+          emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St2#luerl{stk=Stk0,cs=Cs1})
+    catch
+        _:{lua_error, Cause, LuerLState}:Stack ->
+            lua_error(Cause, LuerLState);
+        _Error:Cause:Stack ->
+            lua_error({Cause, {erl_stack, Stack}}, St1)
+    end.
 
 %% do_block(Instrs, LocalVars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> <emul>.

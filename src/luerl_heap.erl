@@ -46,7 +46,7 @@
 %% Initialise the heap section of the state and return the state.
 
 init() ->
-    St0 = #luerl{meta=#meta{},tag=make_ref()},
+    St0 = #luerl{meta=#meta{},cover_fun=undefined,tag=make_ref()},
     init_tables(St0).
 
 init_tables(St) ->

@@ -32,7 +32,8 @@
 		%%
 		meta=[],			%Data type metatables
 		rand,				%Random state
-		tag				%Unique tag
+		tag,				%Unique tag
+	    cover_fun
 	       }).
 
 %% Table structure.

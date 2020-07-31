@@ -161,23 +161,25 @@ get_stacktrace(#luerl{cs=Stack}=St) ->
     {_,Trace} = lists:foldl(Fun, {1,[]}, Stack),
     lists:reverse(Trace).
 
-do_stackframe(#call_frame{func=Funref}, {Line,Trace}, St) ->
-    case Funref of
-        #funref{} ->
-            {Func,_} = luerl_heap:get_funcdef(Funref, St),
-            Anno = Func#lua_func.anno,
-            Name = case luerl_anno:get(name, Anno) of
-                       undefined -> <<"-no-name-">>;
-                       N -> N
-                   end,
-            File = luerl_anno:get(file, Anno),
-            {Line,[{Name,[{file,File},{line,Line}]} | Trace]};
-        #erl_func{} -> {Line,Trace}             %Skip these for now
-    end;
+do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
+	case Funref of
+		#funref{} ->
+			{Func,_} = luerl_heap:get_funcdef(Funref, St),
+			Anno = Func#lua_func.anno,
+			Name = case luerl_anno:get(name, Anno) of
+					   undefined -> <<"-no-name-">>;
+					   N -> N
+				   end,
+			File = luerl_anno:get(file, Anno),
+			{Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
+		#erl_func{} -> {Line,Trace};            %Skip these for now
+		Other ->
+			{Line,[{Other,Args,[{file,<<"-no-file">>},{line,Line}]} | Trace]}
+	end;
 do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
-    {Line,Trace};
+	{Line,Trace};
 do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
-    Acc.
+	Acc.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
