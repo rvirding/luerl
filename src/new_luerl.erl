@@ -161,7 +161,7 @@ get_stacktrace(#luerl{cs=Stack}=St) ->
     {_,Trace} = lists:foldl(Fun, {1,[]}, Stack),
     lists:reverse(Trace).
 
-do_stackframe(#call_frame{func=Funref}, {Line,Trace}, St) ->
+do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
     case Funref of
         #funref{} ->
             {Func,_} = luerl_heap:get_funcdef(Funref, St),
@@ -171,8 +171,10 @@ do_stackframe(#call_frame{func=Funref}, {Line,Trace}, St) ->
                        N -> N
                    end,
             File = luerl_anno:get(file, Anno),
-            {Line,[{Name,[{file,File},{line,Line}]} | Trace]};
-        #erl_func{} -> {Line,Trace}             %Skip these for now
+            {Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
+        #erl_func{} -> {Line,Trace};            %Skip these for now
+	Other ->
+            {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
 do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
     {Line,Trace};
