@@ -14,9 +14,13 @@
 
 %% File    : luerl_comp_cg.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
-%% Does code generation in the compiler.
+%% Does code generation in the compiler. In the generated function
+%% definitions annotations and when we generate the #current_line{}
+%% instruction we use the virtual filename the compiler has
+%% generated. This is either the default file name or an explicit one
+%% given with the {file,FileName} compiler option.
 
 -module(luerl_comp_cg).
 
@@ -29,17 +33,18 @@
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,
 		  subtract/2,intersection/2,new/0]).
 
--record(c_cg, {line				%Current line
+-record(c_cg, {line,				%Current line
+	       vfile=[]				%Current virtual file
 	      }).
 
-%% chunk(St0, Opts) -> {ok,St0}.
+%% chunk(Code, CompInfo) -> {ok,Code}.
 %%  Return a list of instructions to define the chunk function.
 
-chunk(#code{code=C0}=Code, Opts) ->
-    St0 = #c_cg{line=0},
-    {Is,_} = functiondef(C0, St0),
-    luerl_comp:debug_print(Opts, "cg: ~p\n", [Is]),
-    {ok,Code#code{code=Is}}.
+chunk(Code0, #cinfo{vfile=Vfile,opts=Opts}=_Ci) ->
+    St0 = #c_cg{line=0,vfile=Vfile},            %Get the virtual filename
+    {Code1,_} = functiondef(Code0, St0),
+    luerl_comp:debug_print(Opts, "cg: ~p\n", [Code1]),
+    {ok,Code1}.
 
 %% set_var(Var) -> SetIs.
 %% get_var(Var) -> GetIs.
@@ -69,8 +74,8 @@ stmts([], St) -> {[],St}.
 %%  Return currentline instruction and update state if new line.
 
 add_current_line(Line, #c_cg{line=Line}=St) -> {[],St};
-add_current_line(Line, St) ->
-    {[?CURRENT_LINE(Line)],St#c_cg{line=Line}}.
+add_current_line(Line, #c_cg{vfile=Vfile}=St) ->
+    {[?CURRENT_LINE(Line, Vfile)],St#c_cg{line=Line}}.
 
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
@@ -446,13 +451,15 @@ prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
 %%  the local current line to 0 to get correct line numbers inside the
 %%  function. Reset to the original afterwards.
 
-functiondef(#fdef{l=Anno,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz},
-            #c_cg{line=Line}=St0) ->
+functiondef(#fdef{l=Anno0,pars=Ps0,body=Ss,lsz=Lsz,esz=Esz},
+            #c_cg{line=Line,vfile=Vfile}=St0) ->
     St1 = St0#c_cg{line=0},                     %Set current line to 0
+    %% Set the functions file annotation to the virtual file.
+    Anno1 = luerl_anno:set(file, Vfile, Anno0),
     Ps1 = func_pars(Ps0),
     {Iss,St2} = stmts(Ss, St1),
     Iss1 = [?PUSH_ARGS(Ps1)] ++ gen_store(Ps1, Iss ++ [?RETURN(0)]),
-    {[?PUSH_FDEF(Anno,Lsz,Esz,Ps1,Iss1)],St2#c_cg{line=Line}}.
+    {[?PUSH_FDEF(Anno1,Lsz,Esz,Ps1,Iss1)],St2#c_cg{line=Line}}.
 
 func_pars([#evar{n='...',i=I}]) -> -I;	%Tail is index for varargs
 func_pars([#lvar{n='...',i=I}]) -> I;

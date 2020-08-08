@@ -41,9 +41,9 @@ format_error(illegal_varargs) ->
 format_error(assign_mismatch) ->
     "assign mismatch variables and expressions".
 
-%% chunk(Code, Opts) -> {ok,Warnings} | {error,Errors,Warnings}.
+%% chunk(Code, Compinfo) -> {ok,Warnings} | {error,Errors,Warnings}.
 
-chunk(#code{code=Code}, Opts) ->
+chunk(Code, #cinfo{opts=Opts}=_Ci) ->
     St0 = #lint{opts=Opts},
     St1 = functiondef(Code, St0),
     return_status(St1).

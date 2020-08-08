@@ -25,13 +25,13 @@
 
 -export([chunk/2]).
 
-%% chunk(Code, Options) -> {ok,Code} | {error,Reason}.
+%% chunk(Code, CompInfo) -> {ok,Code} | {error,Reason}.
 
-chunk(#code{code=Code0,cst=Cst0}, Opts) ->
+chunk(Code0, #cinfo{opts=Opts}=Ci0) ->
     %% The chunk is a function.
-    {Code1,Cst1} = functiondef(Code0, Cst0),
+    {Code1,_Ci1} = functiondef(Code0, Ci0),
     luerl_comp:debug_print(Opts, "cn: ~p\n", [Code1]),
-    {ok,#code{code=Code1,cst=Cst1}}.
+    {ok,Code1}.
 
 %% stmts([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
 %%     %% Need to split this to handle recursive definitions.
@@ -409,7 +409,7 @@ var_name(L, N) -> #var{l=L,name=N}.
 
 line_file_anno(L, St) ->
     Anno = luerl_anno:new(L),
-    luerl_anno:set(file, St#cst.lfile, Anno).
+    luerl_anno:set(file, St#cinfo.lfile, Anno).
 
 %% set_anno(Ps, Anno) ->
 %%     lists:foldl(fun ({Key,Val}, A) -> luerl_anno:set(Key, Val, A) end,

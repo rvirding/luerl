@@ -14,7 +14,7 @@
 
 %% File    : luerl_comp_env.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
 %% Does variable and stack analysis in the compiler
 
@@ -36,12 +36,13 @@
 		locf				%Local frame
 	      }).
 
-%% chunk(St0) -> {ok,St0};
-chunk(#code{code=C0}=Code, Opts) ->
+%% chunk(Code, CompInfo) -> {ok,Code}.
+
+chunk(Code0, #cinfo{opts=Opts}=_Ci) ->
     St0 = #c_env{},				%Local state
-    {C1,_} = functiondef(C0, St0),
-    luerl_comp:debug_print(Opts, "ce: ~p\n", [C1]),
-    {ok,Code#code{code=C1}}.
+    {Code1,_} = functiondef(Code0, St0),
+    luerl_comp:debug_print(Opts, "ce: ~p\n", [Code1]),
+    {ok,Code1}.
 
 %% alloc_frame(State) -> State.
 %% pop_frame(State) -> State.

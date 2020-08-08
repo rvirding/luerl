@@ -14,7 +14,7 @@
 
 %% File    : luerl_comp_vars.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
 %% Does variable and stack analysis in the compiler
 
@@ -28,10 +28,13 @@
 -import(ordsets, [add_element/2,del_element/2,is_element/2,
 		  union/1,union/2,subtract/2,intersection/2]).
 
-chunk(#code{code=C0}=Code, Opts) ->
-    {C1,_,_,nul} = functiondef(C0, [], nul),	%No local state here!
-    luerl_comp:debug_print(Opts, "cv: ~p\n", [C1]),
-    {ok,Code#code{code=C1}}.
+%% chunk(Code, CompInfo) -> {ok,Code}.
+
+chunk(Code0, #cinfo{opts=Opts}=_Ci) ->
+    %% No local state here!
+    {Code1,_,_,nul} = functiondef(Code0, [], nul),
+    luerl_comp:debug_print(Opts, "cv: ~p\n", [Code1]),
+    {ok,Code1}.
 
 %% stmts(Stmts, VarData, State) ->
 %%     {Stmts,NewVarData,State}.

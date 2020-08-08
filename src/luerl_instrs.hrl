@@ -82,4 +82,4 @@
 
 %% Comment nad line instructiond.
 -define(COMMENT(C), {comment,C}).
--define(CURRENT_LINE(L), {current_line,L}).
+-define(CURRENT_LINE(L, File), {current_line,L,File}).

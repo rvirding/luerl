@@ -14,7 +14,7 @@
 
 %% File    : luerl_emul.erl
 %% Author  : Robert Virding
-%% Purpose : A very basic LUA 5.2 machine emulator.
+%% Purpose : A basic LUA 5.3 machine emulator.
 
 %% First version of emulator. Compiler so far only explicitly handles
 %% local/global variables.
@@ -211,13 +211,14 @@ get_env_var_1(D, I, Env, St) ->
 
 %% load_chunk(FunctionDefCode, State) -> {Function,State}.
 %% load_chunk(FunctionDefCode, Env, State) -> {Function,State}.
-%%  Load a chunk from the compiler which a compilefunction definition
-%%  instructions returning a callable function. Currently it does
-%%  nothing with the state.
+%%  Load a chunk from the compiler which is a compiled function
+%%  definition whose instructions define everything. Return a callable
+%%  function reference which defines everything and a updated Luerl
+%%  state.
 
 load_chunk(Code, St) -> load_chunk(Code, [], St).
 
-load_chunk(#code{code=[Code]}, [], St0) ->
+load_chunk([Code], [], St0) ->
     {?PUSH_FDEF(Funref),_,St1} = load_chunk_i(Code, [], St0),
     {Funref,St1}.
 
@@ -529,8 +530,8 @@ emul_1([?POP_ARGS(Ac)|Is], Cont, Lvs, Stk0, Env, Cs, St) ->
 emul_1([?COMMENT(_)|Is], Cont, Lvs, Stk, Env, Cs, St) ->
     %% This just a comment which is ignored.
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
-emul_1([?CURRENT_LINE(Line)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
-    Cs1 = push_current_line(Cs0, Line),		%Push onto callstack
+emul_1([?CURRENT_LINE(Line,File)|Is], Cont, Lvs, Stk, Env, Cs0, St) ->
+    Cs1 = push_current_line(Cs0, Line, File),	%Push onto callstack
     emul(Is, Cont, Lvs, Stk, Env, Cs1, St);
 emul_1([], [Is|Cont], Lvs, Stk, Env, Cs, St) ->
     emul(Is, Cont, Lvs, Stk, Env, Cs, St);
@@ -645,13 +646,14 @@ find_loop_frame([#loop_frame{}=Bf|Cs], _St) -> {Bf,Cs};
 find_loop_frame(Cs, St) ->
     lua_error({illegal_op,break}, St#luerl{cs=Cs}).
 
-%% push_current_line(CallStack, CurrLine) -> CallStack.
+%% push_current_line(CallStack, CurrLine, FileName) -> CallStack.
 %%  Push the current line info on the stack replacing as existing one
 %%  on the top.
 
-push_current_line([#current_line{}|Cs], Line) ->
-    [#current_line{line=Line}|Cs];
-push_current_line(Cs, Line) -> [#current_line{line=Line}|Cs].
+push_current_line([#current_line{}|Cs], Line, File) ->
+    [#current_line{line=Line,file=File}|Cs];
+push_current_line(Cs, Line, File) ->
+    [#current_line{line=Line,file=File}|Cs].
 
 %% do_fcall(Instrs, LocalVars, Stack, Env, State) -> ReturnFromEmul.
 %%  Pop arg list and function from stack and do call.

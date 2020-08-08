@@ -14,7 +14,7 @@
 
 %% File    : luerl_comp_peep.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
 %% Does peep-hole optimisation in the compiler.
 
@@ -26,13 +26,13 @@
 
 -export([chunk/2]).
 
-%% chunk(St0, Opts) -> {ok,St0}.
+%% chunk(Code, CompInfo) -> {ok,Code}.
 %%  A chunk is now a list of instructions to define the function.
 
-chunk(#code{code=Is0}=Code, Opts) ->
+chunk(Is0, #cinfo{opts=Opts}=_Ci) ->
     Is1 = instrs(Is0, nil),                     %No local state
     luerl_comp:debug_print(Opts, "cp: ~p\n", [Is1]),
-    {ok,Code#code{code=Is1}}.
+    {ok,Is1}.
 
 %% Combining instructions.
 instrs([?PUSH_LIT(L),?GET_KEY|Is], St) ->

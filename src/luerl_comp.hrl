@@ -16,16 +16,12 @@
 %% Author  : Robert Virding
 %% Purpose : Internal LUA 5.2 compiler definitions.
 
-%% The code compile info.
--record(code, {code=none,			%Code
-	       cst=none				%Shared compiler state
-	      }).
+%% Common compiler information
 
-%% Compiler state passed between passes.
-%%  This includes necessary things from the compiler state.
--record(cst, {opts=[],				%Keep the options here as well
-	      lfile=""				%The lua file name
-	     }).
+-record(cinfo, {lfile=[],			%Lua file name
+		vfile=[],			%Virtual file name
+		opts=[]				%Compiler options
+	       }).
 
 %% Some useful macros.
 -define(IF(Test,True,False), case Test of true -> True; false -> False end).

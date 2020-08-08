@@ -61,7 +61,8 @@
 		     is=[],cont=[]		%Instructions, continuation
 		    }).
 %% Current line
--record(current_line, {line			%Line
+-record(current_line, {line,			%Line
+		       file			%File name
 		      }).
 
 %% Data types.

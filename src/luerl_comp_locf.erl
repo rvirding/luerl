@@ -14,7 +14,7 @@
 
 %% File    : luerl_comp_locf.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
 %% Does local function analysis.
 
@@ -28,10 +28,13 @@
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,
 		  subtract/2,intersection/2]).
 
-chunk(#code{code=C0}=Code, Opts) ->
-    {C1,_,nul} = exp(C0, nul),			%No local state here!
-    luerl_comp:debug_print(Opts, "cf: ~p\n", [C1]),
-    {ok,Code#code{code=C1}}.
+%% chunk(Code, CompInfo) ->
+%%     {ok,Code} | {ok,Code,Warnings} | {error,Error}.
+
+chunk(Code0, #cinfo{opts=Opts}=_Ci) ->
+    {Code1,_,nul} = exp(Code0, nul),		%No local state here!
+    luerl_comp:debug_print(Opts, "cf: ~p\n", [Code1]),
+    {ok,Code1}.
 
 %% stmt(Stmts, State) -> {Stmts,LocalFunc,State}.
 

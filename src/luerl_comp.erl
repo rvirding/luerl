@@ -14,7 +14,7 @@
 
 %% File    : luerl_comp.erl
 %% Author  : Robert Virding
-%% Purpose : A basic LUA 5.2 compiler for Luerl.
+%% Purpose : A basic LUA 5.3 compiler for Luerl.
 
 %% This is the main loop of the Luerl compiler. While we can handle
 %% errors in this loop they should never occur as Lua basically allows
@@ -37,63 +37,103 @@
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
--record(comp, {base="",				%Base name
-	       odir=".",			%Output directory
-	       lfile="",			%Lua file
-	       opts=[],				%User options
-	       code=none,			%Code after last pass.
-	       errors=[],
-	       warnings=[]
-	      }).
+%% The main Lua compiler state.
+
+-record(luacomp, {base="",			%Base name
+		  ldir="",			%Lua file dir
+		  lfile="",			%Lua file
+		  odir=".",			%Output directory
+		  opts=[],			%User options
+		  code=none,			%Code after last pass.
+		  cinfo=none,			%Common compiler info
+		  errors=[],
+		  warnings=[]
+		 }).
 
 -define(NOFILE, "-no-file-").
+
+%% file(Name) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
+%% file(Name, Options) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
 file(Name) -> file(Name, [verbose,report]).
 
 file(Name, Opts) ->
-    St0 = #comp{opts=Opts},
+    St0 = #luacomp{opts=Opts},
     St1 = filenames(Name, St0),
-    compile(file_passes(), St1).
+    do_compile(file_passes(), St1).
 
-%% filenames(File, State) -> State.
-%%  The default output dir is the current directory unless an
-%%  explicit one has been given in the options.
-
-filenames(?NOFILE, St) -> St#comp{lfile=?NOFILE};
-filenames(File, St) ->
-    %% Test for explicit outdir.
-    Odir = case keysearch(outdir, 1, St#comp.opts) of
-	       {value,{outdir,D}} -> D;
-	       false -> "."
-	   end,
-    Dir = filename:dirname(File),
-    Base = filename:basename(File, ".lua"),
-    Lfile = filename:join(Dir, Base ++ ".lua"),
-    St#comp{base=Base,
-	    lfile=Lfile,
-	    odir=Odir}.
+%% string(String) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
+%% string(String, Options) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
 string(Str) -> string(Str, [verbose,report]).
 
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
-    St0 = #comp{opts=Opts,code=Str},
+    St0 = #luacomp{opts=Opts,code=Str},
     St1 = filenames(?NOFILE, St0),
-    compile(list_passes(), St1).
+    do_compile(list_passes(), St1).
+
+%% forms(Forms) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
+%% forms(Forms, Options) ->
+%%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
 forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
-    St0 = #comp{opts=Opts,code=Forms},
+    St0 = #luacomp{opts=Opts,code=Forms},
     St1 = filenames(?NOFILE, St0),
-    compile(forms_passes(), St1).
+    do_compile(forms_passes(), St1).
 
-compile(Ps, St0) ->
-    case do_passes(Ps, St0) of
-	{ok,St1} -> do_ok_return(St1);
-	{error, St1} -> do_error_return(St1)
+do_compile(Ps, St0) ->
+    %% The compiler state already contains the filenames.
+    Cinfo = compiler_info(St0),                 %The compiler info
+    St1 = St0#luacomp{cinfo=Cinfo},
+    case do_passes(Ps, St1) of
+        {ok,St2} -> do_ok_return(St2);
+        {error, St2} -> do_error_return(St2)
     end.
+
+%% filenames(File, State) -> State.
+%%  The default output dir is the current directory unless an
+%%  explicit one has been given in the options.
+
+filenames(?NOFILE, St) -> St#luacomp{lfile=?NOFILE};
+filenames(File, St) ->
+    Suffix = ".lua",
+    %% Test for explicit outdir.
+    Odir = prop(outdir, St#luacomp.opts, "."),
+    Ldir = filename:dirname(File),
+    Base = filename:basename(File, Suffix),
+    Lfile = luafile(Ldir, Base, Suffix),
+    St#luacomp{base=Base,
+	       ldir=Ldir,
+	       lfile=Lfile,
+	       odir=Odir}.
+
+luafile(".", Base, Suffix) -> Base ++ Suffix;
+luafile(Dir, Base, Suffix) ->
+    filename:join(Dir, Base ++ Suffix).
+
+%% prop(Key, PropList, Default) -> Value | Default.
+%%  Find Key, Val from PropList else Default.
+
+prop(Key, [{Key,Val}|_], _Def) -> Val;
+prop(Key, [_|Plist], Def) ->  prop(Key, Plist, Def);
+prop(_Key, [], Def) -> Def.
+
+%% compiler_info(State) -> CompInfo.
+%%  Initialse the #cinfo record passed into all compiler passes.
+
+compiler_info(#luacomp{lfile=F,opts=Opts}) ->
+    %% The file option may get a binary so we are helpful.
+    Vfile = iolist_to_binary(prop(file, Opts, F)),
+    #cinfo{lfile=F,vfile=Vfile,opts=Opts}.
 
 %% file_passes() -> [Pass].
 %% list_passes() -> [Pass].
@@ -139,12 +179,12 @@ do_passes([{do,Fun}|Ps], St0) ->
 	{error,St1} -> {error,St1}
     end;
 do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
-    case member(Flag, St#comp.opts) of
+    case member(Flag, St#luacomp.opts) of
 	true -> do_passes([Cmd|Ps], St);
 	false -> do_passes(Ps, St)
     end;
 do_passes([{unless_flag,Flag,Cmd}|Ps], St) ->
-    case member(Flag, St#comp.opts) of
+    case member(Flag, St#luacomp.opts) of
 	true -> do_passes(Ps, St);
 	false -> do_passes([Cmd|Ps], St)
     end;
@@ -164,7 +204,7 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#comp{lfile=Name,opts=Opts}=St) ->
+do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
     case file:open(Name, [read]) of
 	{ok,F} ->
@@ -179,77 +219,73 @@ do_read_file(#comp{lfile=Name,opts=Opts}=St) ->
 	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
 		      {ok,Ts,_} ->
 			  debug_print(Opts, "scan: ~p\n", [Ts]),
-			  {ok,St#comp{code=Ts}};
-		      {error,E,L} -> {error,St#comp{errors=[{L,io,E}]}}
+			  {ok,St#luacomp{code=Ts}};
+		      {error,E,L} -> {error,St#luacomp{errors=[{L,io,E}]}}
 		  end,
 	    file:close(F),
 	    Ret;
-	{error,E} -> {error,St#comp{errors=[{none,file,E}]}}
+	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#comp{code=Str,opts=Opts}=St) ->
+do_scan(#luacomp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
 	{ok,Ts,_} ->
 	    debug_print(Opts, "scan: ~p\n", [Ts]),
-	    {ok,St#comp{code=Ts}};
-	{error,E,_} -> {error,St#comp{errors=[E]}}
+	    {ok,St#luacomp{code=Ts}};
+	{error,E,_} -> {error,St#luacomp{errors=[E]}}
     end.
 
-do_parse(#comp{code=Ts,opts=Opts}=St) ->
+do_parse(#luacomp{code=Ts,opts=Opts}=St) ->
     case luerl_parse:chunk(Ts) of
 	{ok,Chunk} ->
 	    debug_print(Opts, "parse: ~p\n", [Chunk]),
-	    {ok,St#comp{code=Chunk}};
-	{error,E} -> {error,St#comp{errors=[E]}}
+	    {ok,St#luacomp{code=Chunk}};
+	{error,E} -> {error,St#luacomp{errors=[E]}}
     end.
 
-do_init_comp(#comp{}=St) ->
-    %% Initialise the compiler state.
-    Cst = #cst{opts=St#comp.opts,
-	       lfile=list_to_binary(St#comp.lfile)},
-    %% The code now includes compiler state.
-    C1 = #code{code=St#comp.code,cst=Cst},
-    {ok,St#comp{code=C1}}.
+do_init_comp(#luacomp{}=St) ->
+    %% Nothing to do here now.
+    {ok,St}.
 
-do_comp_normalise(#comp{code=C0,opts=Opts}=St) ->
-    {ok,C1} = luerl_comp_normalise:chunk(C0, Opts),
-    {ok,St#comp{code=C1}}.
+do_comp_normalise(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+    {ok,Code1} = luerl_comp_normalise:chunk(Code0, Cinfo),
+    {ok,St#luacomp{code=Code1}}.
 
-do_comp_lint(St) ->
-    case luerl_comp_lint:chunk(St#comp.code, St#comp.opts) of
-	{ok,Ws} -> {ok,St#comp{warnings=Ws}};
-	{error,Es,Ws} -> {error,St#comp{errors=Es,warnings=Ws}}
+do_comp_lint(#luacomp{code=Code,cinfo=Cinfo}=St) ->
+    case luerl_comp_lint:chunk(Code, Cinfo) of
+	{ok,Ws} -> {ok,St#luacomp{warnings=Ws}};
+	{error,Es,Ws} -> {error,St#luacomp{errors=Es,warnings=Ws}}
     end.
 
-do_comp_vars(St) ->
-    {ok,C1} = luerl_comp_vars:chunk(St#comp.code, St#comp.opts),
-    {ok,St#comp{code=C1}}.
+do_comp_vars(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+    {ok,Code1} = luerl_comp_vars:chunk(Code0, Cinfo),
+    {ok,St#luacomp{code=Code1}}.
 
-%% do_comp_locf(St) ->
-%%     case luerl_comp_locf:chunk(St#comp.code, St#comp.opts) of
-%% 	{ok,C1} -> {ok,St#comp{code=C1}};
-%% 	{ok,C1,Ws} -> {ok,St#comp{code=C1,warnings=Ws}};
-%% 	{error,Es} -> {error,St#comp{errors=Es}}
+%% do_comp_locf(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+%%     case luerl_comp_locf:chunk(Code0, Cinfo) of
+%%         {ok,Code1} -> {ok,St#luacomp{code=Code1}};
+%%         {ok,Code1,Ws} -> {ok,St#luacomp{code=Code1,warnings=Ws}};
+%%         {error,Es} -> {error,St#luacomp{errors=Es}}
 %%     end.
 
-do_comp_env(St) ->
-    {ok,C1} = luerl_comp_env:chunk(St#comp.code, St#comp.opts),
-    {ok,St#comp{code=C1}}.
+do_comp_env(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+    {ok,Code1} = luerl_comp_env:chunk(Code0, Cinfo),
+    {ok,St#luacomp{code=Code1}}.
 
-do_code_gen(St) ->
-    {ok,C1} = luerl_comp_cg:chunk(St#comp.code, St#comp.opts),
-    {ok,St#comp{code=C1}}.
+do_code_gen(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+    {ok,Code1} = luerl_comp_cg:chunk(Code0, Cinfo),
+    {ok,St#luacomp{code=Code1}}.
 
-do_peep_op(St) ->
-    {ok,C1} = luerl_comp_peep:chunk(St#comp.code, St#comp.opts),
-    {ok,St#comp{code=C1}}.
+do_peep_op(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
+    {ok,Code1} = luerl_comp_peep:chunk(Code0, Cinfo),
+    {ok,St#luacomp{code=Code1}}.
 
-do_ok_return(#comp{lfile=Lfile,opts=Opts,code=C,warnings=Ws}) ->
+do_ok_return(#luacomp{lfile=Lfile,opts=Opts,code=C,warnings=Ws}) ->
     Report = lists:member(report, Opts),
     ?IF(Report, list_warnings(Lfile, Ws), ok),
     {ok,C}.
 
-do_error_return(#comp{lfile=Lfile,opts=Opts,errors=Es,warnings=Ws}) ->
+do_error_return(#luacomp{lfile=Lfile,opts=Opts,errors=Es,warnings=Ws}) ->
     Report = lists:member(report, Opts),
     Return = lists:member(return, Opts),
     ?IF(Report, begin list_errors(Lfile, Es), list_warnings(Lfile, Ws) end, ok),
