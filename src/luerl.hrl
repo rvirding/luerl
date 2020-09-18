@@ -73,7 +73,7 @@
 -record(table, {a,d=[],meta=nil}).		%Table type, array, dict, meta
 
 -record(eref, {i}).				%Environment reference, index
--define(IS_EREF(E), is_record(E, eref).
+-define(IS_EREF(E), is_record(E, eref)).
 
 -record(usdref, {i}).                           %Userdata reference, index
 -define(IS_USDREF(U), is_record(U, usdref)).
