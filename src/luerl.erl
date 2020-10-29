@@ -39,7 +39,8 @@ eval(Chunk, St0) ->
     try do(Chunk, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R:S -> {error,R,S} % {error, {E, R}} ? <- todo: decide
+	?CATCH(_C, E, S)
+	    {error, E, S}               %{error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:evalfile(Path, State) -> {ok, Result} | {error,Reason}.
@@ -48,7 +49,8 @@ evalfile(Path, St0) ->
     try dofile(Path, St0) of
         {Ret,St1} -> {ok, decode_list(Ret, St1)}
     catch
-         _E:R:S -> {error, R, S} % {error, {E, R}} ? <- todo: decide
+	?CATCH(_C, E, S)
+	    {error, E, S}               %{error, {E, R}} ? <- todo: decide
     end.
 
 %% luerl:do(String|Binary|Form, State) -> {Result, NewState}

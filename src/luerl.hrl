@@ -193,3 +193,10 @@
 	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
 		  Acc, E)).
 -endif.
+
+%% Define CATCH to handle deprecated get_stacktrace/0
+-ifdef(NEW_STACKTRACE).
+-define(CATCH(C, E, S), C:E:S ->).
+-else.
+-define(CATCH(C, E, S), C:E -> S = erlang:get_stacktrace(),).
+-endif.
