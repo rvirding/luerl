@@ -29,9 +29,10 @@
 
 %% External interface.
 -export([alloc_table/1,alloc_table/2,free_table/2,
-         get_table/2,set_table/3,
+         get_table/2,set_table/3,upd_table/3,
          get_global_key/2,set_global_key/3,
          get_table_key/3,set_table_key/4,
+         raw_get_table_key/3,raw_set_table_key/4,
          alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
          alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
          alloc_environment/2,get_env_var/3,set_env_var/4,
@@ -51,17 +52,48 @@ init() ->
 
 init_tables(St) ->
     %% Initialise the table handling.
-    Tst = init_table(),
+    Tst = init_tstruct(),
     %% Initialise the environment handling.
-    Est = init_table(),
+    Est = init_tstruct(),
     %% Initialise the userdata handling.
-    Ust = init_table(),
+    Ust = init_tstruct(),
     %% Initialise the function def handling.
-    Fst = init_table(),
+    Fst = init_tstruct(),
     St#luerl{tabs=Tst,envs=Est,usds=Ust,fncs=Fst}.
 
-init_table() ->
+%% init_tstruct() -> #tstruct{}.
+%% alloc_tstruct(Val, #tstruct{}) -> {Index,#tstruct{}}.
+%% set_tstruct(Index, Val, #tstruct{}) -> #tstruct{}.
+%% upd_tstruct(Index, UpdFun, #tstruct{}) -> #tstruct{}.
+%% del_tstruct(Index, #tstruct{}) -> #tstruct{}.
+%%
+%%  Functions for accessing tstructs.
+
+init_tstruct() ->
     #tstruct{data=?MAKE_TABLE(),free=[],next=0}.
+
+alloc_tstruct(Val, #tstruct{data=D0,free=[N|Ns]}=Tstr) ->
+    D1 = ?SET_TABLE(N, Val, D0),
+    {N,Tstr#tstruct{data=D1,free=Ns}};
+alloc_tstruct(Val, #tstruct{data=D0,free=[],next=N}=Tstr) ->
+    D1 = ?SET_TABLE(N, Val, D0),
+    {N,Tstr#tstruct{data=D1,next=N+1}}.
+
+set_tstruct(N, Val, #tstruct{data=D0}=Tstr) ->
+    D1 = ?SET_TABLE(N, Val, D0),
+    Tstr#tstruct{data=D1}.
+
+upd_tstruct(N, Upd, #tstruct{data=D0}=Tstr) ->
+    D1 = ?UPD_TABLE(N, Upd, D0),
+    Tstr#tstruct{data=D1}.
+
+del_tstruct(N, #tstruct{data=D0,free=Ns}=Tstr) ->
+    D1 = ?DEL_TABLE(N, D0),
+    Tstr#tstruct{data=D1,free=[N|Ns]}.
+
+-compile({inline,[get_tstruct/2]}).             %Such a simple function
+get_tstruct(N, Tstr) ->
+    ?GET_TABLE(N, Tstr#tstruct.data).
 
 %% alloc_table(State) -> {Tref,State}
 %%
@@ -76,19 +108,8 @@ alloc_table(St) -> alloc_table([], St).
 
 alloc_table(Itab, #luerl{tabs=Tst0}=St) ->
     Tab = create_table(Itab),
-    {Tref,Tst1} = alloc_table_tab(Tab, Tst0),
-    {Tref,St#luerl{tabs=Tst1}}.
-
-alloc_table_tab(Tab, #tstruct{data=Ts0,free=[N|Ns]}=Tst0) ->
-    %% io:fwrite("it1: ~p\n", [{N,Tab}]),
-    Ts1 = ?SET_TABLE(N, Tab, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,free=Ns},
-    {#tref{i=N},Tst1};
-alloc_table_tab(Tab, #tstruct{data=Ts0,free=[],next=N}=Tst0) ->
-    %% io:fwrite("it2: ~p\n", [{N,Tab}]),
-    Ts1 = ?SET_TABLE(N, Tab, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,next=N+1},
-    {#tref{i=N},Tst1}.
+    {N,Tst1} = alloc_tstruct(Tab, Tst0),
+    {#tref{i=N},St#luerl{tabs=Tst1}}.
 
 create_table(Itab) ->
     D0 = ttdict:new(),
@@ -110,28 +131,33 @@ create_table(Itab) ->
 %%
 %% Delete a table freeing its space.
 
-free_table(#tref{i=N}, #luerl{tabs=#tstruct{data=Ts0,free=Ns}=Tst0}=St) ->
-    %% io:fwrite("ft: ~p\n", [{N,?GET_TABLE(N, Ts0)}]),
-    Ts1 = ?DEL_TABLE(N, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1,free=[N|Ns]},
+free_table(#tref{i=N}, #luerl{tabs=Tst0}=St) ->
+    Tst1 = del_tstruct(N, Tst0),
     St#luerl{tabs=Tst1}.
-
-%% set_table(Tref, Table, State) -> State
-%%
-%% Set a new table at the location referred to by Tref
-%% overwriting the existing one.
-
-set_table(#tref{i=N}, Tab, #luerl{tabs=Tst}=St) ->
-    Ts0 = Tst#tstruct.data,
-    Ts1 = ?SET_TABLE(N, Tab, Ts0),
-    St#luerl{tabs=Tst#tstruct{data=Ts1}}.
 
 %% get_table(Tref, State) -> Table
 %%
 %% Get the table referred to by Tref.
 
 get_table(#tref{i=N}, #luerl{tabs=Tst}) ->
-    ?GET_TABLE(N, Tst#tstruct.data).
+    get_tstruct(N, Tst).
+
+%% set_table(Tref, Table, State) -> State
+%%
+%% Set a new table at the location referred to by Tref
+%% overwriting the existing one.
+
+set_table(#tref{i=N}, Tab, #luerl{tabs=Tst0}=St) ->
+    Tst1 = set_tstruct(N, Tab, Tst0),
+    St#luerl{tabs=Tst1}.
+
+%% upd_table(Tref, Fun, State) -> State
+%%
+%% Update the table at the location referred to by Tref.
+
+upd_table(#tref{i=N}, Upd, #luerl{tabs=Tst0}=St) ->
+    Tst1 = upd_tstruct(N, Upd, Tst0),
+    St#luerl{tabs=Tst1}.
 
 %% set_global_key(Key, Value, State) ->
 %%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}
@@ -248,13 +274,13 @@ get_table_key(Tab, Key, St) ->                  %Just find the metamethod
             get_table_key(Meth, Key, St)
     end.
 
-get_table_key_key(#tref{i=N}=T, Key, #luerl{tabs=#tstruct{data=Ts}}=St) ->
+get_table_key_key(#tref{i=N}=Tab, Key, #luerl{tabs=#tstruct{data=Ts}}=St) ->
     #table{d=Dict,meta=Meta} = ?GET_TABLE(N, Ts),
     case ttdict:find(Key, Dict) of
         {ok,Val} -> {value,Val,St};
         error ->
             %% Key not present so try metamethod
-            get_table_key_metamethod(T, Meta, Key, Ts, St)
+            get_table_key_metamethod(Tab, Meta, Key, Ts, St)
     end.
 
 get_table_key_int(#tref{i=N}=T, Key, I, #luerl{tabs=#tstruct{data=Ts}}=St) ->
@@ -266,14 +292,75 @@ get_table_key_int(#tref{i=N}=T, Key, I, #luerl{tabs=#tstruct{data=Ts}}=St) ->
         Val -> {value,Val,St}
     end.
 
-get_table_key_metamethod(T, Meta, Key, Ts, St) ->
+get_table_key_metamethod(Tab, Meta, Key, Ts, St) ->
     case get_metamethod_tab(Meta, <<"__index">>, Ts) of
         nil -> {value,nil,St};
         Meth when ?IS_FUNCTION(Meth) ->
-            {meta,Meth,[T,Key],St};
+            {meta,Meth,[Tab,Key],St};
         Meth ->                         %Recurse down the metatable
             get_table_key(Meth, Key, St)
     end.
+
+%% raw_get_table_key(Table, Key, State) -> Value.
+%% raw_set_table_key(Table, Key, Value, State) -> State.
+%%
+%% Get/set key values in tables without metamethods.
+
+raw_get_table_key(#tref{i=N}, Key, #luerl{tabs=Tst})
+  when is_integer(Key), Key >= 1 ->
+    raw_get_table_key_int(N, Key, Tst);
+raw_get_table_key(#tref{i=N}, Key, #luerl{tabs=Tst})
+  when is_float(Key) ->
+    case ?IS_FLOAT_INT(Key, I) of
+        true when I >= 1 ->
+            raw_get_table_key_int(N, I, Tst);
+        _NegFalse ->
+            raw_get_table_key_key(N, Key, Tst)
+    end;
+raw_get_table_key(#tref{i=N}, Key, #luerl{tabs=Tst}) ->
+    raw_get_table_key_key(N, Key, Tst).
+
+raw_get_table_key_key(N, Key, Tst) ->
+    #table{d=Dict} = get_tstruct(N, Tst),
+    case ttdict:find(Key, Dict) of
+        {ok,Val} -> Val;
+        error -> nil
+    end.
+
+raw_get_table_key_int(N, Key, Tst) ->
+    #table{a=Arr} = get_tstruct(N, Tst),
+    array:get(Key, Arr).
+
+raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St)
+  when is_integer(Key), Key >= 1 ->
+    Tst1 = raw_set_table_key_int(Tref, Key, Val, Tst0),
+    St#luerl{tabs=Tst1};
+raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St)
+  when is_float(Key) ->
+    Tst1 = case ?IS_FLOAT_INT(Key, I) of
+               true when I >= 1 ->
+                   raw_set_table_key_int(Tref, I, Val, Tst0);
+               _NegFalse ->
+                   raw_set_table_key_key(Tref, Key, Val, Tst0)
+           end,
+    St#luerl{tabs=Tst1}.
+
+raw_set_table_key_key(#tref{i=N}, Key, Val, Tst0) ->
+    Fun = fun (#table{d=Dict0}=Tab) ->
+                  Dict1 = if Val =:= nil -> ttdict:erase(Key, Dict0);
+                             true -> ttdict:store(Key, Val, Dict0)
+                          end,
+                  Tab#table{d=Dict1}
+          end,
+    upd_tstruct(N, Fun, Tst0).
+
+raw_set_table_key_int(#tref{i=N}, Key, Val, Tst0) ->
+    Fun = fun (#table{a=Arr0}=Tab) ->
+                  %% Default array value is nil.
+                  Arr1 = array:set(Key, Val, Arr0),
+                  Tab#table{a=Arr1}
+          end,
+    upd_tstruct(N, Fun, Tst0).
 
 %% alloc_userdata(Data, State) -> {Usdref,State}
 %%
@@ -286,66 +373,51 @@ alloc_userdata(Data, St) ->
 %%
 %% Allocate userdata setting its metadata.
 
-alloc_userdata(Data, Meta, #luerl{usds=Ust}=St) ->
-    alloc_userdata_map(Data, Meta, St, Ust).
-
-alloc_userdata_map(Data, Meta, St, #tstruct{data=Us0,free=[N|Ns]}=Ust0) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    Ust1 = Ust0#tstruct{data=Us1,free=Ns},
-    {#usdref{i=N},St#luerl{usds=Ust1}};
-alloc_userdata_map(Data, Meta, St, #tstruct{data=Us0,free=[],next=N}=Ust0) ->
-    Us1 = ?SET_TABLE(N, #userdata{d=Data,meta=Meta}, Us0),
-    Ust1 = Ust0#tstruct{data=Us1,next=N+1},
+alloc_userdata(Data, Meta, #luerl{usds=Ust0}=St) ->
+    Ud = #userdata{d=Data,meta=Meta},
+    {N,Ust1} = alloc_tstruct(Ud, Ust0),
     {#usdref{i=N},St#luerl{usds=Ust1}}.
-
-%% set_userdata(Usdref, UserData, State) -> State
-%%
-%% Set the data in the userdata.
-
-set_userdata(#usdref{i=N}, Data, #luerl{usds=#tstruct{data=Us0}=Ust}=St) ->
-    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{d=Data} end, Us0),
-    St#luerl{usds=Ust#tstruct{data=Us1}}.
 
 %% get_userdata(Usdref, State) -> {UserData,State}
 %%
 %% Get the userdata data.
 
-get_userdata(#usdref{i=N}, #luerl{usds=#tstruct{data=Us}}=St) ->
-    #userdata{} = Udata = ?GET_TABLE(N, Us),
+get_userdata(#usdref{i=N}, #luerl{usds=Ust}=St) ->
+    #userdata{} = Udata = get_tstruct(N, Ust),
     {Udata,St}.
+
+%% set_userdata(Usdref, UserData, State) -> State
+%%
+%% Set the data in the userdata.
+
+set_userdata(#usdref{i=N}, Data, #luerl{usds=Ust0}=St) ->
+    Ust1 = upd_tstruct(N, fun (Ud) -> Ud#userdata{d=Data} end, Ust0),
+    St#luerl{usds=Ust1}.
 
 %% make_userdata(Data) -> make_userdata(Data, nil).
 %% make_userdata(Data, Meta) -> #userdata{d=Data,meta=Meta}.
 
 %% alloc_funcdef(Def, State) -> {FunRef,State}
 
-alloc_funcdef(Func, #luerl{fncs=Fst}=St) ->
-    alloc_funcdef(Func, St, Fst).
-
-alloc_funcdef(Func, St, #tstruct{data=Fs0,free=[N|Ns]}=Fst0) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    Fst1 = Fst0#tstruct{data=Fs1,free=Ns},
-    {#funref{i=N},St#luerl{fncs=Fst1}};
-alloc_funcdef(Func, St, #tstruct{data=Fs0,free=[],next=N}=Fst0) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    Fst1 = Fst0#tstruct{data=Fs1,next=N+1},
+alloc_funcdef(Func, #luerl{fncs=Fst0}=St) ->
+    {N,Fst1} = alloc_tstruct(Func, Fst0),
     {#funref{i=N},St#luerl{fncs=Fst1}}.
-
-%% set_funcdef(Funref, Fdef, State) -> State.
-%%
-%% Set the function data referred to by Fref.
-
-set_funcdef(#funref{i=N}, Func, #luerl{fncs=#tstruct{data=Fs0}=Fst}=St) ->
-    Fs1 = ?SET_TABLE(N, Func, Fs0),
-    St#luerl{fncs=Fst#tstruct{data=Fs1}}.
 
 %% get_funcdef(Funref, State) -> {Fdef,State}
 %%
 %% Get the function data referred to by Fref.
 
-get_funcdef(#funref{i=N}, #luerl{fncs=#tstruct{data=Fs}}=St) ->
-    Fdef = ?GET_TABLE(N, Fs),
+get_funcdef(#funref{i=N}, #luerl{fncs=Fst}=St) ->
+    Fdef = get_tstruct(N, Fst),
     {Fdef,St}.
+
+%% set_funcdef(Funref, Fdef, State) -> State.
+%%
+%% Set the function data referred to by Fref.
+
+set_funcdef(#funref{i=N}, Func, #luerl{fncs=Fst0}=St) ->
+    Fst1 = set_tstruct(N, Func, Fst0),
+    St#luerl{fncs=Fst1}.
 
 %% get_metamethod(Object1, Object2, Event, State) -> Method | nil
 %%
@@ -373,10 +445,10 @@ get_metamethod_tab(_, _, _) -> nil.             %Other types have no metatables
 %%
 %% Get the metatable of an object or its type metatable.
 
-get_metatable(#tref{i=T}, #luerl{tabs=#tstruct{data=Ts}}) ->
-    (?GET_TABLE(T, Ts))#table.meta;
-get_metatable(#usdref{i=U}, #luerl{usds=#tstruct{data=Us}}) ->
-    (?GET_TABLE(U, Us))#userdata.meta;
+get_metatable(#tref{i=T}, #luerl{tabs=Tst}) ->
+    (get_tstruct(T, Tst))#table.meta;
+get_metatable(#usdref{i=U}, #luerl{usds=Ust}) ->
+    (get_tstruct(U, Ust))#userdata.meta;
 get_metatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
 get_metatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
     Meta#meta.boolean;
@@ -391,14 +463,10 @@ get_metatable(_, _) -> nil.                     %Other types have no metatables
 %% Set the metatable of an object or its type metatable.
 
 set_metatable(#tref{i=N}, M, #luerl{tabs=Tst0}=St) ->
-    Ts0 = Tst0#tstruct.data,
-    Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end, Ts0),
-    Tst1 = Tst0#tstruct{data=Ts1},
+    Tst1 = upd_tstruct(N, fun (Tab) -> Tab#table{meta=M} end, Tst0),
     St#luerl{tabs=Tst1};
 set_metatable(#usdref{i=N}, M, #luerl{usds=Ust0}=St) ->
-    Us0 = Ust0#tstruct.data,
-    Us1 = ?UPD_TABLE(N, fun (Ud) -> Ud#userdata{meta=M} end, Us0),
-    Ust1 = Ust0#tstruct{data=Us1},
+    Ust1 = upd_tstruct(N, fun (Ud) -> Ud#userdata{meta=M} end, Ust0),
     St#luerl{usds=Ust1};
 set_metatable(nil, M, #luerl{meta=Meta0}=St) ->
     Meta1 = Meta0#meta{nil=M},
@@ -420,24 +488,18 @@ set_metatable(_, _, St) ->                      %Do nothing for the rest
 %% Allocate the environment in the environemnt table and return
 %% its eref.
 
-alloc_environment(Size, #luerl{envs=Etab0}=St) ->
+alloc_environment(Size, #luerl{envs=Est0}=St) ->
     Fr = erlang:make_tuple(Size, nil),
-    {Eref,Etab1} = alloc_environment_tab(Fr, Etab0),
-    {Eref,St#luerl{envs=Etab1}}.
+    {N,Est1} = alloc_tstruct(Fr, Est0),
+    {#eref{i=N},St#luerl{envs=Est1}}.
 
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[N|Ns]}=Etab) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Etab#tstruct{data=Es1,free=Ns}};
-alloc_environment_tab(Fr, #tstruct{data=Es0,free=[],next=N}=Etab) ->
-    Es1 = ?SET_TABLE(N, Fr, Es0),
-    {#eref{i=N},Etab#tstruct{data=Es1,next=N+1}}.
-
-%% set_env_var(Eref, Index, Val, State) -> State.
 %% get_env_var(Eref, Index, State) -> Value.
-
-set_env_var(#eref{i=N}, Index, Val, #luerl{envs=#tstruct{data=Es0}=Etab}=St) ->
-    Es1 = ?UPD_TABLE(N, fun (Fr) -> setelement(Index, Fr, Val) end, Es0),
-    St#luerl{envs=Etab#tstruct{data=Es1}}.
+%% set_env_var(Eref, Index, Val, State) -> State.
 
 get_env_var(#eref{i=N}, Index, #luerl{envs=Etab}) ->
-    element(Index, ?GET_TABLE(N, Etab#tstruct.data)).
+    element(Index, get_tstruct(N, Etab)).
+%%     element(Index, ?GET_TABLE(N, Etab#tstruct.data)).
+
+set_env_var(#eref{i=N}, Index, Val, #luerl{envs=Est0}=St) ->
+    Est1 = upd_tstruct(N, fun (Fr) -> setelement(Index, Fr, Val) end, Est0),
+    St#luerl{envs=Est1}.
