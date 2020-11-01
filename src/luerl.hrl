@@ -36,8 +36,10 @@
 	       }).
 
 %% Table structure.
--record(tstruct, {data,free,next		%Data, free list, next index
-		 }).
+-record(tstruct, {data,                         %Data table/array
+                  free,                         %Index free list
+                  next                          %Next index
+                 }).
 
 %% Metatables for atomic datatypes.
 
