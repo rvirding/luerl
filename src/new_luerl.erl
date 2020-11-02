@@ -38,7 +38,8 @@ init() ->
     luerl_emul:init().
 
 %% gc(State) -> State.
-gc(St) -> luerl_emul:gc(St).
+gc(St) ->
+    luerl_heap:gc(St).
 
 %% load(String|Binary, State) -> {ok,FuncRef,NewState}.
 %% load(String|Binary, Options, State) -> {ok,FuncRef,NewState}.

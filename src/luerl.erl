@@ -249,10 +249,11 @@ set_table1(Tab, Key, Lv, St) ->
 
 %% stop(State) -> GCedState.
 stop(St) ->
-    luerl_emul:gc(St).
+    luerl_heap:gc(St).
 
 %% gc(State) -> State.
-gc(St) -> luerl_emul:gc(St).
+gc(St) ->
+    luerl_heap:gc(St).
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).

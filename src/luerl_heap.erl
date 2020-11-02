@@ -28,7 +28,8 @@
 -export([init/0]).
 
 %% External interface.
--export([alloc_table/1,alloc_table/2,free_table/2,
+-export([gc/1,
+         alloc_table/1,alloc_table/2,free_table/2,
          get_table/2,set_table/3,upd_table/3,
          get_global_key/2,set_global_key/3,
          get_table_key/3,set_table_key/4,
@@ -503,3 +504,171 @@ get_env_var(#eref{i=N}, Index, #luerl{envs=Etab}) ->
 set_env_var(#eref{i=N}, Index, Val, #luerl{envs=Est0}=St) ->
     Est1 = upd_tstruct(N, fun (Fr) -> setelement(Index, Fr, Val) end, Est0),
     St#luerl{envs=Est1}.
+
+%% gc(State) -> State.
+%%  The garbage collector. Its main job is to reclaim unused tables
+%%  and frames. It is a mark/sweep collector which passes over all
+%%  objects and marks tables and frames which it has seen. All unseen
+%%  tables and frames are then freed and their indexes added to the
+%%  free lists.
+
+-record(gct, {t,s}).                            %Gc table info table, seen
+
+gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
+          envs=#tstruct{data=Et0,free=Ef0}=Env0,
+          usds=#tstruct{data=Ut0,free=Uf0}=Usd0,
+          fncs=#tstruct{data=Ft0,free=Ff0}=Fnc0,
+          g=G,stk=Stk,cs=Cs,meta=Meta}=St) ->
+    %% The root set consisting of global table and stack.
+    Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
+            G|Stk],
+    %% Mark all seen tables and frames, i.e. return them.
+    GcT = #gct{t=Tt0,s=[]},
+    GcE = #gct{t=Et0,s=[]},
+    GcU = #gct{t=Ut0,s=[]},
+    GcF = #gct{t=Ft0,s=[]},
+    {SeenT,SeenE,SeenU,SeenF} = mark(Root, [Cs], GcT, GcE, GcU, GcF),
+    %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
+    %% Free unseen tables and add freed to free list.
+    {Tf1,Tt1} = filter_tables(SeenT, Tf0, Tt0),
+    {Ef1,Et1} = filter_environment(SeenE, Ef0, Et0),
+    {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
+    {Ff1,Ft1} = filter_funcdefs(SeenF, Ff0, Ft0),
+    Tab1 = Tab0#tstruct{data=Tt1,free=Tf1},
+    Env1 = Env0#tstruct{data=Et1,free=Ef1},
+    Usd1 = Usd0#tstruct{data=Ut1,free=Uf1},
+    Fnc1 = Fnc0#tstruct{data=Ft1,free=Ff1},
+    St#luerl{tabs=Tab1,envs=Env1,usds=Usd1,fncs=Fnc1}.
+
+%% mark(ToDo, MoreTodo, GcTabs, GcEnv, GcUserdata, GcFuncdefs) ->
+%%     {SeenTabs,SeenFrames,SeenUserdata,SeenFuncdefs}.
+%% Scan over all live objects and mark seen tables by adding them to
+%% the seen list.
+
+mark([{in_table,_}=_T|Todo], More, GcT, GcE, GcU, GcF) ->
+    %%io:format("gc: ~p\n", [_T]),
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
+    case ordsets:is_element(T, Ts0) of
+        true ->                                 %Already done
+            mark(Todo, More, GcT, GcE, GcU, GcF);
+        false ->                                %Mark it and add to todo
+            Ts1 = ordsets:add_element(T, Ts0),
+            #table{a=Arr,d=Dict,meta=Meta} = ?GET_TABLE(T, Tt),
+            %% Have to be careful when adding Tab and Meta as Tab is
+            %% [{Key,Val}], Arr is array and Meta is
+            %% nil|#tref{i=M}. We want lists.
+            Aes = array:sparse_to_list(Arr),
+            Des = ttdict:to_list(Dict),
+            mark([Meta|Todo], [[{in_table,T}],Des,Aes,[{in_table,-T}]|More],
+                 GcT#gct{s=Ts1}, GcE, GcU, GcF)
+    end;
+mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
+    case ordsets:is_element(F, Es0) of
+        true ->                                 %Already done
+            mark(Todo, More, GcT, GcE, GcU, GcF);
+        false ->                                %Mark it and add to todo
+            Es1 = ordsets:add_element(F, Es0),
+            Ses = tuple_to_list(?GET_TABLE(F, Et)),
+            mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
+    end;
+mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
+    case ordsets:is_element(U, Us0) of
+       true ->                                 %Already done
+           mark(Todo, More, GcT, GcE, GcU, GcF);
+       false ->
+           Us1 = ordsets:add_element(U, Us0),
+           mark(Todo, More, GcT, GcE, GcU#gct{s=Us1}, GcF)
+    end;
+mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
+     #gct{t=Ft0,s=Fs0}=GcF) ->
+    case ordsets:is_element(F, Fs0) of
+        true ->
+            mark(ToDo, More, GcT, GcE, GcU, GcF);
+        false ->
+            Fs1 = ordsets:add_element(F, Fs0),
+            Fdef = ?GET_TABLE(F, Ft0),
+            %% And mark the function definition.
+            mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
+    end;
+mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
+    %% io:format("push funrefs ~p\n", [Funrefs]),
+    mark(Todo, [Funrefs|More], GcT, GcE, GcU, GcF);
+%% The call stack.
+mark([#call_frame{func=Funref,lvs=Lvs,env=Env}|Todo],
+     More0, GcT, GcE, GcU, GcF) ->
+    %% io:format("cf ~p\n", [Funref]),
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Env|More0],
+    mark([Funref|Todo], More1, GcT, GcE, GcU, GcF);
+mark([#loop_frame{lvs=Lvs,stk=Stk,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
+    More1 = [ tuple_to_list(Lv) || Lv <- Lvs, is_tuple(Lv) ] ++ [Stk,Env|More0],
+    mark(Todo, More1, GcT, GcE, GcU, GcF);
+%% Specifically catch these as they would match table key-value pair.
+mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#userdata{meta=Meta}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark([Meta|Todo], More, GcT, GcE, GcU, GcF);
+mark([{K,V}|Todo], More, GcT, GcE, GcU, GcF) -> %Table key-value pair
+    %% io:format("mt: ~p\n", [{K,V}]),
+    mark([K,V|Todo], More, GcT, GcE, GcU, GcF);
+mark([_|Todo], More, GcT, GcE, GcU, GcF) ->
+    %% Can ignore everything else.
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([], [M|More], GcT, GcE, GcU, GcF) ->
+    mark(M, More, GcT, GcE, GcU, GcF);
+mark([], [], #gct{s=St}, #gct{s=Se}, #gct{s=Su}, #gct{s=Sf}) ->
+    {St,Se,Su,Sf}.
+
+%% filter_tables(Seen, Free, Tables) -> {Free,Tables}.
+%% filter_environment(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_userdata(Seen, Free, Frames) -> {Free,Frames}.
+%% filter_funcdefs(Seen, Free, Frames) -> {Free,Frames}.
+%%  Filter tables/frames/userdata/funcdefs and return updated free
+%%  lists and tables/frames.
+
+filter_tables(Seen, Tf0, Tt0) ->
+    %% Update the free list.
+    Tf1 = ?FOLD_TABLES(fun (K, _, Free) ->
+                               case ordsets:is_element(K, Seen) of
+                                   true -> Free;
+                                   false -> [K|Free]
+                               end
+                       end, Tf0, Tt0),
+    Tt1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Tt0),
+    {Tf1,Tt1}.
+
+filter_environment(Seen, Ef0, Et0) ->
+    %% Update the free list.
+    Ef1 = ?FOLD_TABLES(fun (K, _, Free) ->
+                               case ordsets:is_element(K, Seen) of
+                                   true -> Free;
+                                   false -> [K|Free]
+                               end
+                       end, Ef0, Et0),
+    Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
+    {Ef1,Et1}.
+
+filter_userdata(Seen, Uf0, Ut0) ->
+    %% Update the free list.
+    Uf1 = ?FOLD_TABLES(fun (K, _, Free) ->
+                              case ordsets:is_element(K, Seen) of
+                                  true -> Free;
+                                  false -> [K|Free]
+                              end
+                      end, Uf0, Ut0),
+    %% Reclaim free table slots.
+    Ut1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ut0),
+    {Uf1,Ut1}.
+
+filter_funcdefs(Seen, Ff0, Ft0) ->
+    %% Update the free list.
+    Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
+                                case ordsets:is_element(K, Seen) of
+                                    true -> Free;
+                                    false -> [K|Free]
+                                end
+                        end, Ff0, Ft0),
+    Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
+    {Ff1,Ft1}.
