@@ -81,9 +81,9 @@ collectgarbage(_, St) ->			%Ignore everything else
     {[],St}.
 
 eprint(Args, St) ->
-    lists:foreach(fun (#tref{i=N}) ->
-			  T = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
-			  io:format("~w ", [T]);
+    lists:foreach(fun (#tref{}=Tref) ->
+			  Tab = luerl_heap:get_table(Tref, St),
+			  io:format("~w ", [Tab]);
 		      (A) -> io:format("~w ", [A])
 		  end, Args),
     io:nl(),
@@ -113,11 +113,11 @@ ipairs([#tref{}=Tref|_], St) ->
 ipairs(As, St) -> badarg_error(ipairs, As, St).
     
 ipairs_next([A], St) -> ipairs_next([A,0], St);
-ipairs_next([#tref{i=T},K|_], St) ->
+ipairs_next([Tref,K|_], St) ->
     %% Get the table.
-    #table{a=Arr} = ?GET_TABLE(T, St#luerl.tabs#tstruct.data),
+    #table{a=Arr} = luerl_heap:get_table(Tref, St),
     Next = K + 1,
-    case raw_get_index(Arr, Next) of
+    case array:get(Next, Arr) of
 	nil -> {[nil],St};
 	V -> {[Next,V],St}
     end.
@@ -138,9 +138,9 @@ pairs(As, St) -> badarg_error(pairs, As, St).
 %%  first key-value pair.
 
 next([A], St) -> next([A,nil], St);
-next([#tref{i=T},K|_], St) ->
+next([#tref{}=Tref,K|_], St) ->
     %% Get the table.
-    #table{a=Arr,d=Dict} = ?GET_TABLE(T, St#luerl.tabs#tstruct.data),
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     if K == nil ->
 	    %% Find the first, start with the array.
 	    next_index(0, Arr, Dict, St);
@@ -216,73 +216,17 @@ rawlen([#tref{}=T|_], St) ->
     {[luerl_lib_table:raw_length(T, St)],St};
 rawlen(As, St) -> badarg_error(rawlen, As, St).
 
-rawget([#tref{i=N},K|_], St) when is_integer(K), K >= 1 ->
-    %% Get the table.
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
-    V = raw_get_index(Arr, K),
-    {[V],St};
-rawget([#tref{i=N},K|_], St) when is_float(K) ->
-    %% Get the table.
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
-    V = case ?IS_FLOAT_INT(K, I) of
-	    true when I >= 1 ->			%Array index
-		raw_get_index(Arr, I);
-	    _NegFalse ->			%Negative or false
-		raw_get_key(Dict, K)
-	end,
-    {[V],St};
-rawget([#tref{i=N},K|_], St) ->
-    %% Get the table.
-    #table{d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
-    V = raw_get_key(Dict, K),
-    {[V],St};
+rawget([#tref{}=Tref,Key|_], St) ->
+    Val = luerl_heap:raw_get_table_key(Tref, Key, St),
+    {[Val],St};
 rawget(As, St) -> badarg_error(rawget, As, St).
 
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St)
-  when is_integer(K), K >= 1 ->
-    Tst1 = raw_set_index(N, K, V, Tst0),
-    {[Tref],St#luerl{tabs=Tst1}};
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St) when is_float(K) ->
-    Tst1 = case ?IS_FLOAT_INT(K, I) of
-	       true when I >= 1 ->
-		   raw_set_index(N, I, V, Tst0);
-	       _NegFalse ->
-		   raw_set_key(N, K, V, Tst0)
-	   end,
-    {[Tref],St#luerl{tabs=Tst1}};
-rawset([Tref,nil=K,_|_], St) ->
-    lua_error({illegal_index,Tref,K}, St);
-rawset([#tref{i=N}=Tref,K,V|_], #luerl{tabs=Tst0}=St) ->
-    Tst1 = raw_set_key(N, K, V, Tst0),
-    {[Tref],St#luerl{tabs=Tst1}};
+rawset([Tref,nil=Key,_|_], St) ->
+    lua_error({illegal_index,Tref,Key}, St);
+rawset([#tref{}=Tref,Key,Val|_], St0) ->
+    St1 = luerl_heap:raw_set_table_key(Tref, Key, Val, St0),
+    {[Tref],St1};
 rawset(As, St) -> badarg_error(rawset, As, St).
-
-%% raw_get_index(Array, Index) -> nil | Value.
-%% raw_get_key(Dict, Key) -> nil | Value.
-%% raw_set_index(N, Index, Value, Tstruct) -> Tstruct.
-%% raw_set_key(N, Key, Value, Tstruct) -> Tstruct.
-
-raw_get_index(Arr, I) -> array:get(I, Arr).
-
-raw_get_key(Dict, K) ->
-    case ttdict:find(K, Dict) of
-	{ok,V} -> V;
-	error -> nil
-    end.
-
-raw_set_index(N, I, V, #tstruct{data=Ts0}=Tst) ->
-    #table{a=Arr0}=T = ?GET_TABLE(N, Ts0),
-    Arr1 = array:set(I, V, Arr0),		%Default value is nil
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    Tst#tstruct{data=Ts1}.
-
-raw_set_key(N, K, V, #tstruct{data=Ts0}=Tst) ->
-    #table{d=Dict0}=T = ?GET_TABLE(N, Ts0),
-    Dict1 = if V =:= nil -> ttdict:erase(K, Dict0);
-	       true -> ttdict:store(K, V, Dict0)
-	    end,
-    Ts1 = ?SET_TABLE(N, T#table{d=Dict1}, Ts0),
-    Tst#tstruct{data=Ts1}.
 
 %% select(Args, State) -> {[Element],State}.
 
@@ -357,10 +301,10 @@ type(_) -> <<"unknown">>.
 %%  values, for tables and userdata it is the table of the object,
 %%  else the metatable for the type.
 
-getmetatable([O|_], St) ->
-    case luerl_heap:get_metatable(O, St) of
-	#tref{i=N}=Meta ->
-	    #table{d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+getmetatable([Obj|_], St) ->
+    case luerl_heap:get_metatable(Obj, St) of
+	#tref{}=Meta ->
+	    #table{d=Dict} = luerl_heap:get_table(Meta, St),
 	    case ttdict:find(<<"__metatable">>, Dict) of
 		{ok,MM} -> {[MM],St};
 		error -> {[Meta],St}
@@ -374,14 +318,13 @@ setmetatable([#tref{}=T,nil|_], St) ->
     do_setmetatable(T, nil, St);
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
 
-do_setmetatable(#tref{i=N}=T, M, St) ->
-    case luerl_heap:get_metamethod(T, <<"__metatable">>, St) of
+do_setmetatable(#tref{}=Tref, Meta, St0) ->
+    case luerl_heap:get_metamethod(Tref, <<"__metatable">>, St0) of
 	nil ->
-	    Tst = St#luerl.tabs,
-	    Ts = ?UPD_TABLE(N, fun (Tab) -> Tab#table{meta=M} end,
-			    Tst#tstruct.data),
-	    {[T],St#luerl{tabs=Tst#tstruct{data=Ts}}};
-	_ -> badarg_error(setmetatable, [T], St)
+	    Upd = fun (Tab) -> Tab#table{meta=Meta} end,
+	    St1 = luerl_heap:upd_table(Tref, Upd, St0),
+	    {[Tref],St1};
+	_ -> badarg_error(setmetatable, [Tref], St0)
     end.
 
 %% Do files.

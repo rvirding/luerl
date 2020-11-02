@@ -62,8 +62,8 @@ concat(As, St0) ->
 	throw:{error,E} -> lua_error(E, St0)
     end.
 
-do_concat([#tref{i=N}|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+do_concat([#tref{}=Tref|As], St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     case luerl_lib:conv_list(concat_args(As),
 			     [lua_string,lua_integer,lua_integer]) of
 	[Sep,I] ->
@@ -79,15 +79,13 @@ do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 %%  Concatenate elements in a list into a string. Callable from
 %%  Erlang.
 
-%% concat(#tref{i=N}, Sep, I, St) ->
-%%     #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
 concat(Tref, Sep, I, St) ->
     #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     J = length_loop(Arr),
     do_concat(Arr, Dict, Sep, I, J).
 
-concat(#tref{i=N}, Sep, I, J, St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+concat(Tref, Sep, I, J, St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     do_concat(Arr, Dict, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
@@ -265,8 +263,8 @@ pack_loop([], N) -> [{<<"n">>,N}].
 
 %% unpack - unpack table into return values.
 
-unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+unpack([#tref{}=Tref|As], St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
 	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
@@ -277,7 +275,7 @@ unpack([#tref{i=N}=T|As], St) ->
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
 	error ->				%Not numbers
-	    badarg_error(unpack, [T|As], St)
+	    badarg_error(unpack, [Tref|As], St)
     end;
 unpack([], St) -> badarg_error(unpack, [], St).
 
@@ -325,8 +323,8 @@ length(#tref{}=T, St0) ->
 	    {raw_length(T, St0),St0}
     end.
 
-raw_length(#tref{i=N}, St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.tabs#tstruct.data),
+raw_length(Tref, St) ->
+    #table{a=Arr} = luerl_heap:get_table(Tref, St),
     length_loop(Arr).
 
 length_loop(Arr) ->

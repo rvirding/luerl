@@ -312,22 +312,17 @@ decode_list(Lts, St) ->
     lists:map(fun (Lt) -> decode(Lt, St) end, Lts).
 
 decode(LT, St) ->
-    %% Catch errors to clean up call stack.
-    try decode(LT, St, [])
-    catch
-	error:E ->
-	    erlang:raise(error, E, [{?MODULE,decode,2}])
-    end.
+    decode(LT, St, []).
 
 decode(nil, _, _) -> nil;
 decode(false, _, _) -> false;
 decode(true, _, _) -> true;
 decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;		%Integers and floats
-decode(#tref{i=N}, St, In) ->
-    decode_table(N, St, In);
-decode(#usdref{i=N}, St, _) ->
-    decode_userdata(N, St);
+decode(#tref{}=T, St, In) ->
+    decode_table(T, St, In);
+decode(#usdref{}=U, St, _) ->
+    decode_userdata(U, St);
 decode(#funref{}=Fun, State, _) ->
     F = fun(Args) ->
 		{Args1, State1} = encode_list(Args, State),
@@ -338,12 +333,12 @@ decode(#funref{}=Fun, State, _) ->
 decode(#erl_func{code=Fun}, _, _) -> Fun;
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
-decode_table(N, St, In0) ->
+decode_table(#tref{i=N}=T, St, In0) ->
     case lists:member(N, In0) of
-	true -> error(recursive_data);		%Been here before
+	true -> error({recursive_table,T});	%Been here before
 	false ->
 	    In1 = [N|In0],			%We are in this as well
-	    case ?GET_TABLE(N, St#luerl.tabs#tstruct.data) of
+	    case luerl_heap:get_table(T, St) of
 		#table{a=Arr,d=Dict} ->
 		    Fun = fun (K, V, Acc) ->
 				  [{decode(K, St, In1),decode(V, St, In1)}|Acc]
@@ -354,6 +349,6 @@ decode_table(N, St, In0) ->
 	    end
     end.
 
-decode_userdata(N, St) ->
-    #userdata{d=Data} = ?GET_TABLE(N, St#luerl.usds#tstruct.data),
+decode_userdata(U, St) ->
+    {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
