@@ -20,7 +20,7 @@
 -module(luerl_sandbox).
 
 -export([init/0,init/1,init/2,
-         run/1,run/2,run/3,run/4,run/5]).
+         run/1,run/2,run/3,run/4,run/5,run/6]).
 
 -define(LUERL_GLOBAL, '_G').
 -define(SANDBOXED_VALUE, sandboxed).
@@ -75,25 +75,32 @@ run(S, St, MaxR, Flags) ->
     run(S, St, MaxR, Flags, ?TIMEOUT).
 
 run(S, St, 0, Flags, Timeout) ->
-    Runner = start(self(), S, St, Flags),
-    receive_response(Runner, Timeout);
-run(S, St, MaxR, Flags, Timeout) ->
-    Runner = start(self(), S, St, Flags),
+    run(S, St, 0, Flags, Timeout, []).
+
+run(S, St, MaxR, Flags, Timeout, Action) ->
+    Runner = start(self(), S, St, Flags, Action),
     case wait_reductions(Runner, MaxR) of
         {killed, R} -> {error, {reductions, R}};
         ok -> receive_response(Runner, Timeout)
     end.
 
-start(Parent, S, St, Flags) ->
+start(Parent, Script, State, Flags, Action) ->
     spawn_opt(fun() ->
         try
-            Reply = luerl:do(S, St),
+            Reply = case Action of
+                [] ->
+                    luerl:do(Script, State);
+                [CallBack, Args] ->
+                    {_, DoState} = luerl:do(Script, State),
+                    luerl:call_function(CallBack, Args, DoState)
+            end,
             erlang:send(Parent, {self(), Reply})
         catch
             error:Reason ->
                 erlang:send(Parent, {self(), {error, Reason}})
         end
      end, Flags).
+
 
 wait_reductions(Runner, MaxR) ->
     case process_info(Runner, reductions) of
