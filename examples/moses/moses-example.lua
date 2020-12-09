@@ -8,7 +8,6 @@ local M = require("moses")
 
 -- Table functions
 
-
 M.clear({1,2,'hello',true})
 
 M.each({4,2,1},print)
@@ -129,10 +128,8 @@ local initial_state = 256
 local function div(a,b) return a/b end
 M.reduceRight({1,2,4,16},div,initial_state)
 
-
 local function concat(a,b) return a..b end
 M.mapReduce({'a','b','c'},concat) -- => "{'a', 'ab', 'abc'}"
-
 
 local function concat(a,b) return a..b end
 M.mapReduceRight({'a','b','c'},concat) -- => "{'c', 'cb', 'cba'}"
@@ -548,3 +545,354 @@ M.concat({'a',1,0,1,'b'})
 
 -- Utility functions
 
+
+M.noop()
+
+M.identity(1)-- => 1
+M.identity(false) -- => false
+M.identity('hello!') -- => 'hello!'
+
+--M.call(math.pow, 2, 3) -- => 8
+--M.call(string.len, 'hello' ) -- => 5
+--M.call(table.concat, {1,2,3,4,5}, ',', 2, 4) -- => {2,3,4}
+
+local pi = M.constant(math.pi)
+pi(1) -- => 3.1415926535898
+pi(2) -- => 3.1415926535898
+pi(math.pi) -- => 3.1415926535898
+
+--local stats = M.applySpec({
+--    min = function(...) return math.min(...) end,
+--    max = function(...) return math.max(...) end,
+--})
+
+--stats(5,4,10,1,8) -- => {min = 1, max = 10}
+
+--local function inc(x) return x + 1 end
+--local function double(x) return 2 * x end
+--local function square(x) return x * x end
+--M.thread(2, inc, double, square) -- => 36
+--M.thread(3, double, inc, square) -- => 49
+--M.thread(4, square, double, inc) -- => 33
+--M.thread(5, square, inc, double) -- => 52
+
+--local function inc(x) return x + 1 end
+--local function add(x, y) return x * y end
+--local function pow(x, y) return x ^ y end
+--M.thread(2, inc, {add, 3}, {pow, 2}) -- => 36
+--M.thread(2, {add, 4}, inc, {pow, 2}) -- => 49
+
+--local function inc(x) return x + 1 end
+--local function add(x, y) return x * y end
+--local function pow(x, y) return x ^ y end
+--M.threadRight(2, inc, {add, 3}, {pow, 2}) -- => 64
+--M.threadRight(2, {add, 4}, inc, {pow, 2}) -- => 128
+
+--local f = M.dispatch(
+--  function() return nil end,
+--  function (v) return v+1 end, 
+--  function (v) return 2*v end
+--)
+--f(5) -- => 6
+--f(7) -- => 8
+
+local function fibonacci(n)
+    return n < 2 and n or fibonacci(n-1)+fibonacci(n-2)
+end  
+local mem_fibonacci = M.memoize(fibonacci)
+fibonacci(20) -- => 6765 (but takes some time)
+mem_fibonacci(20) -- => 6765 (takes less time)
+
+--local function f(v)
+--    if v < 100 then return v, v * 2 end
+--end
+--local t = M.unfold(f, 10) -- => {10,20,40,80}
+
+local sq = M.once(function(a) return a*a end)
+sq(1) -- => 1
+sq(2) -- => 1
+sq(3) -- => 1
+sq(4) -- => 1
+sq(5) -- => 1
+
+local function greet(someone) return 'hello '..someone end
+local greetOnly3people = M.before(greet, 3)
+greetOnly3people('John') -- => 'hello John'
+print(greetOnly3people('Moe')) -- => 'hello Moe'
+greetOnly3people('James') -- => 'hello James'
+greetOnly3people('Joseph') -- => 'hello James'
+greetOnly3people('Allan') -- => 'hello James'
+
+local f = M.after(M.identity,3)
+f(1) -- => nil
+f(2) -- => nil
+f(3) -- => 3
+f(4) -- => 4
+
+local function f(x) return x^2 end
+local function g(x) return x+1 end
+local function h(x) return x/2 end
+local compositae = M.compose(f,g,h)
+compositae(10) -- => 36
+compositae(20) -- => 121
+
+local function f(x) return x^2 end
+local function g(x) return x+1 end
+local function h(x) return x/2 end
+M.pipe(10,f,g,h) -- => 36
+M.pipe(20,f,g,h) -- => 121
+
+M.complement(function() return true end)()
+
+local function f(x) return x^2 end
+local function g(x) return x+1 end
+local function h(x) return x/2 end
+M.juxtapose(10, f, g, h) -- => 100, 11, 5
+
+local greet = function(name) return "hi: " .. name end
+local greet_backwards = M.wrap(greet, function(f,arg)
+  return f(arg) ..'\nhi: ' .. arg:reverse()
+end) 
+print(greet_backwards('John'))
+
+--local f = ('Lua programming'):gmatch('.')
+--M.times(f, 3) -- => {'L','u','a'}
+
+local sqrt2 = M.bind(math.sqrt,2)
+print(sqrt2()) -- => 1.4142135623731
+
+--local last2 = M.bind(M.last,2)
+--last2({1,2,3,4,5,6}) -- => {5,6}
+
+local function out(...) return table.concat {...} end
+local out = M.bindn(out,'OutPut',':',' ')
+out(1,2,3) -- => OutPut: 123
+print(out('a','b','c','d')) -- => OutPut: abcd
+
+--local window = {
+--	setPos = function(w,x,y) w.x, w.y = x, y end,
+--	setName = function(w,name) w.name = name end,
+--	getName = function(w) return w.name end,
+--}
+--window = M.bindall(window, 'setPos', 'setName', 'getName')
+--window.setPos(10,15)
+--print(window.x, window.y) -- => 10,15
+
+--window.setName('fooApp')
+--print(window.name) -- => 'fooApp'
+
+--print(window.getName()) -- => 'fooApp'
+
+--local multipleOf = M.cond({
+--    {function(v) return v%2==0 end, function(v) return v..' is multiple of 2' end},
+--    {function(v) return v%3==0 end, function(v) return v..' is multiple of 3' end},
+--    {function(v) return v%5==0 end, function(v) return v..' is multiple of 5' end},
+--    {function() return true end, function(v) return 'could not find an answer for '..v end}
+--})
+--for i = 15, 20 do
+--print(multipleOf(i))
+--end
+
+--local f = M.both(
+--	function(x) return x > 0 end,
+--	function(x) return x < 10 end,
+--	function(x) return x % 2 == 0 end
+--)
+--f(2) -- => true
+--f(8) -- => true
+--f(9) -- => false
+
+--local f = M.either(
+--	function(x) return x > 0 end,
+--	function(x) return x % 2 == 0 end
+--)
+--f(0) -- => true
+--f(-3) -- => false
+
+--local f = M.neither(
+--	function(x) return x > 10 end,
+--	function(x) return x % 2 == 0 end
+--)
+--f(12) -- => false
+--f(8) -- => false
+--f(7) -- => true
+
+print(M.uniqueId())
+
+M.uniqueId('ID%s') -- => 'ID2'
+
+local formatter = function(ID) return '$'..ID..'$' end
+print(M.uniqueId(formatter)) -- => '$ID1$'
+
+--local function po2(x) return x*2 end
+--local function iter_po2 = M.iterator(po2, 1)
+--iter_po2() -- => 2
+--iter_po2() -- => 4
+--iter_po2() -- => 8
+
+--local function po2(x) return x*2 end
+--local function iter_po2 = M.iterator(po2, 1, 3)
+--iter_po2() -- => 2
+--iter_po2() -- => 4
+--iter_po2() -- => 8
+--iter_po2() -- => nil
+
+--local w = "hello"
+--local char = string.gmatch(w,'.')
+--local iter = M.skip(char, 3)
+--for w in iter do print(w) end
+
+--local text = 'letters'
+--local chars = string.gmatch(text, '.')
+--M.tabulate(chars) -- => {'l','e','t','t','e','r','s'}
+
+--local text = 'lua'
+--local chars = string.gmatch(text, '.')
+--M.iterlen(chars) -- => 3
+--chars() -- => nil
+
+--M.castArray(true) -- => {true}
+--M.castArray(2) -- => {2}
+
+local function f(...) return table.concat({...}) end
+local flipped = M.flip(f)
+flipped('a','b','c') -- => 'cba'
+
+--local f = M.nthArg(3)
+--f('a','b','c') -- => 'c'
+
+--local f = M.nthArg(-2)
+--f('a','b','c') -- => 'b'
+
+--local f = M.unary(function (...) return ... end)
+--f('a') - ==> 'a'
+--f('a','b','c') -- => 'a'
+
+--local f = M.ary(function (...) return ... end, 2)
+--f(1,2) - ==> 1,2
+--f(1,2,3,4) -- => 1,2
+
+--local f = M.unary(function (...) return ... end)
+--f('a','b','c') -- => 'a'
+
+--local f = M.noarg(function (x) return x or 'default' end)
+--f(1) -- => 'default'
+--f(function() end, 3) -- => 'default'
+
+--local f = M.rearg(function (...) return ... end, {5,4,3,2,1})
+--f('a','b','c','d','e') -- => 'e','d','c','b','a'
+
+local minmax = M.over(math.min, math.max)
+minmax(5,10,12,4,3) -- => {3,12}
+
+local function alleven(...) 
+	for i, v in ipairs({...}) do 
+		if v%2~=0 then return false end 
+	end 
+	return true 
+end
+
+local function allpositive(...)
+	for i, v in ipairs({...}) do 
+		if v < 0 then return false end 
+	end 
+	return true 	
+end
+
+local allok = M.overEvery(alleven, allpositive)
+
+allok(2,4,-1,8) -- => false
+allok(10,3,2,6) -- => false
+print(allok(8,4,6,10)) -- => true
+
+local function alleven(...) 
+	for i, v in ipairs({...}) do 
+		if v%2~=0 then return false end 
+	end 
+	return true 
+end
+
+local function allpositive(...)
+	for i, v in ipairs({...}) do 
+		if v < 0 then return false end 
+	end 
+	return true 	
+end
+
+local anyok = M.overSome(alleven,allpositive)
+
+anyok(2,4,-1,8) -- => false
+anyok(10,3,2,6) -- => true
+print(anyok(-1,-5,-3)) -- => false
+
+local function f(x, y) return x, y end
+local function triple(x) return x*3 end
+local function square(x) return x^2 end
+local new_f = M.overArgs(f, triple, square)
+
+new_f(1,2) -- => 3, 4
+new_f(10,10) -- => 30, 100
+
+local function f(x, y, z) return x, y, z end
+local function triple(x) return x*3 end
+local function square(x) return x^2 end
+local new_f = M.overArgs(f, triple, square)
+
+new_f(1,2,3) -- => 3, 4, 3
+new_f(10,10,10) -- => 30, 100, 10
+
+--local function pow2(x) return x*x end
+--local function pow3(x) return x*x*x end
+--local function sum(a,b) return a+b end
+--local poly = M.converge(sum, pow2, pow3)
+--poly(5) -- => 150 (ie. 5*5 + 5*5*5)
+
+local function diff(a, b) return a - b end
+local diffFrom20 = M.partial(diff, 20) -- arg 'a' will be 20 by default
+print(diffFrom20(5)) -- => 15
+
+local function diff(a, b) return a - b end
+local remove5 = M.partial(diff, '_', 5) -- arg 'a' will be given at call-time, but 'b' is set to 5
+remove5(20) -- => 15
+
+local function concat(...) return table.concat({...},',') end
+local concat_right = M.partialRight(concat,'a','b','c')
+concat_right('d') -- => d,a,b,c
+
+concat_right = M.partialRight(concat,'a','b')
+concat_right('c','d') -- => c,d,a,b
+
+concat_right = M.partialRight(concat,'a')
+concat_right('b','c','d') -- => b,c,d,a
+
+local function concat(...) return table.concat({...},',') end
+local concat_right = M.partialRight(concat,'a','_','c')
+concat_right('d','b') -- => b,a,d,c
+
+concat_right = M.partialRight(concat,'a','b','_')
+concat_right('c','d') -- => d,a,b,c
+
+concat_right = M.partialRight(concat,'_','a')
+concat_right('b','c','d') -- => c,d,b,a
+
+--local function sumOf3args(x,y,z) return x + y + z end
+--local curried_sumOf3args = M.curry(sumOf3args, 3)
+--sumOf3args(1)(2)(3)) -- => 6
+--sumOf3args(0)(6)(9)) -- => 15
+
+local function product(x,y) return x * y end
+local curried_product = M.curry(product)
+curried_product(5)(4) -- => 20
+curried_product(3)(-5) -- => -15
+curried_product(0)(1) -- => 0
+
+local function wait_count(n) 
+	local i = 0
+	while i < n do i = i + 1 end
+	return i
+end
+
+local time, i = M.time(wait_count, 1e6) -- => 0.002 1000000
+print(time)
+local time, i = M.time(wait_count, 1e7) -- => 0.018 10000000
+print(time)
