@@ -196,3 +196,85 @@ M.invoke({'a','bea','cdhza'},string.len) -- => "{1,3,5}"
 local a, b, c, d = {id = 'a'}, {id = 'b'}, {id = 'c'}, {id = 'd'}
 local function call(self) return self.id end
 M.invoke({a,b,c,d},call) -- => "{'a','b','c','d'}"
+
+local peoples = {
+    {name = 'John', age = 23},{name = 'Peter', age = 17},
+    {name = 'Steve', age = 15},{age = 33}}
+M.pluck(peoples,'age') -- => "{23,17,15,33}"
+M.pluck(peoples,'name') -- => "{'John', 'Peter', 'Steve'}"
+
+M.max({1,2,3}) -- => 3
+M.max({'a','b','c'}) -- => 'c'
+
+
+M.max(peoples,function(people) return people.age end) -- => 33
+
+M.min({1,2,3}) -- => 1
+M.min({'a','b','c'}) -- => 'a'
+
+local a = {'a','b','c','d'}
+local b = {'b','a','d','c'}
+print(M.same(a,b)) -- => true
+
+b[#b+1] = 'e'
+print(M.same(a,b)) -- => false
+
+--M.sort({'b','a','d','c'}) -- => "{'a','b','c','d'}"
+
+M.sort({'b','a','d','c'}, function(a,b) 
+    return a:byte() > b:byte() 
+end) -- => "{'d','c','b','a'}"
+
+--local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
+--for k, v in M.sortedk(tbl) do print(k, v) end
+
+--local function comp(a,b) return a > b end
+--for k, v in M.sortedk(tbl, comp) do print(k, v) end
+
+--local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
+--for k, v in M.sortedv(tbl) do print(k, v) end
+
+--local function comp(a,b) return a > b end
+--for k, v in M.sortedv(tbl, comp) do print(k, v) end
+
+local r = M.sortBy({1,2,3,4,5}, math.sin)
+print(table.concat(r,','))
+
+local people = {
+	{name = 'albert', age = 40},
+	{name = 'louis', age = 55},
+	{name = 'steve', age = 35},
+	{name = 'henry', age = 19},
+}
+local r = M.sortBy(people, 'age')
+--M.each(r, function(v) print(v.age, v.name)	end)
+
+local r = M.sortBy(people, 'age', function(a,b) return a > b end)
+--M.each(r, function(v) print(v.age, v.name)	end)
+
+local r = M.sortBy({1,2,3,4,5})
+print(table.concat(r,','))
+
+M.groupBy({0,1,2,3,4,5,6},function(v)
+    return v%2==0 and 'even' or 'odd'
+end)
+
+M.groupBy({0,'a',true, false,nil,b,0.5},type)
+
+M.countBy({0,1,2,3,4,5,6},function(v) 
+    return v%2==0 and 'even' or 'odd'
+end)
+
+M.size {1,2,3} -- => 3
+M.size {one = 1, two = 2}
+
+M.size {1,2,3} -- => 3
+M.size {one = 1, two = 2}
+
+M.contains({1,2,3,4},{1,2,3}) -- => true
+M.contains({1,2,'d','b'},{1,2,3,5}) -- => true
+M.contains({x = 1, y = 2, z = 3},{x = 1, y = 2})
+
+M.sameKeys({1,2,3,4},{1,2,3}) -- => false
+M.sameKeys({1,2,'d','b'},{1,2,3,5}) -- => true
+M.sameKeys({x = 1, y = 2, z = 3},{x = 1, y = 2})
