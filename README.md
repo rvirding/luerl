@@ -9,7 +9,7 @@ Lua is a lightweight, multi-paradigm, scripting programming language, intended t
 
 It supports procedural, object-oriented, functional, data-driven, reactive, organizational programming, data description and more.
 
-Luerl works as a library embedded in a host simple called the embedding program. The host program can invoke functions to execute a piece of Lua code, can write and read Lua variables, and can call Erlang functions by Lua code.
+Luerl works as a library embedded in a host simple called the embedding program. The host program can invoke functions to execute a piece of Lua code, can write and read Lua variables, and call Erlang functions by Lua code.
 
 Through the use of Erlang, Luerl can be augmented to cope with a wide range of different domains, creating a customized language sharing a syntactical framework.
 
