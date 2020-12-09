@@ -5,6 +5,10 @@
 
 local M = require("moses")
 
+
+-- Table functions
+
+
 M.clear({1,2,'hello',true})
 
 M.each({4,2,1},print)
@@ -35,7 +39,6 @@ M.count({false, false, true},false) -- => 2
 M.count({false, false, true},true) -- => 1
 
 print(M.count({1,1,2,3,3})) -- => 5
-
 
 print(M.countf({1,2,3,4,5,6}, function(v)
     return v%2==0
@@ -71,17 +74,14 @@ for v in M.cycle(t, 2) do
   print(v)
 end
 
-
 local t = {x = 1, y = 2, z = 3}
 for v in M.cycle(t) do
   print(v)
 end
 
-
 print(M.map({1,2,3},function(v) 
     return v+10 
 end))
-
 
 M.map({a = 1, b = 2},function(v, k) 
     return k..v 
@@ -136,7 +136,6 @@ M.mapReduce({'a','b','c'},concat) -- => "{'a', 'ab', 'abc'}"
 
 local function concat(a,b) return a..b end
 M.mapReduceRight({'a','b','c'},concat) -- => "{'c', 'cb', 'cba'}"
-
 
 M.include({6,8,10,16,29},16) -- => true
 M.include({6,8,10,16,29},1) -- => false
@@ -205,7 +204,6 @@ M.pluck(peoples,'name') -- => "{'John', 'Peter', 'Steve'}"
 
 M.max({1,2,3}) -- => 3
 M.max({'a','b','c'}) -- => 'c'
-
 
 M.max(peoples,function(people) return people.age end) -- => 33
 
@@ -278,3 +276,275 @@ M.contains({x = 1, y = 2, z = 3},{x = 1, y = 2})
 M.sameKeys({1,2,3,4},{1,2,3}) -- => false
 M.sameKeys({1,2,'d','b'},{1,2,3,5}) -- => true
 M.sameKeys({x = 1, y = 2, z = 3},{x = 1, y = 2})
+
+
+-- Array functions
+
+
+local array = M.range(1,20)
+local sample = M.sample(array, 3)
+print(table.concat(sample,','))
+
+local array = M.range(1,20)
+local sample = M.sample(array)
+print(sample)
+
+local array = M.range(1,20)
+local sample = M.sampleProb(array, 0.2)
+print(table.concat(sample,','))
+
+sample = M.sampleProb(array, 0.2, os.time())
+print(table.concat(sample,','))
+
+--local function comp(a,b) return a > b end
+--M.nsorted(array,5, comp)
+
+--local function comp(a,b) return a > b end
+--M.nsorted(array,5, comp)
+
+local list = M.shuffle {1,2,3,4,5,6} -- => "{3,2,6,4,1,5}"
+M.each(list,print)
+
+--M.pack(1,2,8,'d','a',0) -- => "{1,2,8,'d','a',0}"
+
+local value = {3}
+M.find({{4},{3},{2},{1}},value)
+
+-- search value 4 starting from index 3
+M.find({1,4,2,3,4,5},4,3) -- => 5
+
+M.reverse({1,2,3,'d'}) -- => "{'d',3,2,1}"
+
+local array = M.range(1,5)
+M.fill(array, 0)
+
+local array = M.range(1,5)
+M.fill(array,0,3)
+
+local array = M.range(1,5)
+M.fill(array,0,2,4)
+
+local array = M.range(1,5)
+M.fill(array,0,5,10)
+
+--M.zeros(4)
+
+--M.ones(3)
+
+--M.vector(10, 4)
+
+M.selectWhile({2,4,5,8}, function(v)
+    return v%2==0
+end)
+
+M.dropWhile({2,4,5,8}, function(v)
+    return v%2==0
+end)
+
+M.sortedIndex({1,2,3},4)
+
+M.indexOf({1,2,3},2)
+
+M.lastIndexOf({1,2,2,3},2)
+
+local array = {1,2,3,4,5,6}
+local function multipleOf3(v) return v%3==0 end
+M.findIndex(array, multipleOf3)
+
+local array = {1,2,3,4,5,6}
+local function multipleOf3(v) return v%3==0 end
+M.findLastIndex(array, multipleOf3)
+
+local array = {1}
+M.addTop(array,1,2,3,4)
+
+--local array = {'old_val'}
+--M.prepend(array,1,2,3,4)
+
+local array = {1}
+M.push(array,1,2,3,4)
+
+local array = {1,2,3}
+local shift = M.shift(array)
+
+local array = {1,2,3,4,5}
+local a, b = M.shift(array, 2)
+
+local array = {1,2,3}
+local value = M.unshift(array)
+
+M.pull({1,2,1,2,3,4,3},1,2,3)
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.removeRange(array, 3,8)
+
+local t = {1,5,2,4,3,3,4}
+M.chunk(t, function(v) return v%2==0 end)
+
+--local t = {1,5,2,4,3,3,4}
+--M.chunk(t)
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.slice(array, 3,6)
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.first(array,3)
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.initial(array,5) -- => "{1,2,3,4}"
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.last(array,3) -- => "{7,8,9}"
+
+local array = {1,2,3,4,5,6,7,8,9}
+M.rest(array,6) -- => "{6,7,8,9}"
+
+local array = {1,2,3,4,5,6}
+M.nth(array,3) -- => "3"
+
+M.compact {a,'aa',false,'bb',true} -- => "{'aa','bb',true}"
+
+M.flatten({1,{2,3},{4,5,{6,7}}}) -- => "{1,2,3,4,5,6,7}"
+
+M.flatten({1,{2},{{3}}},true) -- => "{1,{2},{{3}}}"
+
+local array = {1,2,'a',4,5}
+M.difference(array,{1,'a'}) -- => "{2,4,5}"
+
+local A = {'a'}
+local B = {'a',1,2,3}
+local C = {2,10}
+M.union(A,B,C) -- => "{'a',1,2,3,10}"
+
+local A = {'a'}
+local B = {'a',1,2,3}
+local C = {2,10,1,'a'}
+M.intersection(A,B,C) -- => "{'a'}"
+
+--local A = {'a'}
+--local B = {'a',1,3}
+--local C = {3,10,2}
+
+--M.disjoint(A,B) -- => false
+--M.disjoint(A,C) -- => true
+--M.disjoint(B,C) -- => false
+
+local array = {1,2,3}
+local array2 = {1,4,5}
+M.symmetricDifference(array, array2) -- => "{2,3,4,5}"
+
+M.unique({1,1,2,2,3,3,4,4,4,5}) -- => "{1,2,3,4,5}"
+
+print(M.isunique({1,2,3,4,5})) -- => true
+M.isunique({1,2,3,4,4}) -- => false
+
+--M.duplicates({1,2,3,3,8,8,3,2,4}) -- => {2,3,8}
+
+local names = {'Bob','Alice','James'}
+local ages = {22, 23}
+M.zip(names,ages) -- => "{{'Bob',22},{'Alice',23},{'James'}}"
+
+--local names = {'Bob','Alice','James'}; local ages = {22, 23, 25}
+--local function introduce(name, age) return 'I am '..name..' and I am '..age..' years old.' end
+--local t = M.zipWith(introduce,names,ages)
+
+M.append({1,2,3},{'a','b'}) -- => "{1,2,3,'a','b'}"
+
+t1 = {1, 2, 3}
+t2 = {'a', 'b', 'c'}
+M.interleave(t1, t2) -- => "{1,'a',2,'b',3,'c'}"
+
+M.interleave('a', {1,2,3}) -- => "{1,'a',2,'a',3}"
+
+M.range(1,4) -- => "{1,2,3,4}"
+
+M.range(3) -- => "{1,2,3}"
+
+M.range(0,2,0.7) -- => "{0,0.7,1.4}"
+
+M.range(-5) -- => "{-1,-2,-3,-4,-5}"
+
+M.range(5,1) -- => "{5,4,3,2,1}"
+
+M.rep(4,3)
+
+-- M.powerset({1,2,3})
+
+--local t = {1,2,3,4,5,6}
+--for p in M.partition(t,2) do
+--  print(table.concat(p, ','))
+--end
+
+-- => 1,2
+-- => 3,4
+-- => 5,6
+
+--local t = {1,2,3,4,5,6}
+--for p in M.partition(t,4) do
+--  print(table.concat(p, ','))
+--end
+
+--local t = {1,2,3,4,5,6}
+--for p in M.partition(t,4,0) do
+--  print(table.concat(p, ','))
+--end
+
+--local t = {1,2,3,4,5,6,7}
+--for p in M.overlapping(t,3) do
+--	print(table.concat(p,','))
+--end
+
+--for p in M.overlapping(t,4) do
+--	print(table.concat(p,','))
+--end
+
+--for p in M.overlapping(t,5) do
+--	print(table.concat(p,','))
+--end
+
+--local t = {1,2,3,4,5,6,7}
+--for p in M.overlapping(t,5,0) do
+--	print(table.concat(p,','))
+--end
+
+--local t = {1,2,3,4,5}
+--for p in M.aperture(t,4) do
+--  print(table.concat(p,','))
+--end
+
+-- => 1,2,3,4
+-- => 2,3,4,5
+
+--for p in M.aperture(t,3) do
+--  print(table.concat(p,','))
+--end
+
+--local t = M.range(5)
+--for p in pairwise(t) do
+--  print(table.concat(p,','))
+--end
+
+--t = {'a','b','c'}
+--for p in M.permutation(t) do
+--  print(table.concat(p))
+--end
+
+M.concat({'a',1,0,1,'b'})
+
+--local t = M.xprod({1,2},{'a','b'})
+
+--local t = M.xpairs(1, {1, 2, 3})
+
+--local t = M.xpairsRight(1, {1, 2, 3})
+
+--M.sum({1,2,3,4,5})
+
+--M.product({1,2,3,4,5})
+
+--M.mean({1,2,3,4,5})
+
+--M.median({1,2,3,4,5})
+
+
+-- Utility functions
+
