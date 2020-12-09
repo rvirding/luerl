@@ -5,9 +5,9 @@ Luerl - Lua in Erlang
 
 **The migration from Lua 5.2 to 5.3 is very much Work-In-Progress. Please test it but there are as yet no guratantees.**
 
-Lua is a powerful, efficient, lightweight, embeddable scripting language common in games, IoT devices, AI and scientific computing research, intended to be a general embeddable extension language designed primarily for embedded use in applications.
+Lua is a powerful, lightweight, multi-paradigm, scripting programming language, intended to be a extension designed primarily for embedded use in applications.
 
-It supports procedural, object-oriented, functional, data-driven, reactive, organizational programming and data description.
+It supports procedural, object-oriented, functional, data-driven, reactive, organizational programming, data description and more.
 
 Being an extension language, Lua has no notion of a "main" program: it works as a library embedded in a host simple called the embedding program. The host program can invoke functions to execute a piece of Lua code, can write and read Lua variables, and can call Erlang functions by Lua code.
 
