@@ -15,7 +15,7 @@ Through the use of Erlang, Luerl can be augmented to cope with a wide range of d
 
 Documentation
 -------------
-Luerl is implemented as a library, written in Erlang/OTP. See the [github wiki page](https://github.com/rvirding/luerl/wiki) for examples & documentation.
+Luerl is implemented as a library written in Erlang. See the [github wiki page](https://github.com/rvirding/luerl/wiki) for examples & documentation.
 
 Join the Community
 ------------------
