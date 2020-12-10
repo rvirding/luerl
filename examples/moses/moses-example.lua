@@ -892,7 +892,154 @@ local function wait_count(n)
 	return i
 end
 
-local time, i = M.time(wait_count, 1e6) -- => 0.002 1000000
-print(time)
-local time, i = M.time(wait_count, 1e7) -- => 0.018 10000000
-print(time)
+--local time, i = M.time(wait_count, 1e6) -- => 0.002 1000000
+--print(time)
+--local time, i = M.time(wait_count, 1e7) -- => 0.018 10000000
+--print(time)
+
+
+-- Object functions
+
+
+M.keys({1,2,3}) -- => "{1,2,3}"
+M.keys({x = 0, y = 1}) -- => "{'y','x'}"
+
+M.values({1,2,3}) -- => "{1,2,3}"
+M.values({x = 0, y = 1}) -- => "{1,0}"
+
+--local entity = {
+--    pos = {x = 1, y = 2},
+--    engine = {
+--        left = {status = 'active', damage = 5},
+--        right = {status = 'off', damage = 10}
+--    },
+--    boost = false
+--}
+
+--M.path(entity,'pos','x') -- => 1
+--M.path(entity,'pos','y') -- => 2
+--M.path(entity,'engine','left','status') -- => 'active'
+--M.path(entity,'engine','right','damage') -- => 10
+--M.path(entity,'boost') -- => false
+
+--local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
+--M.spreadPath(obj, 'c', 'f')
+-- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {f = {}}}
+
+--local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
+--M.spreadPath(obj, 'c', 'f')
+-- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {d = 3, e = 4, f = {g = 5}}}
+
+--local obj = {x = 1, y = 2, z = 3}
+--M.each(M.kvpairs(obj), function(v,k)
+--	print(k, table.concat(v,','))	
+--end)
+
+local list_pairs = {{'x',1},{'y',2},{'z',3}}
+obj = M.toObj(list_pairs)
+
+M.invert {'a','b','c'} -- => "{a=1, b=2, c=3}"
+M.invert {x = 1, y = 2} -- => "{'x','y'}"
+
+local who = M.property('name')
+local people = {name = 'Henry'}
+who(people) -- => 'Henry'
+
+local people = {name = 'Henry'}
+print(M.propertyOf(people)('name')) -- => 'Henry'
+
+M.toBoolean(true) -- => true
+M.toBoolean(false) -- => false
+M.toBoolean(nil) -- => false
+M.toBoolean({}) -- => true
+M.toBoolean(1) -- => true
+
+M.extend({},{a = 'b', c = 'd'}) -- => "{a = 'b', c = 'd'}"
+
+local obj = {1,2,3}
+local obj2 = M.clone(obj)
+print(obj2 == obj) -- => false
+print(M.isEqual(obj2, obj)) -- => true
+
+--M.has(_,'has') -- => true
+--M.has(coroutine,'resume') -- => true
+--M.has(math,'random') -- => true
+
+local object = {a = 1, b = 2, c = 3}
+M.pick(object,'a','c') -- => "{a = 1, c = 3}"
+
+local object = {a = 1, b = 2, c = 3}
+M.omit(object,'a','c') -- => "{b = 2}"
+
+local obj = {a = 0}
+M.template(obj,{a = 1, b = 2, c = 3}) -- => "{a=0, c=3, b=2}"
+
+M.isEqual(1,1) -- => true
+M.isEqual(true,false) -- => false
+M.isEqual(3.14,math.pi) -- => false
+M.isEqual({3,4,5},{3,4,{5}}) -- => false
+
+M.result('abc','len') -- => 3
+M.result({'a','b','c'},table.concat) -- => 'abc'
+
+M.isTable({}) -- => true
+M.isTable(math) -- => true
+M.isTable(string) -- => true
+
+M.isCallable(print) -- => true
+M.isCallable(function() end) -- => true
+M.isCallable(setmetatable({},{__index = string}).upper) -- => true
+M.isCallable(setmetatable({},{__call = function() return end})) -- => true
+
+M.isArray({}) -- => true
+M.isArray({1,2,3}) -- => true
+M.isArray({'a','b','c'}) -- => true
+
+M.isIterable({}) -- => true
+M.isIterable(function() end) -- => false
+M.isIterable(false) -- => false
+M.isIterable(1) -- => false
+
+--M.type('string') -- => 'string'
+--M.type(table) -- => 'table'
+--M.type(function() end) -- => 'function'
+--M.type(io.open('f','w')) -- => 'file'
+
+M.isEmpty('') -- => true
+M.isEmpty({})  -- => true
+M.isEmpty({'a','b','c'}) -- => false
+
+M.isString('') -- => true
+M.isString('Hello') -- => false
+M.isString({}) -- => false
+
+M.isFunction(print) -- => true
+M.isFunction(function() end) -- => true
+M.isFunction({}) -- => false
+
+M.isNil(nil) -- => true
+M.isNil() -- => true
+M.isNil({}) -- => false
+
+--M.isNumber(math.pi) -- => true
+--M.isNumber(math.huge) -- => true
+--M.isNumber(0/0) -- => true
+--M.isNumber() -- => false
+
+--M.isNaN(1) -- => false
+--M.isNaN(0/0) -- => true
+
+--M.isFinite(99e99) -- => true
+--M.isFinite(math.pi) -- => true
+--M.isFinite(math.huge) -- => false
+--M.isFinite(1/0) -- => false
+--M.isFinite(0/0) -- => false
+
+M.isBoolean(true) -- => true
+M.isBoolean(false) -- => true
+M.isBoolean(1==1) -- => true
+M.isBoolean(print) -- => false
+
+M.isInteger(math.pi) -- => false
+M.isInteger(1) -- => true
+M.isInteger(-1) -- => true
