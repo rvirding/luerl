@@ -17,8 +17,8 @@ Documentation
 -------------
 Luerl is implemented as a library written in Erlang. See the [github wiki page](https://github.com/rvirding/luerl/wiki) for examples & documentation.
 
-Join the Community
-------------------
+Community
+---------
 
 [Luerl on Slack](https://luerl.slack.com), join by requesting an invite [here](http://luerl-slack.herokuapp.com/)
 
