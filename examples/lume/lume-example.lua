@@ -355,8 +355,10 @@ print( lume.format("{1} idx {2}", {"an", "test"}), "an idx test"       )
 print( lume.format("bad idx {-1}", {"x"}),         "bad idx {-1}"      )
 print( lume.format("empty {}", {"idx"}),           "empty {}"          )
 
---print( lume.split("cat   dog  pig"),     {"cat", "dog", "pig"}     )
---print( lume.trim("   hello world   "),       "hello world"   )
+--print(lume.split("cat   dog  pig"))
+print(lume.trim("   hello world   "))
+
+--lume.wordwrap("Hello world. This is a short string", 14)
 
 print( type(lume.uuid()), "string" )
 print( #lume.uuid(),      36       )
@@ -373,3 +375,64 @@ print( t, { 2, 4 } )
 print( lume.chain(10):result(), 10 )
 local t = lume({1, 2}):map(function(x) return x * 2 end):result()
 print( t, { 2, 4 } )
+
+
+--
+
+print(lume.round(2.3)) -- Returns 2
+print(lume.round(123.4567, .1)) -- Returns 123.5
+
+print( lume.sign(6) )
+
+print( lume.lerp(100, 200, .5) )
+
+local x, y = lume.vector(0, 10)
+
+
+print( lume.randomchoice({true, false}) )
+print( lume.weightedchoice({ ["cat"] = 10, ["dog"] = 5, ["frog"] = 0 }) )
+print( lume.isarray(x) )
+
+local t = { 1, 2, 3 }
+lume.push(t, 4, 5) -- `t` becomes { 1, 2, 3, 4, 5 }
+
+print( t[1] .. " " .. t[5] )
+
+local t = { 1, 2, 3 }
+lume.remove(t, 2)
+
+print( lume.count(t) )
+
+lume.clear(t)
+
+print( lume.count(t) )
+
+print(lume.time(function(x) return x end, "hello")) -- Returns 0, "hello"
+
+local f = lume.lambda "x,y -> 2*x+y"
+print(f(10, 5))
+
+--lume.serialize({a = "test", b = {1, 2, 3}})
+
+local t = lume.deserialize("{1, 2, 3}") -- Returns {1, 2, 3}
+
+print(t[1])
+
+-- lume.split("One two three")
+
+for i, v in lume.ripairs({ "a", "b", "c" }) do
+    print(i .. "->" .. v)
+end
+
+lume.dostring("print('Hellox!')") -- Prints "Hellox!"
+
+print(lume.trim("  Hello  "))
+
+print(lume.trim("   hello world   "))
+
+print( lume.chain({1, 2, 3, 4})
+:filter(function(x) return x % 2 == 0 end)
+:map(function(x) return -x end)
+:result()[1] )
+
+lume({1, 2, 3}):each(print)

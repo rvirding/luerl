@@ -669,54 +669,6 @@ local out = M.bindn(out,'OutPut',':',' ')
 out(1,2,3) -- => OutPut: 123
 print(out('a','b','c','d')) -- => OutPut: abcd
 
---local window = {
---	setPos = function(w,x,y) w.x, w.y = x, y end,
---	setName = function(w,name) w.name = name end,
---	getName = function(w) return w.name end,
---}
---window = M.bindall(window, 'setPos', 'setName', 'getName')
---window.setPos(10,15)
---print(window.x, window.y) -- => 10,15
-
---window.setName('fooApp')
---print(window.name) -- => 'fooApp'
-
---print(window.getName()) -- => 'fooApp'
-
---local multipleOf = M.cond({
---    {function(v) return v%2==0 end, function(v) return v..' is multiple of 2' end},
---    {function(v) return v%3==0 end, function(v) return v..' is multiple of 3' end},
---    {function(v) return v%5==0 end, function(v) return v..' is multiple of 5' end},
---    {function() return true end, function(v) return 'could not find an answer for '..v end}
---})
---for i = 15, 20 do
---print(multipleOf(i))
---end
-
---local f = M.both(
---	function(x) return x > 0 end,
---	function(x) return x < 10 end,
---	function(x) return x % 2 == 0 end
---)
---f(2) -- => true
---f(8) -- => true
---f(9) -- => false
-
---local f = M.either(
---	function(x) return x > 0 end,
---	function(x) return x % 2 == 0 end
---)
---f(0) -- => true
---f(-3) -- => false
-
---local f = M.neither(
---	function(x) return x > 10 end,
---	function(x) return x % 2 == 0 end
---)
---f(12) -- => false
---f(8) -- => false
---f(7) -- => true
-
 print(M.uniqueId())
 
 M.uniqueId('ID%s') -- => 'ID2'
@@ -892,10 +844,8 @@ local function wait_count(n)
 	return i
 end
 
---local time, i = M.time(wait_count, 1e6) -- => 0.002 1000000
---print(time)
---local time, i = M.time(wait_count, 1e7) -- => 0.018 10000000
---print(time)
+local time, i = M.time(wait_count, 1e6) -- => 0.002 1000000
+print(time)
 
 
 -- Object functions
