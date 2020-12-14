@@ -1,6 +1,6 @@
 %% File    : vector.erl
 %% Purpose : Brief demonstration of a 2D vector library on Luerl.
-%% Use     $ erlc vector.erl && erl -pa ./ebin -s json run -s init stop -noshell
+%% Use     $ erlc vector.erl && erl -pa ./ebin -s vector run -s init stop -noshell
 %% Or      $ make vector
 
 -module(vector).
