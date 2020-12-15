@@ -1,5 +1,6 @@
 Luerl - Lua in Erlang
 ==========================================
+<img src="https://luerl.org/images/luerl.png" width="200" alt="Luerl">
 
 > Luerl is an implementation of standard Lua 5.3 written in Erlang/OTP.
 
