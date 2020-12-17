@@ -21,7 +21,7 @@ local M = require ("moses")
 * [__Array functions__](#array), meant for array lists (or sequences),
 * [__Utility functions__](#utility),
 * [__Object functions__](#object).
-
+<br>br>
 ## <a name='table'>Table functions</a>
 
 ### clear (t)
