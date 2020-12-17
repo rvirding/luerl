@@ -15,6 +15,8 @@ Drop the file [moses.lua](http://github.com/Yonaba/Moses/blob/master/moses.lua) 
 local M = require("moses")
 ````
 
+*Note:* the full source [moses.lua](https://github.com/Yonaba/Moses/blob/master/moses.lua) is quite heavy (~92 kiB, 3115 LOC). You can alternatively use the [minified version](https://github.com/Yonaba/Moses/blob/master/moses_min.lua) (~35 kiB, 561 LOC).
+
 *Moses* provides a large set of functions that can be classified into four categories:
 
 * [__Table functions__](#table), which are mostly meant for tables, i.e Lua tables which contains both an array-part and a hash-part,
