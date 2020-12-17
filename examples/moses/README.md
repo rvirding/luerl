@@ -12,7 +12,7 @@ Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonab
 Drop the file [moses.lua](http://github.com/Yonaba/Moses/blob/master/moses.lua) into your project and add it to your code with the *require* function:
 
 ```lua
-local M = require ("moses")
+local M = require("moses")
 ````
 
 *Moses* provides a large set of functions that can be classified into four categories:
