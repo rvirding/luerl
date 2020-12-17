@@ -1,14 +1,11 @@
 *Moses: a utility-belt library for functional programming in Lua*
 
 __Moses__ is a Lua utility library which provides support for functional programming. 
-It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more.
+It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more. Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md).
 <br/>
 <br/>
-Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md).
 
-<br/><br/>
-
-# <a name='TOC'>Adding *Moses* to your project</a>
+## <a name='TOC'>Adding *Moses* to your project</a>
 
 Drop the file [moses.lua](http://github.com/Yonaba/Moses/blob/master/moses.lua) into your project and add it to your code with the *require* function:
 
