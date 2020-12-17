@@ -4,7 +4,7 @@ __Moses__ is a Lua utility library which provides support for functional program
 It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more.
 <br>
 <br>
-Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md), its purpose is show what works under Luerl using the moses library and document what's not!.
+Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md), its purpose is show what works under Luerl using the library and document what's not!.
 <br/>
 <br/>
 ## <a name='TOC'>Adding *Moses* to your project</a>
