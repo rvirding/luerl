@@ -22,8 +22,6 @@ local M = require ("moses")
 * [__Utility functions__](#utility),
 * [__Object functions__](#object).
 
-**[[⬆]](#TOC)**
-
 ## <a name='table'>Table functions</a>
 
 ### clear (t)
