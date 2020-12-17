@@ -4,15 +4,11 @@ __Moses__ is a Lua utility library which provides support for functional program
 It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more.
 <br/>
 <br/>
-Tested on Luerl 5.3 this tutorial is copied from [moses.lua](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md).
-# <a name='TOC'>Sections</a>
-* [Adding *Moses* to your project](#adding)
-* [Table functions](#table)
-* [Array functions](#array)
-* [Utility functions](#utility)
-* [Object functions](#object)
+Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md).
+
 <br/><br/>
-# <a name='adding'>Adding *Moses* to your project</a>
+
+# <a name='TOC'>Adding *Moses* to your project</a>
 
 Drop the file [moses.lua](http://github.com/Yonaba/Moses/blob/master/moses.lua) into your project and add it to your code with the *require* function:
 
@@ -2638,53 +2634,6 @@ M.isInteger(1) -- => true
 M.isInteger(-1) -- => true
 ````
 
-**[[⬆]](#TOC)**
-
-## <a name='chaining'>Chaining</a>
-
-*Method chaining* (also known as *name parameter idiom*), is a technique for invoking consecutively method calls in object-oriented style.
-Each method returns an object, and method calls are chained together.
-Moses offers chaining for your perusal. <br/>
-
-Let's use chaining to get the count of evey single word in some lyrics (case won't matter here).
-
-
-```lua
-local lyrics = {
-  "I am a lumberjack and I am okay",
-  "I sleep all night and I work all day",
-  "He is a lumberjack and he is okay",
-  "He sleeps all night and he works all day"
-}
-
--- split a text into words
-local function words(line)
-  local t = {}
-  for w in line:gmatch('(%w+)') do t[#t+1] = w end
-  return t
-end
-
-local stats = M.chain(lyrics)
-  :map(words)
-  :flatten()
-  :countBy(string.lower)
-  :value() 
-
--- => "{
--- =>    sleep = 1, night = 2, works = 1, am = 2, is = 2,
--- =>    he = 2, and = 4, I = 4, he = 2, day = 2, a = 2,
--- =>    work = 1, all = 4, okay = 2
--- =>  }"
-````
-
-For convenience, you can also use `M(value)` to start chaining methods, instead of `M.chain(value)`.
-
-Note that one can use `:value()` to unwrap a chained object.
-
-```lua
-local t = {1,2,3}
-print(_(t):value() == t) -- => true
-````
 
 **[[⬆]](#TOC)**
 
