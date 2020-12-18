@@ -2,19 +2,20 @@
 
 __Moses__ is a Lua utility library which provides support for functional programming. 
 It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more.
+<br>
+<br>
+Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md), its purpose is show what works under Luerl using the library and document what's not!.
 <br/>
 <br/>
-Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md).
-
-<br/><br/>
-
-# <a name='TOC'>Adding *Moses* to your project</a>
+## <a name='TOC'>Adding *Moses* to your project</a>
 
 Drop the file [moses.lua](http://github.com/Yonaba/Moses/blob/master/moses.lua) into your project and add it to your code with the *require* function:
 
 ```lua
-local M = require ("moses")
+local M = require("moses")
 ````
+
+*Note:* [moses.lua](https://github.com/Yonaba/Moses/blob/master/moses.lua) is quite heavy (~92 kiB, 3115 LOC). You can alternatively use the [minified version](https://github.com/Yonaba/Moses/blob/master/moses_min.lua) (~35 kiB, 561 LOC).
 
 *Moses* provides a large set of functions that can be classified into four categories:
 
@@ -22,9 +23,7 @@ local M = require ("moses")
 * [__Array functions__](#array), meant for array lists (or sequences),
 * [__Utility functions__](#utility),
 * [__Object functions__](#object).
-
-**[[⬆]](#TOC)**
-
+<br><br>
 ## <a name='table'>Table functions</a>
 
 ### clear (t)
@@ -2634,48 +2633,5 @@ M.isInteger(1) -- => true
 M.isInteger(-1) -- => true
 ````
 
-
-**[[⬆]](#TOC)**
-
-## <a name='import'>Import</a>
-
-All library functions can be imported in a context using `import` into a specified context.
-
-```lua
-local context = {}
-M.import(context)
-
-context.each({1,2,3},print)
-
--- => 1 1
--- => 2 2
--- => 3 3
-````
-
-When no `context` was provided, it defaults to the current environment, `_ENV` or `_G`.
-
-```lua
-M.import()
-
-each({1,2,3},print)
-
--- => 1 1
--- => 2 2
--- => 3 3
-````
-
-Passing `noConflict` argument leaves untouched conflicting keys while importing into the context.
-
-```lua
-local context = {each = 1}
-M.import(context, true)
-
-print(context.each) -- => 1
-context.eachi({1,2,3},print)
-
--- => 1 1
--- => 2 2
--- => 3 3
-````
 
 **[[⬆]](#TOC)**
