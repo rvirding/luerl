@@ -2,16 +2,16 @@
 -- Purpose : Brief demonstration of Lua Fun on Luerl.
 -- See     : ./luafun.erl
 
+
 local fun = require('fun')
 
 for _k, a in fun.range(3) do print(a) end
 
 print(fun.sum(fun.filter(function(x) return x % 16 == 0 end, fun.range(10000))))
 
-for k, v in pairs(require "fun") do _G[k] = v end
+for k, v in pairs(require("fun")) do _G[k] = v end
 
 each(print, range(5))
-
 
 each(print, take(5, tabulate(math.sin)))
 
