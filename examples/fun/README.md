@@ -132,22 +132,3 @@ Since there is no way to determine automatically if an iterator is finite or
 not the library function can not automatically resolve infinite
 loops. It is your obligation to do not pass infinite iterator to reducing
 functions.
-
-## Tracing JIT
-
-Tracing just-in-time compilation is a technique used by virtual machines to
-optimize the execution of a program at runtime. This is done by recording a
-linear sequence of frequently executed operations, compiling them to native
-machine code and executing them.
-
-First profiling information for loops is collected. After a hot loop has been
-identified, a special tracing mode is entered which records all executed
-operations of that loop. This sequence of operations is called a **trace**.
-The trace is then optimized and compiled to machine code (trace). When this
-loop is executed again the compiled trace is called instead of the program
-counterpart.
-
-Why the tracing JIT is important for us? The LuaJIT tracing compiler can detect
-tail-, up- and down-recursion, unroll compositions of
-functions and inline high-order functions.
-All of these concepts make the foundation for functional programming.
