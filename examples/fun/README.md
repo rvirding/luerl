@@ -4,7 +4,7 @@ __Lua__ __Fun__ a high-performance functional programming library for Lua design
 
 Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc, make it easy to **write simple and efficient functional code**.
 
-Let's see an example:
+See an example:
 
 ```lua
     -- Functional style
