@@ -107,7 +107,6 @@ What does it mean for us?
 and ``ipairs``.
 
 ## Iterator Types
---------------
 
 ### Pure functional iterators
 
