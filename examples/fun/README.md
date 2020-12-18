@@ -72,10 +72,11 @@ It is just a nice trick to get ``for .. in`` loop working in Lua.
 
 What happens when you type the following code into a Lua console:
 
+```lua
     for _it, x in ipairs({'a', 'b', 'c'}) do print(x) end
-
-According to Lua reference manual [#lua_for]_ the code above is equivalent to::
-
+```
+According to Lua reference manual [#lua_for]_ the code above is equivalent to:
+```lua
     do
         -- Initialize the iterator
         local gen, param, state = ipairs({'a', 'b', 'c'})
@@ -90,7 +91,7 @@ According to Lua reference manual [#lua_for]_ the code above is equivalent to::
             print(x)
         end
     end
-
+```
 What does it mean for us?
 
 * An iterator can be used together with ``for .. in`` to generate a loop
