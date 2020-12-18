@@ -146,9 +146,9 @@ identified, a special tracing mode is entered which records all executed
 operations of that loop. This sequence of operations is called a **trace**.
 The trace is then optimized and compiled to machine code (trace). When this
 loop is executed again the compiled trace is called instead of the program
-counterpart [#tracing_jit]_.
+counterpart.
 
 Why the tracing JIT is important for us? The LuaJIT tracing compiler can detect
-tail-, up- and down-recursion [#luajit-recursion]_, unroll compositions of
-functions and inline high-order functions [#luajit-optimizations]_.
+tail-, up- and down-recursion, unroll compositions of
+functions and inline high-order functions.
 All of these concepts make the foundation for functional programming.
