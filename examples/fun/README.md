@@ -1,8 +1,8 @@
-*Lua Fun: a high-performance functional programming library for Lua*
+__Lua__ __Fun__ a high-performance functional programming library for Lua designed with LuaJIT's trace compilers in mind.
 
-__Lua__ __Fun__ a high-performance functional programming library for Lua designed with JIT's trace compilers in mind.
+<img src="/examples/fun/logo.png" align="right" width="174px" height="144px" />
 
-Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..and many more, make it easy to **write simple and efficient functional code**.
+Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc, make it easy to **write simple and efficient functional code**.
 
 Let's see an example:
 
