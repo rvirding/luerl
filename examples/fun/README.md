@@ -12,7 +12,6 @@ Let's see an example:
     -- calculate sum(x for x^2 in 1..n)
     n = 100
     print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
-    328350
 
     -- Object-oriented style
     local fun = require "fun"
