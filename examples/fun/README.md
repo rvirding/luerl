@@ -21,7 +21,7 @@ Let's see an example:
     328350
 ```
 
-The section shed some light on the internal library structure and working
+Let's shed some light on the internal library structure and working
 principles.
 
 ## Iterators
