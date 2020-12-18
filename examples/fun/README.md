@@ -65,5 +65,5 @@ value ``a``. The second call to ``gen`` with the new state will return the next
 state  and the next iteration value. When the iterator finishes to the end
 the ``nil`` value is returned instead of the next state.
 
-**Please do not panic!** You do not have to use these values directly.
+**Do not panic!** You do not have to use these values directly.
 It is just a nice trick to get ``for .. in`` loop working in Lua.
