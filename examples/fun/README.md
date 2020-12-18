@@ -105,3 +105,50 @@ What does it mean for us?
 
 **The library provides a set of iterators** that can be used like ``pairs``
 and ``ipairs``.
+
+## Iterator Types
+--------------
+
+### Pure functional iterators
+
+Iterators can be either pure functional or have some side effects and returns
+different values for some initial conditions [#pure_function]_. An **iterator is
+pure functional** if it meets the following criteria:
+
+- ``gen`` function always returns the same values for the same ``param`` and
+  ``state`` values (idempotence property)
+- ``param`` and ``state`` values are not modified during ``gen`` call and
+  a new ``state`` object is returned instead (referential transparency
+  property).
+
+Pure functional iterators are very important for us. Pure functional iterator
+can be safety cloned or reapplied without creating side effects. Many library
+function use these properties.
+
+### Finite iterators
+
+Iterators can be **finite** (sooner or later end up) or **infinite**
+(never end).
+Since there is no way to determine automatically if an iterator is finite or
+not the library function can not automatically resolve infinite
+loops. It is your obligation to do not pass infinite iterator to reducing
+functions.
+
+## Tracing JIT
+
+Tracing just-in-time compilation is a technique used by virtual machines to
+optimize the execution of a program at runtime. This is done by recording a
+linear sequence of frequently executed operations, compiling them to native
+machine code and executing them.
+
+First profiling information for loops is collected. After a hot loop has been
+identified, a special tracing mode is entered which records all executed
+operations of that loop. This sequence of operations is called a **trace**.
+The trace is then optimized and compiled to machine code (trace). When this
+loop is executed again the compiled trace is called instead of the program
+counterpart [#tracing_jit]_.
+
+Why the tracing JIT is important for us? The LuaJIT tracing compiler can detect
+tail-, up- and down-recursion [#luajit-recursion]_, unroll compositions of
+functions and inline high-order functions [#luajit-optimizations]_.
+All of these concepts make the foundation for functional programming.
