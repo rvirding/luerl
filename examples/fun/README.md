@@ -67,3 +67,40 @@ the ``nil`` value is returned instead of the next state.
 
 **Do not panic!** You do not have to use these values directly.
 It is just a nice trick to get ``for .. in`` loop working in Lua.
+
+## Iterations
+
+What happens when you type the following code into a Lua console:
+
+    for _it, x in ipairs({'a', 'b', 'c'}) do print(x) end
+
+According to Lua reference manual [#lua_for]_ the code above is equivalent to::
+
+    do
+        -- Initialize the iterator
+        local gen, param, state = ipairs({'a', 'b', 'c'})
+        while true do
+            -- Next iteration
+            local state, var_1, ···, var_n = gen(param, state)
+            if state == nil then break end
+            -- Assign values to our variables
+            _it = state
+            x = var_1
+            -- Execute the code block
+            print(x)
+        end
+    end
+
+What does it mean for us?
+
+* An iterator can be used together with ``for .. in`` to generate a loop
+* An iterator is fully defined using ``gen``, ``param`` and ``state`` iterator
+  triplet
+* The ``nil`` state marks the end of an iteration
+* An iterator can return an arbitrary number of values (multireturn)
+* It is possible to make some wrapping functions to take an iterator and
+
+  return a new modified iterator
+
+**The library provides a set of iterators** that can be used like ``pairs``
+and ``ipairs``.
