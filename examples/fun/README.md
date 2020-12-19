@@ -1,4 +1,4 @@
-__Lua__ __Fun__ a high-performance functional programming library for Lua designed with JIT's trace compilers in mind.
+__Lua__ __Fun__ a high-performance functional programming library for Lua designed with LuaJIT's trace compiler in mind.
 
 <img src="/examples/fun/luafun.png" align="right" width="174px" height="144px" />
 
@@ -25,7 +25,7 @@ print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
 328350
 ```
 
-__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the original [documentation](https://luafun.github.io/intro.html)!
+__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the API [reference](https://luafun.github.io/reference.html)!
 
 ## Iterators
 
