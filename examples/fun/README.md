@@ -1,6 +1,6 @@
 __Lua Fun__ a high-performance functional programming library for Lua designed with LuaJIT's trace compiler in mind.
 
-<img src="/examples/fun/luafun.png" align="right" width="174px" height="144px" />
+<img src="/examples/fun/fun.png" align="right" width="174px" height="144px" />
 
 Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc.
 
