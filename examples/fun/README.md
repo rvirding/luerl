@@ -50,7 +50,7 @@ Let's see how each value is used for:
 
 ``param`` -- second value<br>
    A permanent (constant) parameter of a generating function is used to create
-   specific instance of the generating function. For example, a table itself
+   specific instance of the generating function. <br>For example, a table itself
    for ``ipairs`` case.
 
 ``state`` -- third value<br>
