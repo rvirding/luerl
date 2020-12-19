@@ -1,6 +1,6 @@
 __Lume__: A collection of functions for Lua, geared towards game development.
 
-Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/rxi/lume/blob/master/README.md), its purpose is show what works under Luerl using the library and document what's not!
+Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/rxi/lume/blob/master/README.md), its purpose is show what works under Luerl using the library and document [what's not](#not-work)!
 
 
 ## Installation
@@ -434,7 +434,7 @@ local t = {
 lume.count(t, { age = 10 }) -- returns 2
 ```
 
-## Not working with Luerl
+## <a name='not-work'>Not working with Luerl</a>
 
 #### lume.unique(t)
 Returns a copy of the `t` array with all the duplicate values removed.
