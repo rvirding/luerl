@@ -24,7 +24,7 @@ print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
 328350
 ```
 
-__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read __Lua Fun__ API [reference](https://luafun.github.io/reference.html)!
+__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the __Lua Fun__ API [reference](https://luafun.github.io/reference.html)!
 
 ## Iterators
 
