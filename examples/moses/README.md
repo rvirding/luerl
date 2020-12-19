@@ -1,7 +1,8 @@
-__Moses__ is a Lua utility-belt library which provides support for functional programming. 
+__Moses__: A Lua utility-belt library for functional programming.
+
 It complements built-in Lua functions, making easier common operations on tables, arrays, lists, collections, objects, and a lot more.
 
-Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md), its purpose is show what works under Luerl using the library and document what's not!
+Tested on Luerl 5.3 this reference is copied from [here](https://github.com/Yonaba/Moses/blob/master/doc/tutorial.md), it show what works under Luerl using the library and document [what's not](#not-work)!
 
 ## <a name='TOC'>Installation</a>
 
@@ -2631,3 +2632,8 @@ M.isInteger(-1) -- => true
 
 
 **[[⬆]](#TOC)**
+
+
+## <a name='not-work'>Not working with Luerl</a>
+
+
