@@ -354,7 +354,7 @@ Returns a formatted string. The values of keys in the table `vars` can be
 inserted into the string by using the form `"{key}"` in `str`; numerical keys
 can also be used.
 ```lua
-lume.format("{b} hi {a}", {a = "mark", b = "Oh"}) -- Returns "Oh hi mark"
+lume.format("{b} {a}", {a = "Robert", b = "Hello"}) -- Returns "Hello Robert"
 lume.format("Hello {1}!", {"world"}) -- Returns "Hello world!"
 ```
 
@@ -385,9 +385,7 @@ Takes color string `str` and returns 4 values, one for each color channel (`r`,
 values are multiplied by the number `mul` if it is provided.
 ```lua
 lume.color("#ff0000")               -- Returns 1, 0, 0, 1
-lume.color("rgba(255, 0, 255, .5)") -- Returns 1, 0, 1, .5
 lume.color("#00ffff", 256)          -- Returns 0, 256, 256, 256
-lume.color("rgb(255, 0, 0)", 256)   -- Returns 256, 0, 0, 256
 ```
 
 #### lume.chain(value)
