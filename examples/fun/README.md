@@ -2,7 +2,7 @@ __Lua__ __Fun__ a high-performance functional programming library for Lua design
 
 <img src="/examples/fun/luafun.png" align="right" width="174px" height="144px" />
 
-Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc, make it easy to **write simple and efficient functional code**.
+Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc.
 
 ## Installation
 
@@ -25,7 +25,7 @@ print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
 328350
 ```
 
-__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the API [reference](https://luafun.github.io/reference.html)!
+__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the library API [reference](https://luafun.github.io/reference.html)!
 
 ## Iterators
 
