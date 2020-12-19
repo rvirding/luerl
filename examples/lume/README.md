@@ -1,4 +1,4 @@
-*__Lume__: A collection of functions for Lua, geared towards game development*.
+__Lume__: A collection of functions for Lua, geared towards game development.
 
 Tested on Luerl 5.3 this reference is copied from [here](https://github.com/rxi/lume/blob/master/README.md), it show what works under Luerl using the library and document [what's not](#not-work)!
 
