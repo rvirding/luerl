@@ -179,12 +179,6 @@ an error is raised.
 lume.reduce({1, 2, 3}, function(a, b) return a + b end) -- Returns 6
 ```
 
-#### lume.unique(t)
-Returns a copy of the `t` array with all the duplicate values removed.
-```lua
-lume.unique({2, 1, 2, "cat", "cat"}) -- Returns {1, 2, "cat"}
-```
-
 #### lume.filter(t, fn [, retainkeys])
 Calls `fn` on each value of `t` table. Returns a new table with only the values
 where `fn` returned true. If `retainkeys` is true the table is not treated as
@@ -338,32 +332,6 @@ local f = lume.lambda "x,y -> 2*x+y"
 f(10, 5) -- Returns 25
 ```
 
-#### lume.serialize(x)
-Serializes the argument `x` into a string which can be loaded again using
-`lume.deserialize()`. Only booleans, numbers, tables and strings can be
-serialized. Circular references will result in an error; all nested tables are
-serialized as unique tables.
-```lua
-lume.serialize({a = "test", b = {1, 2, 3}, false})
--- Returns "{[1]=false,["a"]="test",["b"]={[1]=1,[2]=2,[3]=3,},}"
-```
-
-#### lume.deserialize(str)
-Deserializes a string created by `lume.serialize()` and returns the resulting
-value. This function should not be run on an untrusted string.
-```lua
-lume.deserialize("{1, 2, 3}") -- Returns {1, 2, 3}
-```
-
-#### lume.split(str [, sep])
-Returns an array of the words in the string `str`. If `sep` is provided it is
-used as the delimiter, consecutive delimiters are not grouped together and will
-delimit empty strings.
-```lua
-lume.split("One two three") -- Returns {"One", "two", "three"}
-lume.split("a,b,,c", ",") -- Returns {"a", "b", "", "c"}
-```
-
 #### lume.trim(str [, chars])
 Trims the whitespace from the start and end of the string `str` and returns the
 new string. If a `chars` value is set the characters in `chars` are trimmed
@@ -390,14 +358,6 @@ lume.format("{b} hi {a}", {a = "mark", b = "Oh"}) -- Returns "Oh hi mark"
 lume.format("Hello {1}!", {"world"}) -- Returns "Hello world!"
 ```
 
-#### lume.trace(...)
-Prints the current filename and line number followed by each argument separated
-by a space.
-```lua
--- Assuming the file is called "example.lua" and the next line is 12:
-lume.trace("hello", 1234) -- Prints "example.lua:12: hello 1234"
-```
-
 #### lume.dostring(str)
 Executes the lua code inside `str`.
 ```lua
@@ -407,17 +367,6 @@ lume.dostring("print('Hello!')") -- Prints "Hello!"
 #### lume.uuid()
 Generates a random UUID string; version 4 as specified in
 [RFC 4122](http://www.ietf.org/rfc/rfc4122.txt).
-
-#### lume.hotswap(modname)
-Reloads an already loaded module in place, allowing you to immediately see the
-effects of code changes without having to restart the program. `modname` should
-be the same string used when loading the module with require(). In the case of
-an error the global environment is restored and `nil` plus an error message is
-returned.
-```lua
-lume.hotswap("lume") -- Reloads the lume module
-assert(lume.hotswap("inexistant_module")) -- Raises an error
-```
 
 #### lume.ripairs(t)
 Performs the same function as `ipairs()` but iterates in reverse; this allows
@@ -486,3 +435,59 @@ local t = {
 }
 lume.count(t, { age = 10 }) -- returns 2
 ```
+
+## Not working with Luerl
+
+#### lume.unique(t)
+Returns a copy of the `t` array with all the duplicate values removed.
+```lua
+lume.unique({2, 1, 2, "cat", "cat"}) -- Returns {1, 2, "cat"}
+```
+
+#### lume.serialize(x)
+Serializes the argument `x` into a string which can be loaded again using
+`lume.deserialize()`. Only booleans, numbers, tables and strings can be
+serialized. Circular references will result in an error; all nested tables are
+serialized as unique tables.
+```lua
+lume.serialize({a = "test", b = {1, 2, 3}, false})
+-- Returns "{[1]=false,["a"]="test",["b"]={[1]=1,[2]=2,[3]=3,},}"
+```
+
+#### lume.deserialize(str)
+
+NOTE: lume.deserialize() works but serialize not, so this function is listed here as well.
+
+Deserializes a string created by `lume.serialize()` and returns the resulting
+value. This function should not be run on an untrusted string.
+```lua
+lume.deserialize("{1, 2, 3}") -- Returns {1, 2, 3}
+```
+
+#### lume.split(str [, sep])
+Returns an array of the words in the string `str`. If `sep` is provided it is
+used as the delimiter, consecutive delimiters are not grouped together and will
+delimit empty strings.
+```lua
+lume.split("One two three") -- Returns {"One", "two", "three"}
+```
+
+#### lume.trace(...)
+Prints the current filename and line number followed by each argument separated
+by a space.
+```lua
+-- Assuming the file is called "example.lua" and the next line is 12:
+lume.trace("hello", 1234) -- Prints "example.lua:12: hello 1234"
+```
+
+#### lume.hotswap(modname)
+Reloads an already loaded module in place, allowing you to immediately see the
+effects of code changes without having to restart the program. `modname` should
+be the same string used when loading the module with require(). In the case of
+an error the global environment is restored and `nil` plus an error message is
+returned.
+```lua
+lume.hotswap("lume") -- Reloads the lume module
+assert(lume.hotswap("inexistant_module")) -- Raises an error
+```
+
