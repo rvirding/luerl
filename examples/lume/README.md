@@ -1,6 +1,6 @@
 __Lume__: A collection of functions for Lua, geared towards game development.
 
-Tested on Luerl 5.3 this tutorial is copied from here, its purpose is show what works under Luerl using the library and document what's not!
+Tested on Luerl 5.3 this tutorial is copied from [here](https://github.com/rxi/lume/blob/master/README.md), its purpose is show what works under Luerl using the library and document what's not!
 
 
 ## Installation
