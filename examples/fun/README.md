@@ -33,7 +33,7 @@ for k, v in pairs(require("fun")) do _G[k] = v end
 -- Object-oriented style
 local fun = require("fun")
 ```
-Tested on Luerl 5.3 and everything worked, this library is something else! check out `fun-example.lua`, read the original [documentation](https://luafun.github.io/index.html)!
+__Tested on Luerl 5.3 and everything worked__, this library is something else! check out `fun-example.lua`, read the original [documentation](https://luafun.github.io/index.html)!
 
 Let's learn about the internal library structure and working principles.
 
