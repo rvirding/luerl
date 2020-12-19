@@ -4,38 +4,28 @@ __Lua__ __Fun__ a high-performance functional programming library for Lua design
 
 Lua Fun provides programming primitives and high-order functions such as ``map``, ``filter``, ``reduce``, ``zip``, ..etc, make it easy to **write simple and efficient functional code**.
 
-```lua
-    -- Functional style
-    for k, v in pairs(require("fun")) do _G[k] = v end
-    -- calculate sum(x for x^2 in 1..n)
-    n = 100
-    print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
-    328350
-
-    -- Object-oriented style
-    local fun = require("fun")
-    -- calculate sum(x for x^2 in 1..n)
-    print(fun.range(n):map(function(x) return x^2 end):reduce(operator.add, 0))
-    328350
-```
-
 ## Installation
 
 The [fun.lua](https://raw.githubusercontent.com/luafun/luafun/master/fun.lua) file should be dropped into an existing project
 and required by it:
 
 ```lua
--- Functional style
-for k, v in pairs(require("fun")) do _G[k] = v end
+local fun = require("fun")
+-- calculate sum(x for x^2 in 1..n)
+print(fun.range(n):map(function(x) return x^2 end):reduce(operator.add, 0))
+328350
 ```
 
 ```lua
--- Object-oriented style
-local fun = require("fun")
+-- Functional style
+for k, v in pairs(require("fun")) do _G[k] = v end
+-- calculate sum(x for x^2 in 1..n)
+n = 100
+print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
+328350
 ```
-__Tested on Luerl 5.3 and everything works__, this library is something else! check out `luafun-example.lua`, read the original [documentation](https://luafun.github.io/index.html)!
 
-Let's learn about the internal library structure and working principles.
+__Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, read the original [documentation](https://luafun.github.io/intro.html)!
 
 ## Iterators
 
