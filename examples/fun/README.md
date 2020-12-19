@@ -29,7 +29,7 @@ __Tested on Luerl 5.3 and everything works__, check out `luafun-example.lua`, re
 ## Iterators
 
 A basic primitive of the library after functions is an iterator. Most functions
-takes an iterator and returns a new iteraror(s). Iterators all the way down!
+takes an iterator and returns a new iteraror(s).
 
 The simplest iterator is (surprise!) :func:`pairs` and :func:`ipairs`
 Lua functions. Have you ever tried to call, say, :func:`ipairs` function
