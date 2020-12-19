@@ -1,4 +1,4 @@
-__Lua Fun__ a high-performance functional programming library for Lua designed with LuaJIT's trace compiler in mind.
+__Lua Fun__: A high-performance functional programming library for Lua designed with LuaJIT's trace compiler in mind.
 
 <img src="/examples/fun/fun.png" align="right" width="174px" height="144px" />
 
