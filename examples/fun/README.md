@@ -10,13 +10,12 @@ The [fun.lua](https://raw.githubusercontent.com/luafun/luafun/master/fun.lua) fi
 and required by it:
 
 ```lua
+-- Object-oriented style
 local fun = require("fun")
 -- calculate sum(x for x^2 in 1..n)
 print(fun.range(n):map(function(x) return x^2 end):reduce(operator.add, 0))
 328350
-```
 
-```lua
 -- Functional style
 for k, v in pairs(require("fun")) do _G[k] = v end
 -- calculate sum(x for x^2 in 1..n)
