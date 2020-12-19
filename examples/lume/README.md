@@ -482,7 +482,7 @@ lume.trace("hello", 1234) -- Prints "example.lua:12: hello 1234"
 
 #### lume.hotswap(modname)
 
-NOTE: This feature is for love2d, not work and makes no sense in Luerl since we already can hotswap everything in the BEAM.
+NOTE: This feature is for love2d in Luerl we already can hotswap everything!
 
 Reloads an already loaded module in place, allowing you to immediately see the
 effects of code changes without having to restart the program. `modname` should
