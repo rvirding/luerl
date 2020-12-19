@@ -491,3 +491,8 @@ lume.hotswap("lume") -- Reloads the lume module
 assert(lume.hotswap("inexistant_module")) -- Raises an error
 ```
 
+## License
+
+Lume is free software; you can redistribute it and/or modify it under
+the terms of the MIT license. See [LICENSE](https://github.com/rxi/lume/blob/master/LICENSE) for details.
+
