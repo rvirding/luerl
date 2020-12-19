@@ -19,6 +19,22 @@ Lua Fun provides programming primitives and high-order functions such as ``map``
     328350
 ```
 
+## Installation
+
+The [fun.lua](https://raw.githubusercontent.com/luafun/luafun/master/fun.lua) file should be dropped into an existing project
+and required by it:
+
+```lua
+-- Functional style
+for k, v in pairs(require("fun")) do _G[k] = v end
+```
+
+```lua
+-- Object-oriented style
+local fun = require("fun")
+```
+
+
 Let's shed some light on the internal library structure and working
 principles.
 
