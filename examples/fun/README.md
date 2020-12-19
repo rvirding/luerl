@@ -44,16 +44,16 @@ The function returned three strange values which look useless without a ``for``
 loop. We call these values **iterator triplet**.
 Let's see how each value is used for:
 
-``gen`` -- first value
+``gen`` -- first value<br>
    A generating function that can produce a next value on each iteration.
    Usually returns a new ``state`` and iteration values (multireturn).
 
-``param`` -- second value
+``param`` -- second value<br>
    A permanent (constant) parameter of a generating function is used to create
    specific instance of the generating function. For example, a table itself
    for ``ipairs`` case.
 
-``state`` -- third value
+``state`` -- third value<br>
    A some transient state of an iterator that is changed after each iteration.
    For example, an array index for ``ipairs`` case.
 
