@@ -33,10 +33,9 @@ for k, v in pairs(require("fun")) do _G[k] = v end
 -- Object-oriented style
 local fun = require("fun")
 ```
-Tested on Luerl 5.3 everything works, this library is something else! check out `fun-example.lua`, read the original [documentation](https://luafun.github.io/generators.html)!
+Tested on Luerl 5.3 and everything worked, this library is something else! check out `fun-example.lua`, read the original [documentation](https://luafun.github.io/generators.html)!
 
-Let's shed some light on the internal library structure and working
-principles.
+Let's learn about the internal library structure and working principles.
 
 ## Iterators
 
