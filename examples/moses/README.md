@@ -54,45 +54,6 @@ M.each({one = 1, two = 2, three = 3},print)
 -- => 3 three
 ````
 
-Can index and assign in an outer table or in the passed-in table:
-
-```lua
-t = {'a','b','c'}
-M.each(t,function(v,i)
-  t[i] = v:rep(2)
-  print(t[i])
-end)
-
--- => aa
--- => bb
--- => cc
-````
-
-### eachi (t, f)
-*Aliases: `forEachi`*.
-
-Iterates only on integer keys in an array table. It returns value-key pairs.
-
-```lua
-M.eachi({4,2,1},print)
-
--- => 4 1
--- => 2 2
--- => 1 3
-````
-
-The given array can be sparse, or even have a hash-like part.
-
-```lua
-local t = {a = 1, b = 2, [0] = 1, [-1] = 6, 3, x = 4, 5}
-M.eachi(t,print)
-
--- => 6 -1
--- => 1 0
--- => 3 1	
--- => 5 2
-````
-
 ### at (t, ...)
 
 Collects values at given keys and returns them in an array.
@@ -104,21 +65,6 @@ M.at(t,1,3) -- => "{4,6}"
 local t = {a = 4, bb = true, ccc = false}
 M.at(t,'a', 'ccc') -- => "{4, false}"
 ````
-
-### adjust (t, key, f)
-
-Adjusts the value at a given key using a function or a value. In case `f` is a function, it should be prototyped `f(v)`. 
-It does not mutate the given table, but rather returns a new array.
-
-```lua
-local t = {1,2,3}
-M.adjust(t, 2, math.sin) -- => {1, 0.90929, 3}
-
-local v = {x = 1}
- M.adjust(t, 'x', 4) -- => {x = 4}
-````
-
-In case the given `key` does not exist in `t`, it throws an error.
 
 ### count (t [, val])
 
@@ -150,38 +96,6 @@ end) -- => 3
 M.countf({print, pairs, os, assert, ipairs}, function(v)
   return type(v)=='function'
 end) -- => 4
-````
-
-### allEqual (t [, comp])
-*Aliases: `alleq`*.
-
-Checks if all values in a collection are equal. Uses `M.isEqual` by default to compare values.
-
-```lua
-M.allEqual({1,1,1,1,1}, comp) -- => true
-M.allEqual({1,1,2,1,1}, comp) -- => false
-
-local t1 = {1, 2, {3}}
-local t2 = {1, 2, {3}}
-M.allEqual({t1, t2}) -- => true
-````
-
-Can take an optional `comp` function which will be used to compare values.
-
-```lua
-local t1 = {x = 1, y = 0}
-local t2 = {x = 1, y = 0}
-local t3 = {x = 1, y = 2}
-local t4 = {x = 1, y = 2}
-local function compx(a, b) return a.x == b.x end
-local function compy(a, b) return a.y == b.y end
-
-M.allEqual({t1, t2}, compx) -- => true
-M.allEqual({t1, t2}, compy) -- => true
-M.allEqual({t3, t4}, compx) -- => true
-M.allEqual({t3, t4}, compy) -- => true
-M.allEqual({t1, t2, t3, t4}, compx) -- => true
-M.allEqual({t1, t2, t3, t4}, compy) -- => false
 ````
 
 ### cycle (t [, n = 1])
@@ -242,24 +156,6 @@ M.map({a = 1, b = 2},function(v, k)
 end) -- => "{aa = 2, bb = 4}"
 ````
 
-### mapi (t, f)
-
-Executes a function on each value in a given array.
-
-```lua
-M.mapi({1,2,3},function(v) 
-  return v+10 
-end) -- => "{11,12,13}"
-````
-
-It only works for the array-part of the given table.
-
-```lua
-M.map({a = 1, 2, 3, 4, 5},function(v, k) 
-  return k..v 
-end) -- => "{'12','23','34','45'}"
-````
-
 ### reduce (t, f [, state = next(t)])
 *Aliases: `inject`, `foldl`*.
 
@@ -277,56 +173,6 @@ local function concat(a,b) return a..b end
 M.reduce({'a','b','c','d'},concat) -- => abcd	 
 ````
 
-### best (t, f)
-
-Returns the best value passing a selector function. Acts as a special case of `reduce`, using the first value in `t` as 
-an initial state. It thens folds the given table, testing each of its values `v` and selecting the value passing the 
-call `f(state,v)` every time.
-
-```lua
-local words = {'Lua', 'Programming', 'Language'}
-M.best(words, function(a,b) return #a > #b end) -- => 'Programming'
-M.best(words, function(a,b) return #a < #b end) -- => 'Lua'
-````
-
-### reduceBy (t, f, pred [, state = next(t)])
-
-Reduces a table considering only values matching a predicate.
-For example,let us define a set of values.
-
-```lua
-local val = {-1, 8, 0, -6, 3, -1, 7, 1, -9}
-````
-
-And a reduction function which will add up values.
-
-```lua
-local function add(a,b) return a+b end
-````
- 
-We can also define some predicate functions.
-
-```lua
--- predicate for negative values
-local function neg(v) return v<=0 end
-
--- predicate for positive values
-local function pos(v) return v>=0 end
-````
-
-Then we can perform reduction considering only negative or positive values :
-
-```lua
-M.reduceBy(val, add, neg) -- => -17
-M.reduceBy(val, add, pos) -- => 19
-````
-
-An initial state can be passed in.
-
-```lua
-M.reduceBy(val, add, neg, 17) -- => 0
-M.reduceBy(val, add, pos, -19) -- => 0
-````
 
 ### reduceRight (t, f [, state = next(t)])
 *Aliases: `injectr`, `foldr`*.
@@ -558,56 +404,6 @@ Handles custom comparison functions.
 M.sort({'b','a','d','c'}, function(a,b) 
   return a:byte() > b:byte() 
 end) -- => "{'d','c','b','a'}"
-````
-
-### sortedk (t [, comp])
-
-Iterates on values with respect to key order. Keys are sorted using `comp` function which defaults to `math.min`. 
-It returns upon each call a `key, value` pair.
-
-```lua 
-local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
-for k, v in M.sortedk(tbl) do print(k, v) end
-
--- => 1	12
--- => 2	6
--- => 3	5
--- => 4	10
--- => 5	8
-
-local function comp(a,b) return a > b end
-for k, v in M.sortedk(tbl, comp) do print(k, v) end
-
--- => 5	8
--- => 4	10
--- => 3	5
--- => 2	6
--- => 1	12
-````
-
-### sortedv (t [, comp])
-
-Iterates on values with respect to key order. Keys are sorted using `comp` function which defaults to `math.min`. 
-It returns upon each call a `key, value` pair.
-
-```lua 
-local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
-for k, v in M.sortedv(tbl) do print(k, v) end
-
--- => 3	5
--- => 2	6
--- => 5	8
--- => 4	10
--- => 1	12
-
-local function comp(a,b) return a > b end
-for k, v in M.sortedv(tbl, comp) do print(k, v) end
-
--- => 1	12
--- => 4	10
--- => 5	8
--- => 2	6
--- => 3	5
 ````
 
 ### sortBy (t [, transform [, comp = math.min]])
@@ -2637,3 +2433,195 @@ M.isInteger(-1) -- => true
 ## <a name='not-work'>Not working with Luerl</a>
 
 
+### eachi (t, f)
+*Aliases: `forEachi`*.
+
+Iterates only on integer keys in an array table. It returns value-key pairs.
+
+```lua
+M.eachi({4,2,1},print)
+
+-- => 4 1
+-- => 2 2
+-- => 1 3
+````
+
+The given array can be sparse, or even have a hash-like part.
+
+```lua
+local t = {a = 1, b = 2, [0] = 1, [-1] = 6, 3, x = 4, 5}
+M.eachi(t,print)
+
+-- => 6 -1
+-- => 1 0
+-- => 3 1	
+-- => 5 2
+````
+
+
+### adjust (t, key, f)
+
+Adjusts the value at a given key using a function or a value. In case `f` is a function, it should be prototyped `f(v)`. 
+It does not mutate the given table, but rather returns a new array.
+
+```lua
+local t = {1,2,3}
+M.adjust(t, 2, math.sin) -- => {1, 0.90929, 3}
+
+local v = {x = 1}
+ M.adjust(t, 'x', 4) -- => {x = 4}
+````
+
+In case the given `key` does not exist in `t`, it throws an error.
+
+
+### allEqual (t [, comp])
+*Aliases: `alleq`*.
+
+Checks if all values in a collection are equal. Uses `M.isEqual` by default to compare values.
+
+```lua
+M.allEqual({1,1,1,1,1}, comp) -- => true
+M.allEqual({1,1,2,1,1}, comp) -- => false
+
+local t1 = {1, 2, {3}}
+local t2 = {1, 2, {3}}
+M.allEqual({t1, t2}) -- => true
+````
+
+Can take an optional `comp` function which will be used to compare values.
+
+```lua
+local t1 = {x = 1, y = 0}
+local t2 = {x = 1, y = 0}
+local t3 = {x = 1, y = 2}
+local t4 = {x = 1, y = 2}
+local function compx(a, b) return a.x == b.x end
+local function compy(a, b) return a.y == b.y end
+
+M.allEqual({t1, t2}, compx) -- => true
+M.allEqual({t1, t2}, compy) -- => true
+M.allEqual({t3, t4}, compx) -- => true
+M.allEqual({t3, t4}, compy) -- => true
+M.allEqual({t1, t2, t3, t4}, compx) -- => true
+M.allEqual({t1, t2, t3, t4}, compy) -- => false
+````
+
+
+### mapi (t, f)
+
+Executes a function on each value in a given array.
+
+```lua
+M.mapi({1,2,3},function(v) 
+  return v+10 
+end) -- => "{11,12,13}"
+````
+
+It only works for the array-part of the given table.
+
+```lua
+M.map({a = 1, 2, 3, 4, 5},function(v, k) 
+  return k..v 
+end) -- => "{'12','23','34','45'}"
+````
+
+### best (t, f)
+
+Returns the best value passing a selector function. Acts as a special case of `reduce`, using the first value in `t` as 
+an initial state. It thens folds the given table, testing each of its values `v` and selecting the value passing the 
+call `f(state,v)` every time.
+
+```lua
+local words = {'Lua', 'Programming', 'Language'}
+M.best(words, function(a,b) return #a > #b end) -- => 'Programming'
+M.best(words, function(a,b) return #a < #b end) -- => 'Lua'
+````
+
+### reduceBy (t, f, pred [, state = next(t)])
+
+Reduces a table considering only values matching a predicate.
+For example,let us define a set of values.
+
+```lua
+local val = {-1, 8, 0, -6, 3, -1, 7, 1, -9}
+````
+And a reduction function which will add up values.
+
+```lua
+local function add(a,b) return a+b end
+````
+ 
+We can also define some predicate functions.
+
+```lua
+-- predicate for negative values
+local function neg(v) return v<=0 end
+
+-- predicate for positive values
+local function pos(v) return v>=0 end
+````
+
+Then we can perform reduction considering only negative or positive values :
+
+```lua
+M.reduceBy(val, add, neg) -- => -17
+M.reduceBy(val, add, pos) -- => 19
+````
+
+An initial state can be passed in.
+
+```lua
+M.reduceBy(val, add, neg, 17) -- => 0
+M.reduceBy(val, add, pos, -19) -- => 0
+````
+
+### sortedk (t [, comp])
+
+Iterates on values with respect to key order. Keys are sorted using `comp` function which defaults to `math.min`. 
+It returns upon each call a `key, value` pair.
+
+```lua 
+local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
+for k, v in M.sortedk(tbl) do print(k, v) end
+
+-- => 1	12
+-- => 2	6
+-- => 3	5
+-- => 4	10
+-- => 5	8
+
+local function comp(a,b) return a > b end
+for k, v in M.sortedk(tbl, comp) do print(k, v) end
+
+-- => 5	8
+-- => 4	10
+-- => 3	5
+-- => 2	6
+-- => 1	12
+````
+
+### sortedv (t [, comp])
+
+Iterates on values with respect to key order. Keys are sorted using `comp` function which defaults to `math.min`. 
+It returns upon each call a `key, value` pair.
+
+```lua 
+local tbl = {}; tbl[3] = 5 ; tbl[2] = 6; tbl[5] = 8; tbl[4] = 10; tbl[1] = 12
+for k, v in M.sortedv(tbl) do print(k, v) end
+
+-- => 3	5
+-- => 2	6
+-- => 5	8
+-- => 4	10
+-- => 1	12
+
+local function comp(a,b) return a > b end
+for k, v in M.sortedv(tbl, comp) do print(k, v) end
+
+-- => 1	12
+-- => 4	10
+-- => 5	8
+-- => 2	6
+-- => 3	5
+````

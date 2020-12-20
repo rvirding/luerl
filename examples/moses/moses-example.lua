@@ -108,15 +108,7 @@ M.reduce({'a','b','c','d'},concat)
 --M.best(words, function(a,b) return #a > #b end) -- => 'Programming'
 --M.best(words, function(a,b) return #a < #b end) -- => 'Lua'
 
-local val = {-1, 8, 0, -6, 3, -1, 7, 1, -9}
-
-local function add(a,b) return a+b end
-
--- predicate for negative values
-local function neg(v) return v<=0 end
-
--- predicate for positive values
-local function pos(v) return v>=0 end
+--local val = {-1, 8, 0, -6, 3, -1, 7, 1, -9}
 
 --M.reduceBy(val, add, neg) -- => -17
 --M.reduceBy(val, add, pos) -- => 19
