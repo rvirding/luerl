@@ -1373,62 +1373,6 @@ M.values({1,2,3}) -- => "{1,2,3}"
 M.values({x = 0, y = 1}) -- => "{1,0}"
 ````
 
-### path (obj, ...)
-
-Returns the value at a given path in an object.
-
-```lua
-local entity = {
-  pos = {x = 1, y = 2},
-  engine = {
-    left = {status = 'active', damage = 5},
-    right = {status = 'off', damage = 10}
-  },
-  boost = false
-}
-
-M.path(entity,'pos','x') -- => 1
-M.path(entity,'pos','y') -- => 2
-M.path(entity,'engine','left','status') -- => 'active'
-M.path(entity,'engine','right','damage') -- => 10
-M.path(entity,'boost') -- => false
-````
-
-### spreadPath (obj, ...)
-
-Spreads object under property path onto provided object. It is similar to `flattenPath`, but removes object under the property path.
-
-```lua
-local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
-M.spreadPath(obj, 'c', 'f')
--- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {f = {}}}
-````
-
-### flattenPath (obj, ...)
-
-Flattens object under property path onto provided object. It is similar to `spreadPath`, but preserves object under the property path.
-
-```lua
-local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
-M.spreadPath(obj, 'c', 'f')
--- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {d = 3, e = 4, f = {g = 5}}}
-````
-
-### kvpairs (obj)
-
-Converts an object to an array-list of key-value pairs.
-
-```lua
-local obj = {x = 1, y = 2, z = 3}
-M.each(M.kvpairs(obj), function(v,k)
-	print(k, table.concat(v,','))	
-end)
-
--- => 1	y,2
--- => 2	x,1
--- => 3	z,3
-````
-
 ### toObj (kvpairs)
 
 Converts an array list of `kvpairs` to an object where keys are taken from the 1rst column in the `kvpairs` sequence, associated with values in the 2nd column.
@@ -1532,16 +1476,6 @@ local v = M.chain({1,2,3,4,5,6,7,8,9,10})
   :value() -- =>	 Max is 89
 ````
 
-### has (obj, key)
-
-Checks if an object has a given attribute.
-
-```lua
-M.has(_,'has') -- => true
-M.has(coroutine,'resume') -- => true
-M.has(math,'random') -- => true
-````
-
 ### pick (obj, ...)
 *Aliases: `choose`*.
 
@@ -1635,17 +1569,6 @@ M.isIterable(false) -- => false
 M.isIterable(1) -- => false
 ````
 
-### type (obj)
-
-Extends Lua's `type` function. It returns the type of the given object and also recognises 'file' userdata
-
-```lua
-M.type('string') -- => 'string'
-M.type(table) -- => 'table'
-M.type(function() end) -- => 'function'
-M.type(io.open('f','w')) -- => 'file'
-````
-
 ### isEmpty ([obj])
 
 Is the given argument empty ?
@@ -1684,38 +1607,6 @@ Is the given argument nil ?
 M.isNil(nil) -- => true
 M.isNil() -- => true
 M.isNil({}) -- => false
-````
-
-### isNumber (obj)
-
-Is the given argument a number ?
-
-```lua
-M.isNumber(math.pi) -- => true
-M.isNumber(math.huge) -- => true
-M.isNumber(0/0) -- => true
-M.isNumber() -- => false
-````
-
-### isNaN (obj)
-
-Is the given argument NaN ?
-
-```lua
-M.isNaN(1) -- => false
-M.isNaN(0/0) -- => true
-````
-
-### isFinite (obj)
-
-Is the given argument a finite number ?
-
-```lua
-M.isFinite(99e99) -- => true
-M.isFinite(math.pi) -- => true
-M.isFinite(math.huge) -- => false
-M.isFinite(1/0) -- => false
-M.isFinite(0/0) -- => false
 ````
 
 ### isBoolean (obj)
@@ -2638,3 +2529,113 @@ curried_product(0)(1) -- => 0
 ````
 
 ## Object functions
+
+
+### path (obj, ...)
+
+Returns the value at a given path in an object.
+
+```lua
+local entity = {
+  pos = {x = 1, y = 2},
+  engine = {
+    left = {status = 'active', damage = 5},
+    right = {status = 'off', damage = 10}
+  },
+  boost = false
+}
+
+M.path(entity,'pos','x') -- => 1
+M.path(entity,'pos','y') -- => 2
+M.path(entity,'engine','left','status') -- => 'active'
+M.path(entity,'engine','right','damage') -- => 10
+M.path(entity,'boost') -- => false
+````
+
+### spreadPath (obj, ...)
+
+Spreads object under property path onto provided object. It is similar to `flattenPath`, but removes object under the property path.
+
+```lua
+local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
+M.spreadPath(obj, 'c', 'f')
+-- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {f = {}}}
+````
+
+### flattenPath (obj, ...)
+
+Flattens object under property path onto provided object. It is similar to `spreadPath`, but preserves object under the property path.
+
+```lua
+local obj = {a = 1, b = 2, c = {d = 3, e = 4, f = {g = 5}}}
+M.spreadPath(obj, 'c', 'f')
+-- => {a = 1, b = 2, d = 3, e = 4, g = 5, c = {d = 3, e = 4, f = {g = 5}}}
+````
+
+### kvpairs (obj)
+
+Converts an object to an array-list of key-value pairs.
+
+```lua
+local obj = {x = 1, y = 2, z = 3}
+M.each(M.kvpairs(obj), function(v,k)
+	print(k, table.concat(v,','))	
+end)
+
+-- => 1	y,2
+-- => 2	x,1
+-- => 3	z,3
+````
+
+### has (obj, key)
+
+Checks if an object has a given attribute.
+
+```lua
+M.has(_,'has') -- => true
+M.has(coroutine,'resume') -- => true
+M.has(math,'random') -- => true
+````
+
+### type (obj)
+
+Extends Lua's `type` function. It returns the type of the given object and also recognises 'file' userdata
+
+```lua
+M.type('string') -- => 'string'
+M.type(table) -- => 'table'
+M.type(function() end) -- => 'function'
+M.type(io.open('f','w')) -- => 'file'
+````
+
+### isNumber (obj)
+
+Is the given argument a number ?
+
+```lua
+M.isNumber(math.pi) -- => true
+M.isNumber(math.huge) -- => true
+M.isNumber(0/0) -- => true
+M.isNumber() -- => false
+````
+
+### isNaN (obj)
+
+Is the given argument NaN ?
+
+```lua
+M.isNaN(1) -- => false
+M.isNaN(0/0) -- => true
+````
+
+### isFinite (obj)
+
+Is the given argument a finite number ?
+
+```lua
+M.isFinite(99e99) -- => true
+M.isFinite(math.pi) -- => true
+M.isFinite(math.huge) -- => false
+M.isFinite(1/0) -- => false
+M.isFinite(0/0) -- => false
+````
