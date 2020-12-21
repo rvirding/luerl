@@ -2639,3 +2639,34 @@ M.isFinite(math.huge) -- => false
 M.isFinite(1/0) -- => false
 M.isFinite(0/0) -- => false
 ````
+
+## Chaining
+
+NOTE: This feature not work with Luerl.
+
+Method chaining (also known as name parameter idiom), is a technique for invoking consecutively method calls in object-oriented style. Each method returns an object, and method calls are chained together. __Moses offers chaining but this feature is not working with Luerl.__
+
+```lua
+
+local t = {1,2,3}
+print(_(t):value() == t) -- => true
+````
+
+## Import
+
+NOTE: This feature not work with Luerl.
+
+All library functions can be imported in a conext using `import` into a specified context.
+```lua
+
+local context = {}
+M.import(context)
+
+context.each({1,2,3},print)
+
+-- => 1 1
+-- => 2 2
+-- => 3 3
+````
+
+When no `context` was provided, it defaults to the current environment, `_ENV` or `_G`.
