@@ -1636,9 +1636,9 @@ M.isInteger(-1) -- => true
 
 # <a name='not-work'>Not working with Luerl</a>
 
-__NOTE: This list of table functions not work with Luerl.__
-
 ## Table functions
+
+__NOTE: This list of table functions not work with Luerl.__
 
 ### eachi (t, f)
 *Aliases: `forEachi`*.
@@ -2646,7 +2646,7 @@ M.isFinite(0/0) -- => false
 
 ## Chaining
 
-__NOTE: This feature not work with Luerl.__
+__NOTE: This library feature not work with Luerl.__
 
 Method chaining (also known as name parameter idiom), is a technique for invoking consecutively method calls in object-oriented style. Each method returns an object, and method calls are chained together. __Moses offers chaining but this feature is not working with Luerl.__
 
@@ -2658,7 +2658,7 @@ print(_(t):value() == t) -- => true
 
 ## Import
 
-__NOTE: This feature not work with Luerl.__
+__NOTE: This library feature not work with Luerl.__
 
 All library functions can be imported in a conext using `import` into a specified context.
 ```lua
