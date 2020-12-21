@@ -1,7 +1,7 @@
-%% File    : json.erl
+%% File    : chroma.erl
 %% Purpose : Brief demonstration of ANSI colors on Luerl.
-%% Use     $ erlc json.erl && erl -pa ./ebin -s json run -s init stop -noshell
-%% Or      $ make json
+%% Use     $ erlc chroma.erl && erl -pa ./ebin -s chroma run -s init stop -noshell
+%% Or      $ make chroma
 
 -module(chroma).
 -export([run/0]).

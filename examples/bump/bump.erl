@@ -1,6 +1,6 @@
 %% File    : bump.erl
 %% Purpose : Brief demonstration of bump.lua on Luerl.
-%% Use     $ erlc bump.erl && erl -pa ./ebin -s tiny run -s init stop -noshell
+%% Use     $ erlc bump.erl && erl -pa ./ebin -s bump run -s init stop -noshell
 %% Or      $ make bump
 
 -module(bump).

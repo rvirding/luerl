@@ -1,6 +1,6 @@
--- File    : tiny-example.lua
--- Purpose : Brief demonstration of tiny-ecs on Luerl.
--- See     : ./tiny.erl
+-- File    : bump-example.lua
+-- Purpose : Brief demonstration of bump.lua on Luerl.
+-- See     : ./bump.erl
 
 
 local bump = require('bump')

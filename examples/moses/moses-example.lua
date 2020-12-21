@@ -1,5 +1,5 @@
 -- File    : moses-example.lua
--- Purpose : Brief demonstration of moses on Luerl.
+-- Purpose : Brief demonstration of Moses on Luerl.
 -- See     : ./moses.erl
 
 
