@@ -1638,6 +1638,8 @@ M.isInteger(-1) -- => true
 
 ## Table functions
 
+__NOTE: This list of table functions not work with Luerl.__
+
 ### eachi (t, f)
 *Aliases: `forEachi`*.
 
@@ -1662,7 +1664,6 @@ M.eachi(t,print)
 -- => 3 1	
 -- => 5 2
 ````
-
 
 ### adjust (t, key, f)
 
@@ -1711,7 +1712,6 @@ M.allEqual({t3, t4}, compy) -- => true
 M.allEqual({t1, t2, t3, t4}, compx) -- => true
 M.allEqual({t1, t2, t3, t4}, compy) -- => false
 ````
-
 
 ### mapi (t, f)
 
@@ -1833,6 +1833,8 @@ for k, v in M.sortedv(tbl, comp) do print(k, v) end
 
 ## Array functions
 
+__NOTE: This list of array functions not work with Luerl.__
+
 ### nsorted (array [, n = 1[, comp]])
 
 Returns the n-top values satisfying a predicate. It takes a comparison function `comp` used to sort array values, 
@@ -1849,7 +1851,6 @@ M.nsorted(array,5, comp) -- => {5,4,3,2,1}
 local array = M.range(1,20)
 M.nsorted(array) -- => {1}
 ````
-
 
 ### zeros (n)
 
@@ -1948,6 +1949,7 @@ M.powerset {1,2,3} -- => "{{1},{2},{3},{1,2},{2,3},{1,2,3}}"
 ````
 
 ### partition (array [, n = 1 [, pad]])
+
 *Aliases: `part`*.
 
 Returns an iterator function for partitions of a given array.
@@ -2144,6 +2146,7 @@ M.median({1,2,3,4}) -- => 2.5
 
 ## Utility functions
 
+__NOTE: This list of utility functions not work with Luerl.__
 
 ### call (f [, ...])
 
@@ -2154,7 +2157,6 @@ M.call(math.pow, 2, 3) -- => 8
 M.call(string.len, 'hello' ) -- => 5
 M.call(table.concat, {1,2,3,4,5}, ',', 2, 4) -- => {2,3,4}
 ````
-
 
 ### applySpec (specs)
 
@@ -2342,6 +2344,7 @@ f(7) -- => true
 ````
 
 ### iterator (f, value [, n])
+
 *Aliases: `iter`*.
 
 Returns an iterator function which constinuously applies a function `f` onto an input `value`.
@@ -2530,6 +2533,7 @@ curried_product(0)(1) -- => 0
 
 ## Object functions
 
+__NOTE: This list of object functions not work with Luerl.__
 
 ### path (obj, ...)
 
@@ -2639,3 +2643,34 @@ M.isFinite(math.huge) -- => false
 M.isFinite(1/0) -- => false
 M.isFinite(0/0) -- => false
 ````
+
+## Chaining
+
+__Moses offers chaining but this feature is not working with Luerl.__
+
+Method chaining (also known as name parameter idiom), is a technique for invoking consecutively method calls in object-oriented style. Each method returns an object, and method calls are chained together.
+
+```lua
+
+local t = {1,2,3}
+print(_(t):value() == t) -- => true
+````
+
+## Import
+
+__NOTE: This library feature not work with Luerl.__
+
+All library functions can be imported in a conext using `import` into a specified context.
+```lua
+
+local context = {}
+M.import(context)
+
+context.each({1,2,3},print)
+
+-- => 1 1
+-- => 2 2
+-- => 3 3
+````
+
+When no `context` was provided, it defaults to the current environment, `_ENV` or `_G`.
