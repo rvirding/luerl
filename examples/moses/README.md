@@ -2674,3 +2674,9 @@ context.each({1,2,3},print)
 ````
 
 When no `context` was provided, it defaults to the current environment, `_ENV` or `_G`.
+
+## License
+
+This work is under [MIT-LICENSE](http://www.opensource.org/licenses/mit-license.php)<br/>
+Copyright (c) 2012-2018 Roland Yonaba. <br/>
+See [LICENSE](https://github.com/Yonaba/Moses/blob/master/LICENSE).
