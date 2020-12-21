@@ -568,23 +568,6 @@ print(table.concat(sample,','))
 -- => 1,6,10,12,15,20 (or similar)
 ````
 
-### nsorted (array [, n = 1[, comp]])
-
-Returns the n-top values satisfying a predicate. It takes a comparison function `comp` used to sort array values, 
-and then picks the top n-values. It leaves the original array untouched.
-
-```lua
-local function comp(a,b) return a > b end
-M.nsorted(array,5, comp) -- => {5,4,3,2,1}
-````
-
-`n` defaults to 1 and `comp` defaults to the `<` operator.
-
-```lua
-local array = M.range(1,20)
-M.nsorted(array) -- => {1}
-````
-
 ### shuffle (array [, seed])
 
 Shuffles a given array.
@@ -654,30 +637,6 @@ In case the upper bound index i greather than the array size, it will enlarge th
 ```lua
 local array = M.range(1,5)
 M.fill(array,0,5,10) -- => {1,2,3,4,0,0,0,0,0,0}
-````
-
-### zeros (n)
-
-Returns an array of `n` zeros.
-
-```lua 
-M.zeros(4) -- => {0,0,0,0}
-````
-
-### ones (n)
-
-Returns an array of `n` 1's.
-
-```lua 
-M.ones(3) -- => {1,1,1}
-````
-
-### vector (value, n)
-
-Returns an array of `n` times a given value.
-
-```lua 
-M.vector(10, 4) -- => {10,10,10,10}
 ````
 
 ### selectWhile (array, f [, ...])
@@ -762,15 +721,6 @@ local array = {1}
 M.addTop(array,1,2,3,4) -- => "{4,3,2,1,1}"
 ````
 
-### prepend (array, ...)
-
-Adds given values at the top of an array, preserving the order at which elements are passed-in.
-
-```lua
-local array = {'old_val'}
-M.prepend(array,1,2,3,4) -- => "{1,2,3,4,'old_val'}"
-````
-
 ### push (array, ...)
 
 Adds given values at the end of an array.
@@ -822,22 +772,6 @@ Trims out all values index within a range.
 ```lua
 local array = {1,2,3,4,5,6,7,8,9}
 M.removeRange(array, 3,8) -- => "{1,2,9}"
-````
-
-### chunk (array [, f])
-
-Iterates over an array aggregating consecutive values in subsets tables, on the basis of the return value of `f(v, k, ...)`. Consecutive elements which return the same value are chunked together.
-
-```lua
-local t = {1,5,2,4,3,3,4}
-M.chunk(t, function(v) return v%2==0 end) -- => "{{1,5},{2,4},{3,3},{4}}"
-````
-
-If not given, `f` defaults to `identity`.
-
-```lua
-local t = {1,5,2,4,3,3,4}
-M.chunk(t) -- => "{{1},{5},{2},{4},{3,3},{4}}"
 ````
 
 ### slice (array [, start = 1 [, finish = #array]])
@@ -951,20 +885,6 @@ local C = {2,10,1,'a'}
 M.intersection(A,B,C) -- => "{'a'}"
 ````
 
-### disjoint (...)
-
-Checks if all passed in arrays are disjoint.
-
-```lua
-local A = {'a'}
-local B = {'a',1,3}
-local C = {3,10,2}
-
-M.disjoint(A,B) -- => false
-M.disjoint(A,C) -- => true
-M.disjoint(B,C) -- => false
-````
-
 ### symmetricDifference (array, array2)
 *Aliases: `symdiff`,`xor`*.
 
@@ -995,14 +915,6 @@ M.isunique({1,2,3,4,5}) -- => true
 M.isunique({1,2,3,4,4}) -- => false
 ````
 
-### duplicates (array)
-
-Returns an array list of all duplicates in array.
-
-```lua
-M.duplicates({1,2,3,3,8,8,3,2,4}) -- => {2,3,8}
-````
-
 ### zip (...)
 *Aliases: `transpose`*.
 
@@ -1012,23 +924,6 @@ Zips values from different arrays, on the basis on their common keys.
 local names = {'Bob','Alice','James'}
 local ages = {22, 23}
 M.zip(names,ages) -- => "{{'Bob',22},{'Alice',23},{'James'}}"
-````
-
-### zipWith (f, ...)
-*Aliases: `transposeWith`*.
-      
-Merges values using a given function. Only values indexed with the same key in the given arrays are merged in the same subset.
-Function `f` is used to combine values.
-
-```lua
-local names = {'Bob','Alice','James'}; local ages = {22, 23, 25}
-local function introduce(name, age) return 'I am '..name..' and I am '..age..' years old.' end
-local t = M.zipWith(introduce,names,ages)
--- => {
--- =>  'I am Bob and I am 22 years old.'
--- =>  'I am Alice and I am 23 years old.'
--- =>  'I am James and I am 25 years old.'
--- => }
 ````
 
 ### append (array, other)
@@ -1093,149 +988,6 @@ Generates a list of n repetitions of a value.
 M.rep(4,3) -- => "{4,4,4}"
 ````
 
-### powerset (array)
-
-Returns the powerset of an array.
-
-```lua
-M.powerset {1,2,3} -- => "{{1},{2},{3},{1,2},{2,3},{1,2,3}}"
-````
-
-### partition (array [, n = 1 [, pad]])
-*Aliases: `part`*.
-
-Returns an iterator function for partitions of a given array.
-
-```lua
-local t = {1,2,3,4,5,6}
-for p in M.partition(t,2) do
-  print(table.concat(p, ','))
-end
-
--- => 1,2
--- => 3,4
--- => 5,6
-
-local t = {1,2,3,4,5,6}
-for p in M.partition(t,4) do
-  print(table.concat(p, ','))
-end
-
--- => 1,2,3,4
--- => 5,6
-````
-
-In case the last partition has less elements than desired, a 3rd argument can be supplied to adjust the partition size.
-
-```lua
-local t = {1,2,3,4,5,6}
-for p in M.partition(t,4,0) do
-  print(table.concat(p, ','))
-end
-
--- => 1,2,3,4
--- => 5,6,0,0
-````
-
-### overlapping (array [, n = 2 [, pad]])
-
-Returns an iterator function which provides overlapping subsequences of a given array.
-
-```lua
-local t = {1,2,3,4,5,6,7}
-for p in M.overlapping(t,3) do
-	print(table.concat(p,','))
-end
-
--- => 1,2,3
--- => 3,4,5
--- => 5,6,7
-
-for p in M.overlapping(t,4) do
-	print(table.concat(p,','))
-end
-
--- => 1,2,3,4
--- => 4,5,6,7
-
-for p in M.overlapping(t,5) do
-	print(table.concat(p,','))
-end
-
--- => 1,2,3,4,5
--- => 5,6,7
-````
-
-In case the last subsequence wil not match the exact desired length, it can be adjusted with a 3rd argument `pad`.
-
-```lua
-local t = {1,2,3,4,5,6,7}
-for p in M.overlapping(t,5,0) do
-	print(table.concat(p,','))
-end
-
--- => 1,2,3,4,5
--- => 5,6,7,0,0
-````
-
-### aperture (array [, n = 2])
-*Aliases: `sliding`*.
-
-Returns an iterator function which provides sliding partitions of a given array.
-
-```lua
-local t = {1,2,3,4,5}
-for p in M.aperture(t,4) do
-  print(table.concat(p,','))
-end
-
--- => 1,2,3,4
--- => 2,3,4,5
-
-for p in M.aperture(t,3) do
-  print(table.concat(p,','))
-end
-
--- => 1,2,3
--- => 2,3,4
--- => 3,4,5
-````
-
-### pairwise (array)
-
-Iterator returning sliding pairs of an array.
-
-```lua
-local t = M.range(5)
-for p in pairwise(t) do
-  print(table.concat(p,','))
-end
-
--- => 1,2
--- => 2,3
--- => 3,4
--- => 4,5
-````
-
-### permutation (array)
-*Aliases: `perm`*.
-
-Returns an iterator function for permutations of a given array.
-
-```lua
-t = {'a','b','c'}
-for p in M.permutation(t) do
-  print(table.concat(p))
-end
-
--- => 'bca'
--- => 'cba'
--- => 'cab'
--- => 'acb'
--- => 'bac'
--- => 'abc'
-````
-
 ### concat (array [, sep = '' [, i = 1 [, j = #array]]])
 *Aliases: `join`*.
 
@@ -1245,65 +997,6 @@ Concatenates a given array values:
 M.concat({'a',1,0,1,'b'}) -- => 'a101b'
 ````
 
-### xprod (array, array2)
-
-Returns all possible pairs built from given arrays.
-
-```lua
-local t = M.xprod({1,2},{'a','b'})
--- => {{1,'a'},{1,'b'},{2,'a'},{2,'b'}}
-````
-
-### xpairs (value, array)
-
-Creates pairs from value and array. Value is always prepended to the pair.
-
-```lua
-local t = M.xpairs(1, {1, 2, 3})
--- => {{1,1},{1,2},{1,3}}
-````
-
-### xpairsRight (value, array)
-
-Creates pairs from value and array. Value is always appended as the last item to the pair.
-
-```lua
-local t = M.xpairsRight(1, {1, 2, 3})
--- => {{1,1},{2,1},{3,1}}
-````
-
-### sum (array)
-
-Returns the sum of array values.
-
-```lua
-M.sum({1,2,3,4,5}) -- => 15
-````
-
-### product (array)
-
-Returns the product of array values.
-
-```lua
-M.product({1,2,3,4,5}) -- => 120
-````
-
-### mean (array)
-
-Returns the mean of array values.
-
-```lua
-M.mean({1,2,3,4,5}) -- => 3
-````
-
-### median (array)
-
-Returns the median of array values.
-
-```lua
-M.median({1,2,3,4,5}) -- => 3
-M.median({1,2,3,4}) -- => 2.5
-````
 
 **[[⬆]](#TOC)**
 
@@ -2430,8 +2123,9 @@ M.isInteger(-1) -- => true
 **[[⬆]](#TOC)**
 
 
-## <a name='not-work'>Not working with Luerl</a>
+# <a name='not-work'>Not working with Luerl</a>
 
+## Table functions
 
 ### eachi (t, f)
 *Aliases: `forEachi`*.
@@ -2624,4 +2318,315 @@ for k, v in M.sortedv(tbl, comp) do print(k, v) end
 -- => 5	8
 -- => 2	6
 -- => 3	5
+````
+
+## Array functions
+
+### nsorted (array [, n = 1[, comp]])
+
+Returns the n-top values satisfying a predicate. It takes a comparison function `comp` used to sort array values, 
+and then picks the top n-values. It leaves the original array untouched.
+
+```lua
+local function comp(a,b) return a > b end
+M.nsorted(array,5, comp) -- => {5,4,3,2,1}
+````
+
+`n` defaults to 1 and `comp` defaults to the `<` operator.
+
+```lua
+local array = M.range(1,20)
+M.nsorted(array) -- => {1}
+````
+
+
+### zeros (n)
+
+Returns an array of `n` zeros.
+
+```lua 
+M.zeros(4) -- => {0,0,0,0}
+````
+
+### ones (n)
+
+Returns an array of `n` 1's.
+
+```lua 
+M.ones(3) -- => {1,1,1}
+````
+
+### vector (value, n)
+
+Returns an array of `n` times a given value.
+
+```lua 
+M.vector(10, 4) -- => {10,10,10,10}
+````
+
+### prepend (array, ...)
+
+Adds given values at the top of an array, preserving the order at which elements are passed-in.
+
+```lua
+local array = {'old_val'}
+M.prepend(array,1,2,3,4) -- => "{1,2,3,4,'old_val'}"
+````
+
+### chunk (array [, f])
+
+Iterates over an array aggregating consecutive values in subsets tables, on the basis of the return value of `f(v, k, ...)`. Consecutive elements which return the same value are chunked together.
+
+```lua
+local t = {1,5,2,4,3,3,4}
+M.chunk(t, function(v) return v%2==0 end) -- => "{{1,5},{2,4},{3,3},{4}}"
+````
+
+If not given, `f` defaults to `identity`.
+
+```lua
+local t = {1,5,2,4,3,3,4}
+M.chunk(t) -- => "{{1},{5},{2},{4},{3,3},{4}}"
+````
+
+### disjoint (...)
+
+Checks if all passed in arrays are disjoint.
+
+```lua
+local A = {'a'}
+local B = {'a',1,3}
+local C = {3,10,2}
+
+M.disjoint(A,B) -- => false
+M.disjoint(A,C) -- => true
+M.disjoint(B,C) -- => false
+````
+
+### duplicates (array)
+
+Returns an array list of all duplicates in array.
+
+```lua
+M.duplicates({1,2,3,3,8,8,3,2,4}) -- => {2,3,8}
+````
+
+### zipWith (f, ...)
+*Aliases: `transposeWith`*.
+      
+Merges values using a given function. Only values indexed with the same key in the given arrays are merged in the same subset.
+Function `f` is used to combine values.
+
+```lua
+local names = {'Bob','Alice','James'}; local ages = {22, 23, 25}
+local function introduce(name, age) return 'I am '..name..' and I am '..age..' years old.' end
+local t = M.zipWith(introduce,names,ages)
+-- => {
+-- =>  'I am Bob and I am 22 years old.'
+-- =>  'I am Alice and I am 23 years old.'
+-- =>  'I am James and I am 25 years old.'
+-- => }
+````
+
+### powerset (array)
+
+Returns the powerset of an array.
+
+```lua
+M.powerset {1,2,3} -- => "{{1},{2},{3},{1,2},{2,3},{1,2,3}}"
+````
+
+### partition (array [, n = 1 [, pad]])
+*Aliases: `part`*.
+
+Returns an iterator function for partitions of a given array.
+
+```lua
+local t = {1,2,3,4,5,6}
+for p in M.partition(t,2) do
+  print(table.concat(p, ','))
+end
+
+-- => 1,2
+-- => 3,4
+-- => 5,6
+
+local t = {1,2,3,4,5,6}
+for p in M.partition(t,4) do
+  print(table.concat(p, ','))
+end
+
+-- => 1,2,3,4
+-- => 5,6
+````
+
+In case the last partition has less elements than desired, a 3rd argument can be supplied to adjust the partition size.
+
+```lua
+local t = {1,2,3,4,5,6}
+for p in M.partition(t,4,0) do
+  print(table.concat(p, ','))
+end
+
+-- => 1,2,3,4
+-- => 5,6,0,0
+````
+
+### overlapping (array [, n = 2 [, pad]])
+
+Returns an iterator function which provides overlapping subsequences of a given array.
+
+```lua
+local t = {1,2,3,4,5,6,7}
+for p in M.overlapping(t,3) do
+	print(table.concat(p,','))
+end
+
+-- => 1,2,3
+-- => 3,4,5
+-- => 5,6,7
+
+for p in M.overlapping(t,4) do
+	print(table.concat(p,','))
+end
+
+-- => 1,2,3,4
+-- => 4,5,6,7
+
+for p in M.overlapping(t,5) do
+	print(table.concat(p,','))
+end
+
+-- => 1,2,3,4,5
+-- => 5,6,7
+````
+
+In case the last subsequence wil not match the exact desired length, it can be adjusted with a 3rd argument `pad`.
+
+```lua
+local t = {1,2,3,4,5,6,7}
+for p in M.overlapping(t,5,0) do
+	print(table.concat(p,','))
+end
+
+-- => 1,2,3,4,5
+-- => 5,6,7,0,0
+````
+
+### aperture (array [, n = 2])
+*Aliases: `sliding`*.
+
+Returns an iterator function which provides sliding partitions of a given array.
+
+```lua
+local t = {1,2,3,4,5}
+for p in M.aperture(t,4) do
+  print(table.concat(p,','))
+end
+
+-- => 1,2,3,4
+-- => 2,3,4,5
+
+for p in M.aperture(t,3) do
+  print(table.concat(p,','))
+end
+
+-- => 1,2,3
+-- => 2,3,4
+-- => 3,4,5
+````
+
+### pairwise (array)
+
+Iterator returning sliding pairs of an array.
+
+```lua
+local t = M.range(5)
+for p in pairwise(t) do
+  print(table.concat(p,','))
+end
+
+-- => 1,2
+-- => 2,3
+-- => 3,4
+-- => 4,5
+````
+
+### permutation (array)
+*Aliases: `perm`*.
+
+Returns an iterator function for permutations of a given array.
+
+```lua
+t = {'a','b','c'}
+for p in M.permutation(t) do
+  print(table.concat(p))
+end
+
+-- => 'bca'
+-- => 'cba'
+-- => 'cab'
+-- => 'acb'
+-- => 'bac'
+-- => 'abc'
+````
+
+### xprod (array, array2)
+
+Returns all possible pairs built from given arrays.
+
+```lua
+local t = M.xprod({1,2},{'a','b'})
+-- => {{1,'a'},{1,'b'},{2,'a'},{2,'b'}}
+````
+
+### xpairs (value, array)
+
+Creates pairs from value and array. Value is always prepended to the pair.
+
+```lua
+local t = M.xpairs(1, {1, 2, 3})
+-- => {{1,1},{1,2},{1,3}}
+````
+
+### xpairsRight (value, array)
+
+Creates pairs from value and array. Value is always appended as the last item to the pair.
+
+```lua
+local t = M.xpairsRight(1, {1, 2, 3})
+-- => {{1,1},{2,1},{3,1}}
+````
+
+### sum (array)
+
+Returns the sum of array values.
+
+```lua
+M.sum({1,2,3,4,5}) -- => 15
+````
+
+### product (array)
+
+Returns the product of array values.
+
+```lua
+M.product({1,2,3,4,5}) -- => 120
+````
+
+### mean (array)
+
+Returns the mean of array values.
+
+```lua
+M.mean({1,2,3,4,5}) -- => 3
+````
+
+### median (array)
+
+Returns the median of array values.
+
+```lua
+M.median({1,2,3,4,5}) -- => 3
+M.median({1,2,3,4}) -- => 2.5
 ````
