@@ -1833,7 +1833,7 @@ for k, v in M.sortedv(tbl, comp) do print(k, v) end
 
 ## Array functions
 
-__NOTE: This list of array functions not work with Luerl.___
+__NOTE: This list of array functions not work with Luerl.__
 
 ### nsorted (array [, n = 1[, comp]])
 
@@ -2646,9 +2646,9 @@ M.isFinite(0/0) -- => false
 
 ## Chaining
 
-__NOTE: This library feature not work with Luerl.__
+__Moses offers chaining but this feature is not working with Luerl.__
 
-Method chaining (also known as name parameter idiom), is a technique for invoking consecutively method calls in object-oriented style. Each method returns an object, and method calls are chained together. __Moses offers chaining but this feature is not working with Luerl.__
+Method chaining (also known as name parameter idiom), is a technique for invoking consecutively method calls in object-oriented style. Each method returns an object, and method calls are chained together.
 
 ```lua
 
