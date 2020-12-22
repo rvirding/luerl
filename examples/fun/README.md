@@ -26,7 +26,7 @@ print(reduce(operator.add, 0, map(function(x) return x^2 end, range(n))))
 ## Iterators
 
 A basic primitive of the library after functions is an iterator. Most functions
-takes an iterator and returns a new iteraror(s).
+takes an iterator and returns a new iteraror([s](https://en.wikipedia.org/wiki/Turtles_all_the_way_down)).
 
 The simplest iterator is (surprise!) `pairs` and `ipairs`
 Lua functions. Have you ever tried to call, say, `ipairs` function
