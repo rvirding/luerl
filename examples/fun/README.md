@@ -130,6 +130,6 @@ function use these properties.
 Iterators can be **finite** (sooner or later end up) or **infinite**
 (never end).
 Since there is [no way](https://en.wikipedia.org/wiki/Halting_problem) to determine automatically if an iterator is finite or
-not the library function [can not](https://en.wikipedia.org/wiki/Halting_problem) automatically resolve infinite
+not the library function can not automatically resolve infinite
 loops. It is your obligation to do not pass infinite iterator to reducing
 functions.
