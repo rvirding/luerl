@@ -112,8 +112,8 @@ and ``ipairs``.
 ### Pure functional iterators
 
 Iterators can be either pure functional or have some side effects and returns
-different values for some initial conditions. An **iterator is
-pure functional** if it meets the following criteria:
+different values for some initial conditions. An **[iterator is
+pure functional](https://en.wikipedia.org/wiki/Pure_function)** if it meets the following criteria:
 
 - ``gen`` function always returns the same values for the same ``param`` and
   ``state`` values (idempotence property)
