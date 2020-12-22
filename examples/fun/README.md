@@ -76,7 +76,7 @@ What happens when you type the following code into a Lua console:
 ```lua
     for _it, x in ipairs({'a', 'b', 'c'}) do print(x) end
 ```
-According to Lua reference manual for the code above is equivalent to:
+According to (Lua reference manual)[https://www.lua.org/manual/5.3/manual.html#3.3.5] for the code above is equivalent to:
 ```lua
     do
         -- Initialize the iterator
