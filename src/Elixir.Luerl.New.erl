@@ -23,14 +23,22 @@
 
 -module('Elixir.Luerl.New').
 
+%% Basic user API to luerl.
 -export([init/0,gc/1,
-	 load/2,load/3,loadfile/2,loadfile/3,
-	 load_module/3,
-	 do/2,dofile/2,
-	 call/3,call_chunk/3,call_function/3,call_method/4,
-	 get_table_keys/2,set_table_keys/3,
-	 get_stacktrace/1,
-	 encode/2,encode_list/2,decode/2,decode_list/2]).
+         load/2,load/3,loadfile/2,loadfile/3,
+         load_module/3,load_module_dec/3,
+         do/2,do_dec/2,do/3,do_dec/3,
+         dofile/2,dofile/3,dofile_dec/2,dofile_dec/3,
+         call/3,call_chunk/2,call_chunk/3,
+         call_function/3,call_function_dec/3,
+         call_method/4,call_method_dec/4,
+         get_table_keys/2,get_table_keys_dec/2,
+         set_table_keys/3,set_table_keys_dec/3,
+         get_stacktrace/1
+        ]).
+
+%% Encoding and decoding.
+-export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
 init() ->
     luerl_new:init().
@@ -50,17 +58,41 @@ loadfile(St, Name) ->
 loadfile(St, Name, Opts) ->
     luerl_new:loadfile(Name, Opts, St).
 
-load_module(St, Fp, Mod) ->
-    luerl_new:load_module(Fp, Mod, St).
+load_module(St, Lfp, Mod) ->
+    luerl_new:load_module(Lfp, Mod, St).
+
+load_module_dec(St, Dfp, Mod) ->
+    luerl_new:load_module(Dfp, Mod, St).
 
 do(St, S) ->
     luerl_new:do(S, St).
 
+do(St, S, Opts) ->
+    luerl_new:do(S, Opts, St).
+
+do_dec(St, S) ->
+    luerl_new:do_dec(S, St).
+
+do_dec(St, S, Opts) ->
+    luerl_new:do_dec(S, Opts, St).
+
 dofile(St, Path) ->
     luerl_new:dofile(Path, St).
 
+dofile(St, Path, Opts) ->
+    luerl_new:dofile(Path, Opts, St).
+
+dofile_dec(St, Path) ->
+    luerl_new:dofile_de(Path, St).
+
+dofile_dec(St, Path, Opts) ->
+    luerl_new:dofile_dec(Path, Opts, St).
+
 call(St, C, Args) ->
     luerl_new:call(C, Args, St).
+
+call_chunk(St, C) ->
+    luerl_new:call_chunk(C, St).
 
 call_chunk(St, C, Args) ->
     luerl_new:call_chunk(C, Args, St).
@@ -68,14 +100,26 @@ call_chunk(St, C, Args) ->
 call_function(St, Fp, Args) ->
     luerl_new:call_function(Fp, Args, St).
 
+call_function_dec(St, Dfunc, Dargs) ->
+    luerl_new:call_function(Dfunc, Dargs, St).
+
 call_method(St, Obj, Meth, Args) ->
     luerl_new:call_method(Obj, Meth, Args, St).
+
+call_method_dec(St, Dobj, Dmeth, Dargs) ->
+    luerl_new:call_method(Dobj, Dmeth, Dargs, St).
 
 get_table_keys(St, Keys) ->
     luerl_new:get_table_keys(Keys, St).
 
+get_table_keys_dec(St, Dkeys) ->
+    luerl_new:get_table_keys_dec(Dkeys, St).
+
 set_table_keys(St, Keys, Val) ->
     luerl_new:set_table_keys(Keys, Val, St).
+
+set_table_keys_dec(St, Dkeys, Dval) ->
+    luerl_new:set_table_keys(Dkeys, Dval, St).
 
 get_stacktrace(St) ->
     luerl_new:get_stacktrace(St).
