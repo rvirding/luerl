@@ -22,6 +22,8 @@
 
 %% Basic user API to luerl.
 -export([init/0,gc/1,
+         set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1,
          load/2,load/3,loadfile/2,loadfile/3,
          load_module/3,load_module_dec/3,
          do/2,do_dec/2,do/3,do_dec/3,
@@ -45,6 +47,24 @@ init() ->
 %% gc(State) -> State.
 gc(St) ->
     luerl_heap:gc(St).
+
+%% set_trace_func(TraceFunction, State) -> State.
+%% clear_trace_func(State) -> State.
+%% get_trace_data(State) -> TraceData.
+%% set_trace_data(TraceData, State) -> State.
+%%  Set the trace function and access the trace data.
+
+set_trace_func(Tfunc, St) ->
+    St#luerl{trace_func=Tfunc}.
+
+clear_trace_func(St) ->
+    St#luerl{trace_func=none}.
+
+get_trace_data(St) ->
+    St#luerl.trace_data.
+
+set_trace_data(Tdata, St) ->
+    St#luerl{trace_data=Tdata}.
 
 %% load(String|Binary, State) -> {ok,FuncRef,NewState}.
 %% load(String|Binary, Options, State) -> {ok,FuncRef,NewState}.

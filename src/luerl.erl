@@ -31,8 +31,13 @@
 	 call_method/3,call_method1/3,method_list/2,
 	 get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
 	 init/0,stop/1,gc/1,
-	 encode/2,encode_list/2,decode/2,decode_list/2
+         set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1,
+	 get_stacktrace/1
 	]).
+
+%% Encoding and decoding.
+-export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
 %% luerl:eval(String|Binary|Form, State) -> Result.
 
@@ -255,6 +260,51 @@ stop(St) ->
 %% gc(State) -> State.
 gc(St) ->
     luerl_heap:gc(St).
+
+%% set_trace_func(TraceFunction, State) -> State.
+%% clear_trace_func(State) -> State.
+%% get_trace_data(State) -> TraceData.
+%% set_trace_data(TraceData, State) -> State.
+%%  Set the trace function and access the trace data.
+
+set_trace_func(Tfunc, St) ->
+    St#luerl{trace_func=Tfunc}.
+
+clear_trace_func(St) ->
+    St#luerl{trace_func=none}.
+
+get_trace_data(St) ->
+    St#luerl.trace_data.
+
+set_trace_data(Tdata, St) ->
+    St#luerl{trace_data=Tdata}.
+
+%% get_stacktrace(State) -> [{FuncName,[{file,FileName},{line,Line}]}].
+
+get_stacktrace(#luerl{cs=Stack}=St) ->
+    Fun = fun (Frame, Acc) -> do_stackframe(Frame, Acc, St) end,
+    {_,Trace} = lists:foldl(Fun, {1,[]}, Stack),
+    lists:reverse(Trace).
+
+do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
+    case Funref of
+        #funref{} ->
+            {Func,_} = luerl_heap:get_funcdef(Funref, St),
+            Anno = Func#lua_func.anno,
+            Name = case luerl_anno:get(name, Anno) of
+                       undefined -> <<"-no-name-">>;
+                       N -> N
+                   end,
+            File = luerl_anno:get(file, Anno),
+            {Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
+        #erl_func{} -> {Line,Trace};            %Skip these for now
+        Other ->
+            {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
+    end;
+do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
+    {Line,Trace};
+do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
+    Acc.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
