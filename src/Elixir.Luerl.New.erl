@@ -119,7 +119,7 @@ set_table_keys(St, Keys, Val) ->
     luerl_new:set_table_keys(Keys, Val, St).
 
 set_table_keys_dec(St, Dkeys, Dval) ->
-    luerl_new:set_table_keys(Dkeys, Dval, St).
+    luerl_new:set_table_keys_dec(Dkeys, Dval, St).
 
 get_stacktrace(St) ->
     luerl_new:get_stacktrace(St).
