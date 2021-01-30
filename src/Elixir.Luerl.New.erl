@@ -62,7 +62,7 @@ load_module(St, Lfp, Mod) ->
     luerl_new:load_module(Lfp, Mod, St).
 
 load_module_dec(St, Dfp, Mod) ->
-    luerl_new:load_module(Dfp, Mod, St).
+    luerl_new:load_module_dec(Dfp, Mod, St).
 
 do(St, S) ->
     luerl_new:do(S, St).
@@ -83,7 +83,7 @@ dofile(St, Path, Opts) ->
     luerl_new:dofile(Path, Opts, St).
 
 dofile_dec(St, Path) ->
-    luerl_new:dofile_de(Path, St).
+    luerl_new:dofile_dec(Path, St).
 
 dofile_dec(St, Path, Opts) ->
     luerl_new:dofile_dec(Path, Opts, St).
@@ -101,13 +101,13 @@ call_function(St, Fp, Args) ->
     luerl_new:call_function(Fp, Args, St).
 
 call_function_dec(St, Dfunc, Dargs) ->
-    luerl_new:call_function(Dfunc, Dargs, St).
+    luerl_new:call_function_dec(Dfunc, Dargs, St).
 
 call_method(St, Obj, Meth, Args) ->
     luerl_new:call_method(Obj, Meth, Args, St).
 
 call_method_dec(St, Dobj, Dmeth, Dargs) ->
-    luerl_new:call_method(Dobj, Dmeth, Dargs, St).
+    luerl_new:call_method_dec(Dobj, Dmeth, Dargs, St).
 
 get_table_keys(St, Keys) ->
     luerl_new:get_table_keys(Keys, St).
