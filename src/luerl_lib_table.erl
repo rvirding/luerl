@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -62,9 +62,10 @@ concat(As, St0) ->
 	throw:{error,E} -> lua_error(E, St0)
     end.
 
-do_concat([#tref{i=N}|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
-    case luerl_lib:conv_list(concat_args(As), [lua_string,integer,integer]) of
+do_concat([#tref{}=Tref|As], St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+    case luerl_lib:conv_list(concat_args(As),
+			     [lua_string,lua_integer,lua_integer]) of
 	[Sep,I] ->
 	    {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))],St};
 	[Sep,I,J] ->
@@ -78,13 +79,13 @@ do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 %%  Concatenate elements in a list into a string. Callable from
 %%  Erlang.
 
-concat(#tref{i=N}, Sep, I, St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+concat(Tref, Sep, I, St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     J = length_loop(Arr),
     do_concat(Arr, Dict, Sep, I, J).
 
-concat(#tref{i=N}, Sep, I, J, St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
+concat(Tref, Sep, I, J, St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     do_concat(Arr, Dict, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
@@ -115,18 +116,18 @@ concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
 concat_tab(Arr, Dict, N, J) ->
     case ttdict:find(N, Dict) of
 	{ok,V} ->
-	    case luerl_lib:to_list(V) of
-		nil -> throw({error,{illegal_val,concat,V}});
+	    case luerl_lib:arg_to_list(V) of
+		error -> throw({error,{illegal_value,concat,V}});
 		S -> [S|concat_tab(Arr, Dict, N+1, J)]
 	    end;
-	error -> throw({error,{illegal_val,concat,nil}})
+	error -> throw({error,{illegal_value,concat,nil}})
     end.
 
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
     V = array:get(N, Arr),
-    case luerl_lib:to_list(V) of
-	nil -> throw({error,{illegal_val,concat,V}});
+    case luerl_lib:arg_to_list(V) of
+	error -> throw({error,{illegal_value,concat,V}});
 	S -> [S|concat_arr(Arr, N+1, J)]
     end.
 
@@ -138,21 +139,17 @@ concat_join([], _) -> <<>>.
 %% insert(Table, [Pos,] Value) -> []
 %%  Insert an element into a list shifting following elements.
 
-insert([#tref{i=N},V], St) ->
-    Ts0 = St#luerl.ttab,
-    #table{a=Arr0} = T = ?GET_TABLE(N, Ts0),
+insert([Tref,V], St) when ?IS_TREF(Tref) ->
+    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
     Arr1 = do_insert_last(Arr0, V),
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-    {[],St#luerl{ttab=Ts1}};
-insert([#tref{i=N},P0,V]=As, St) ->
-    Ts0 = St#luerl.ttab,
-    #table{a=Arr0} = T = ?GET_TABLE(N, Ts0),
+    {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
+insert([Tref,P0,V]=As, St) when ?IS_TREF(Tref) ->
+    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
     Size = length_loop(Arr0),
-    case luerl_lib:to_int(P0) of
+    case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 >=1, P1 =< Size+1 ->
 	    Arr1 = do_insert(Arr0, P1, V),
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr1}, Ts0),
-	    {[],St#luerl{ttab=Ts1}};
+	    {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
 	_ -> badarg_error(insert, As, St)
     end;
 insert(As, St) -> badarg_error(insert, As, St).
@@ -185,21 +182,18 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 %% remove(Table [,Pos]) -> Value.
 %%  Remove an element from a list shifting following elements.
 
-remove([#tref{i=N}], St) ->
-    Ts0 = St#luerl.ttab,
-    #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
+remove([Tref], St) when ?IS_TREF(Tref) ->
+    #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
     {Ret,Arr1,Dict1} = do_remove_last(Arr0, Dict0),
-    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
-    {Ret,St#luerl{ttab=Ts1}};
-remove([#tref{i=N},P0|_]=As, St) ->
-    Ts0 = St#luerl.ttab,
-    #table{a=Arr0,d=Dict0} = T = ?GET_TABLE(N, Ts0),
-    case luerl_lib:to_int(P0) of
+    {Ret,luerl_heap:set_table(Tref, T#table{a=Arr1,d=Dict1}, St)};
+remove([Tref,P0|_]=As, St) when ?IS_TREF(Tref) ->
+    #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
+    case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 =/= nil ->
 	    case do_remove(Arr0, Dict0, P1) of
 		{Ret,Arr1,Dict1} ->
-		    Ts1 = ?SET_TABLE(N, T#table{a=Arr1,d=Dict1}, Ts0),
-		    {Ret,St#luerl{ttab=Ts1}};
+		    {Ret,
+		     luerl_heap:set_table(Tref, T#table{a=Arr1,d=Dict1}, St)};
 		badarg -> badarg_error(remove, As, St)
 	    end;
 	_ -> badarg_error(remove, As, St)	%nil or P < 1
@@ -259,8 +253,8 @@ remove_array_1(Arr0, N) ->
 %% pack - pack arguments in to a table.
 
 pack(As, St0) ->
-    T = pack_loop(As, 0.0),			%Indexes are floats!
-    {Tab,St1} = luerl_emul:alloc_table(T, St0),
+    T = pack_loop(As, 0),			%Indexes are integers!
+    {Tab,St1} = luerl_heap:alloc_table(T, St0),
     {[Tab],St1}.
 
 pack_loop([E|Es], N) ->
@@ -269,9 +263,9 @@ pack_loop([], N) -> [{<<"n">>,N}].
 
 %% unpack - unpack table into return values.
 
-unpack([#tref{i=N}=T|As], St) ->
-    #table{a=Arr,d=Dict} = ?GET_TABLE(N, St#luerl.ttab),
-    case luerl_lib:to_ints(unpack_args(As)) of
+unpack([#tref{}=Tref|As], St) ->
+    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+    case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
 	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
@@ -280,7 +274,8 @@ unpack([#tref{i=N}=T|As], St) ->
 	    Unp = do_unpack(Arr, Dict, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
 	    {Unp,St};
-	nil -> badarg_error(unpack, [T|As], St)	%Not numbers
+	error ->				%Not numbers
+	    badarg_error(unpack, [Tref|As], St)
     end;
 unpack([], St) -> badarg_error(unpack, [], St).
 
@@ -314,13 +309,13 @@ unpack_arr(_, N, J) when N > J -> [];
 unpack_arr(Arr, N, J) ->
     [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
 
-%% raw_length(Table, State) -> Length.
 %% length(Table, State) -> {Length,State}.
+%% raw_length(Table, State) -> Length.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
 length(#tref{}=T, St0) ->
-    Meta = luerl_emul:getmetamethod(T, <<"__len">>, St0),
+    Meta = luerl_heap:get_metamethod(T, <<"__len">>, St0),
     if ?IS_TRUE(Meta) ->
 	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
 	    {luerl_lib:first_value(Ret),St1};
@@ -328,9 +323,9 @@ length(#tref{}=T, St0) ->
 	    {raw_length(T, St0),St0}
     end.
 
-raw_length(#tref{i=N}, St) ->
-    #table{a=Arr} = ?GET_TABLE(N, St#luerl.ttab),
-    float(length_loop(Arr)).
+raw_length(Tref, St) ->
+    #table{a=Arr} = luerl_heap:get_table(Tref, St),
+    length_loop(Arr).
 
 length_loop(Arr) ->
     case {array:get(1, Arr),array:get(2, Arr)} of
@@ -349,20 +344,20 @@ length_loop(I, Arr) ->
 %% sort(Table [,SortFun])
 %%  Sort the elements of the list after their values.
 
-sort([#tref{i=N}], St0) ->
+sort([Tref], St0) when ?IS_TREF(Tref) ->
     Comp = fun (A, B, St) -> lt_comp(A, B, St) end,
-    St1 = do_sort(Comp, St0, N),
+    St1 = do_sort(Comp, St0, Tref),
     {[],St1};
-sort([#tref{i=N},Func|_], St0) ->
+sort([Tref,Func|_], St0) when ?IS_TREF(Tref) ->
     Comp = fun (A, B, St) ->
 		   luerl_emul:functioncall(Func, [A,B], St)
 	   end,
-    St1 = do_sort(Comp, St0, N),
+    St1 = do_sort(Comp, St0, Tref),
     {[],St1};
 sort(As, St) -> badarg_error(sort, As, St).
 
-do_sort(Comp, St0, N) ->
-    #table{a=Arr0}=T = ?GET_TABLE(N, St0#luerl.ttab),
+do_sort(Comp, St0, Tref) ->
+    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St0),
     case array:to_list(Arr0) of
 	[] -> St0;				%Nothing to do
 	[E0|Es0] ->
@@ -370,9 +365,7 @@ do_sort(Comp, St0, N) ->
 	    {Es1,St1} = merge_sort(Comp, St0, Es0),
 	    Arr2 = array:from_list([E0|Es1], nil),
 	    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
-	    Ts0 = St1#luerl.ttab,
-	    Ts1 = ?SET_TABLE(N, T#table{a=Arr2}, Ts0),
-	    St1#luerl{ttab=Ts1}
+	    luerl_heap:set_table(Tref, T#table{a=Arr2}, St1)
     end.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.
@@ -381,7 +374,7 @@ do_sort(Comp, St0, N) ->
 lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
 lt_comp(O1, O2, St0) ->
-    case luerl_emul:getmetamethod(O1, O2, <<"__lt">>, St0) of
+    case luerl_heap:get_metamethod(O1, O2, <<"__lt">>, St0) of
 	nil -> lua_error({illegal_comp,sort}, St0);
 	Meta ->
 	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),

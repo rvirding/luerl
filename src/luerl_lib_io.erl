@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -39,8 +39,8 @@ table() ->
 flush(_, St) -> {[true],St}.
 
 write(As, St) ->
-    case luerl_lib:conv_list(As, [lua_string]) of
-	nil -> badarg_error(write, As, St);
+    case luerl_lib:args_to_strings(As) of
+	error -> badarg_error(write, As, St);
 	Ss ->
 	    lists:foreach(fun (S) -> io:format("~s", [S]) end, Ss),
 	    {[#userdata{d=standard_io}],St}

@@ -16,6 +16,8 @@
 %% Author  : Łukasz Biedrycki
 %% Purpose : The bit32 library for Luerl.
 
+%% This library has been deprecated in 5.3 but we still keep it.
+
 -module(luerl_lib_bit32).
 
 -include("luerl.hrl").
@@ -31,7 +33,7 @@
 -define(DEFAULT_BXOR, 0).
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 table() ->
     [{<<"band">>,#erl_func{code=fun fband/2}},
@@ -49,9 +51,9 @@ table() ->
      ].
 
 fband(As, St) ->
-    case luerl_lib:tointegers(As) of
-    nil -> badarg_error('band', As, St);
-    L when is_list(L) -> {[aband(L)], St}
+    case luerl_lib:args_to_integers(As) of
+	L when is_list(L) -> {[aband(L)], St};
+	error -> badarg_error('band', As, St)
     end.
 
 aband([]) -> ?DEFAULT_BAND;
@@ -61,17 +63,17 @@ aband([], A) -> float(A);
 aband([X|T], A) -> aband(T, checkint32(X) band A).
 
 fbnot(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [N|_] ->
-        NotN = bnot checkint32(N),
-        {[float(NotN)], St};
-    _ -> badarg_error('bnot', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[N|_] ->
+	    NotN = bnot checkint32(N),
+	    {[float(NotN)], St};
+	error -> badarg_error('bnot', As, St)
     end.
 
 fbor(As, St) ->
-    case luerl_lib:tointegers(As) of
-    nil -> badarg_error('bor', As, St);
-    L when is_list(L) -> {[abor(L)], St}
+    case luerl_lib:args_to_integers(As) of
+	L when is_list(L) -> {[abor(L)], St};
+	error -> badarg_error('bor', As, St)
     end.
 
 abor([]) -> ?DEFAULT_BOR;
@@ -81,15 +83,15 @@ abor([], A) -> float(A);
 abor([X|T], A) -> abor(T, checkint32(X) bor A).
 
 fbtest(As, St) ->
-    case luerl_lib:tointegers(As) of
-    nil -> badarg_error('btest', As, St);
-    L when is_list(L) -> {[aband(L) /= 0], St}
+    case luerl_lib:args_to_integers(As) of
+	L when is_list(L) -> {[aband(L) /= 0], St};
+	error -> badarg_error('btest', As, St)
     end.
 
 fbxor(As, St) ->
-    case luerl_lib:tointegers(As) of
-    nil -> badarg_error('bxor', As, St);
-    L when is_list(L) -> {[abxor(L)], St}
+    case luerl_lib:args_to_integers(As) of
+	L when is_list(L) -> {[abxor(L)], St};
+	error -> badarg_error('bxor', As, St)
     end.
 
 abxor([]) -> ?DEFAULT_BXOR;
@@ -99,56 +101,56 @@ abxor([], A) -> float(A);
 abxor([X|T], A) -> abxor(T, checkint32(X) bxor A).
 
 flshift(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(checkint32(X) bsl trunc(Y))], St};
-    _ -> badarg_error('lshift', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[X,Y|_] -> {[float(checkint32(X) bsl trunc(Y))], St};
+	_ -> badarg_error('lshift', As, St)
     end.
 
 frshift(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(checkint32(X) bsr trunc(Y))], St};
-    _ -> badarg_error('rshift', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[X,Y|_] -> {[float(checkint32(X) bsr trunc(Y))], St};
+	_ -> badarg_error('rshift', As, St)
     end.
 
 farshift(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [X,Y|_] ->
-        Disp = trunc(Y),
-        case Disp > 0 of
-            true -> {[float(checkint32(X) bsr trunc(Y))], St};
-            false -> {[float(checkint32(X) bsl abs(trunc(Y)))], St}
-        end;
-    _ -> badarg_error('arshift', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[X,Y|_] ->
+	    Disp = trunc(Y),
+	    case Disp > 0 of
+		true -> {[float(checkint32(X) bsr trunc(Y))], St};
+		false -> {[float(checkint32(X) bsl abs(trunc(Y)))], St}
+	    end;
+	_ -> badarg_error('arshift', As, St)
     end.
 
 flrotate(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(lrotate(checkint32(X), trunc(Y)))], St};
-    _ -> badarg_error('lrotate', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[X,Y|_] -> {[float(lrotate(checkint32(X), trunc(Y)))], St};
+	_ -> badarg_error('lrotate', As, St)
     end.
 
 frrotate(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [X,Y|_] -> {[float(rrotate(checkint32(X), trunc(Y)))], St};
-    _ -> badarg_error('rrotate', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[X,Y|_] -> {[float(rrotate(checkint32(X), trunc(Y)))], St};
+	_ -> badarg_error('rrotate', As, St)
     end.
 
 fextract(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [N,Field,Width|_] ->
-        {[float(extract(N, Field, Width, As, St))], St};
-    [N,Field|_] ->
-        {[float(extract(N, Field, 1, As, St))], St};
-    _ -> badarg_error('extract', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[N,Field,Width|_] ->
+	    {[float(extract(N, Field, Width, As, St))], St};
+	[N,Field|_] ->
+	    {[float(extract(N, Field, 1, As, St))], St};
+	_ -> badarg_error('extract', As, St)
     end.
 
 freplace(As, St) ->
-    case luerl_lib:tointegers(As) of
-    [N,V,Field,Width|_] ->
-        {[float(replace(N, V, Field, Width, As, St))], St};
-    [N,V,Field|_] ->
-        {[float(replace(N, V, Field, 1, As, St))], St};
-    _ -> badarg_error('replace', As, St)
+    case luerl_lib:args_to_integers(As) of
+	[N,V,Field,Width|_] ->
+	    {[float(replace(N, V, Field, Width, As, St))], St};
+	[N,V,Field|_] ->
+	    {[float(replace(N, V, Field, 1, As, St))], St};
+	_ -> badarg_error('replace', As, St)
     end.
 
 
@@ -162,7 +164,6 @@ lrotate(X1, Y) ->
     X2 = uint32(X1 bsl 1),
     X3 = X2 bor (Most bsr 31),
     lrotate(X3, Y - 1).
-
 
 rrotate(X, Y) when Y < 0 ->
     lrotate(X, abs(Y));

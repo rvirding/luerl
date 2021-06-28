@@ -16,31 +16,32 @@ run() ->
     io:format("It's a comprehensive demo of the interface.~n"),
     io:format("Please check out the source to learn more.~n"),
 
+    St0A = luerl:init(),
     % execute a string
-    luerl:eval("print(\"(1) Hello, Robert!\")"),
-    luerl:eval(<<"print(\"(2) Hello, Roberto!\")">>),
-    luerl:do("print(\"(3) Hej, Robert!\")"),
-    luerl:do(<<"print(\"(4) Olà, Roberto!\")">>),
+    luerl:eval("print(\"(1) Hello, Robert!\")", St0A),
+    luerl:eval(<<"print(\"(2) Hello, Roberto!\")">>, St0A),
+    luerl:do("print(\"(3) Hej, Robert!\")", St0A),
+    luerl:do(<<"print(\"(4) Olà, Roberto!\")">>, St0A),
     
     % execute a string, get a result
-    {ok,A} = luerl:eval("return 1 + 1"),
-    {ok,A} = luerl:eval(<<"return 1 + 1">>),
+    {ok,A} = luerl:eval("return 1 + 1", St0A),
+    {ok,A} = luerl:eval(<<"return 1 + 1">>, St0A),
     io:format("(5) 1 + 1 = ~p!~n", [A]),
 
     % execute a file
-    luerl:evalfile("./hello2-1.lua"),
-    luerl:dofile("./hello2-1.lua"),
+    luerl:evalfile("./hello2-1.lua", St0A),
+    luerl:dofile("./hello2-1.lua", St0A),
 
     % execute a file, get a result
-    {ok,B} = luerl:evalfile("./hello2-2.lua"),
-    {B,_} = luerl:dofile("./hello2-2.lua"),
+    {ok,B} = luerl:evalfile("./hello2-2.lua", St0A),
+    {B,_} = luerl:dofile("./hello2-2.lua", St0A),
     io:format("(7) 2137 * 42 = ~p?~n", [B]),
 
 	% execute a standard function
-    luerl:call_function([print], [<<"(8) Hello, standard print function!">>]),
-    luerl:call_function([print], [<<"(9) Hello, standard print function!">>],  luerl:init()),
-    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42]),
-    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], luerl:init()),
+    luerl:call_function([print], [<<"(8) Hello, standard print function!">>], St0A),
+    luerl:call_function([print], [<<"(9) Hello, standard print function!">>], St0A),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], St0A),
+    {Result1,_} = luerl:call_function([table,pack], [<<"a">>,<<"b">>,42], St0A),
     io:format("(10) ~p?~n", [Result1]),
 
     % separately parse, then execute (doubles (11) and Chunk1 as assertion)
@@ -122,36 +123,36 @@ run() ->
     % execute a file, get a result
     {ok,F} = luerl:evalfile("./hello2-7.lua", State04),
     {F,State05} = luerl:dofile("./hello2-7.lua", State04),
-    io:format("(28) F: ~s~n", [F]),
+    io:format("(28) F: ~ts~n", [F]),
 
     % execute a file that changes the State0, and get a value back
     {F,State06} = luerl:dofile("./hello2-7.lua", State05),
-    io:format("(29) F: ~s = ", [F]),
+    io:format("(29) F: ~ts = ", [F]),
     luerl:do("print('(30) F: ' .. a)", State06),
 
     % separately parse, then execute
     {ok,Chunk11,_} = luerl:load("print(\"(31) Hello, \" .. a .. \"!\")", State06),
-    {ok,Chunk11,_} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>, State06),
-    luerl:eval(Chunk11,State06),
-    luerl:do(Chunk11,State06),
+    {ok,Chunk11,State07} = luerl:load(<<"print(\"(31) Hello, \" .. a .. \"!\")">>, State06),
+    luerl:eval(Chunk11,State07),
+    luerl:do(Chunk11,State07),
 
     % separately parse, then execute a file. The file defines a function old()
-    {ok,Chunk12,St6} = luerl:loadfile("./hello2-8.lua", State06),
-    {ok,Result12} = luerl:eval(Chunk12, St6),
-    {Result12,State06A} = luerl:do(Chunk12,St6),
-    luerl:call_function([old],[],State06A),
+    {ok,Chunk12,St7} = luerl:loadfile("./hello2-8.lua", State07),
+    {ok,Result12} = luerl:eval(Chunk12, St7),
+    {Result12,State07A} = luerl:do(Chunk12,St7),
+    luerl:call_function([old],[],State07A),
 
     % separately parse, then execute, get a result
-    {ok,Chunk13,St7} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a", State06),
-    {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State06),
-    {ok,Result07} = luerl:eval(Chunk13, St7),
-    {Result07,State07} = luerl:do(Chunk13, St7),
+    {ok,Chunk13,St8} = luerl:load("a = '(30a)' .. a .. ' (this is Greek)'; return a", State07),
+    {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State07),
+    {ok,Result07} = luerl:eval(Chunk13, St8),
+    {Result07,State08} = luerl:do(Chunk13, St8),
     io:format("(34) And again I said: ~s~n", [Result07]),
 
     % separately parse, then execute a file, get a result. The file defines confirm(p)
-    {ok,Chunk14,St8} = luerl:loadfile("./hello2-9.lua", State07),
-    {ok,Result14} = luerl:eval(Chunk14, St8),
-    {Result14,State14} = luerl:do(Chunk14, St8),
+    {ok,Chunk14,St9} = luerl:loadfile("./hello2-9.lua", State08),
+    {ok,Result14} = luerl:eval(Chunk14, St9),
+    {Result14,State14} = luerl:do(Chunk14, St9),
     io:format("(35) And twice: ~s~n", [Result14]),
     {Result14A,_} = luerl:call_function([confirm], [<<"Is it?">>], State14),
     io:format("(36) Well: ~s~n", [Result14A]),

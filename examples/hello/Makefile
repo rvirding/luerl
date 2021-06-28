@@ -1,6 +1,9 @@
 EXAMPLES = hello \
 	   hello2 \
-	   hello_table
+	   hello_table \
+	   hello_table_new \
+	   hello_userdata \
+	   hello_userdata_new
 
 ROOTDIR = ../..
 SRCDIR  = $(ROOTDIR)/src

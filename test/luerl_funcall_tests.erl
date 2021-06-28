@@ -56,7 +56,7 @@ return_lib_function_test() ->
     {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
     {[Fun], _State2} = luerl:call_function([test], [1], State1),
     {Res, _State3} = Fun([<<"barfooblafasel">>, <<"foo">>], State1),
-    ?assertEqual([4.0, 6.0], Res).
+    ?assertEqual([4, 6], Res).
 
 define_fun_in_lua_test() ->
     State = luerl:init(),
@@ -69,8 +69,9 @@ define_fun_in_lua_test() ->
     {_, State1} = luerl:do(Chunk, State),
     {[Fun], _State2} = luerl:call_function([mkadder], [1], State1),
     {[Fun2], _State3} = luerl:call_function([mkadder], [2], State1),
-    ?assertEqual([5.0], Fun([4])),
-    ?assertEqual([6.0], Fun2([4])).
+    ?assertEqual([5], Fun([4])),
+    ?assertEqual([5.0], Fun([4.0])),
+    ?assertEqual([6], Fun2([4])).
 
 define_fun2_in_lua_test() ->
     State = luerl:init(),
@@ -86,10 +87,12 @@ define_fun2_in_lua_test() ->
     {_, State1} = luerl:do(Chunk, State),
     {[Fun], _State2} = luerl:call_function([mklist], [5], State1),
     {[Fun2], _State3} = luerl:call_function([mklist], [10], State1),
-    ?assertEqual([[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]],
+    ?assertEqual([[{1,4}, {2,4}, {3,4}, {4,4}, {5,4}]],
 		 Fun([4])),
-    ?assertEqual([[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0},
-		   {6,4.0}, {7,4.0}, {8,4.0}, {9,4.0}, {10,4.0}]],
+    ?assertEqual([[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]],
+		 Fun([4.0])),
+    ?assertEqual([[{1,4}, {2,4}, {3,4}, {4,4}, {5,4},
+		   {6,4}, {7,4}, {8,4}, {9,4}, {10,4}]],
 		 Fun2([4])).
 
 newindex_metamethod_test() ->
@@ -101,5 +104,5 @@ newindex_metamethod_test() ->
 	      "m[123] = 456\n"
 	      "return t[123], m[123]">>,
     {[TVal, MVal], _State1} = luerl:do(Chunk, State),
-    ?assertEqual(456.0, TVal),
+    ?assertEqual(456, TVal),
     ?assertEqual(nil, MVal).

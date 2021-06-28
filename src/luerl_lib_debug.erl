@@ -1,4 +1,4 @@
-%% Copyright (c) 2015-2018 Robert Virding
+%% Copyright (c) 2015-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@
 -import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
 
 install(St) ->
-    luerl_emul:alloc_table(table(), St).
+    luerl_heap:alloc_table(table(), St).
 
 %% table() -> [{FuncName,Function}].
 
@@ -47,46 +47,13 @@ table() ->
 %%  else the metatable for the type.
 
 getmetatable([O|_], St) ->
-    {[do_getmetatable(O, St)],St};
+    {[luerl_heap:get_metatable(O, St)],St};
 getmetatable(As, St) -> badarg_error(getmetatable, As, St).
 
-do_getmetatable(#tref{i=T}, #luerl{ttab=Ts}) ->
-    (?GET_TABLE(T, Ts))#table.m;
-do_getmetatable(#uref{i=U}, #luerl{utab=Us}) ->
-    (?GET_TABLE(U, Us))#table.m;
-do_getmetatable(nil, #luerl{meta=Meta}) -> Meta#meta.nil;
-do_getmetatable(B, #luerl{meta=Meta}) when is_boolean(B) ->
-    Meta#meta.boolean;
-do_getmetatable(N, #luerl{meta=Meta}) when is_number(N) ->
-    Meta#meta.number;
-do_getmetatable(S, #luerl{meta=Meta}) when is_binary(S) ->
-     Meta#meta.string;
-do_getmetatable(_, _) -> nil.	       %Other types have no metatables
-
-setmetatable([T,M|_], St) ->
-    do_setmetatable(T, M, St);
+setmetatable([T,M|_], St0) ->
+    St1 = luerl_heap:set_metatable(T, M, St0),
+    {[T],St1};
 setmetatable(As, St) -> badarg_error(setmetatable, As, St).
-
-do_setmetatable(#tref{i=N}=T, M, #luerl{ttab=Ts0}=St) ->
-    Ts1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, Ts0),
-    {[T],St#luerl{ttab=Ts1}};
-do_setmetatable(#uref{i=N}=U, M, #luerl{utab=Us0}=St) ->
-    Us1 = ?UPD_TABLE(N, fun (Tab) -> Tab#table{m=M} end, Us0),
-    {[U],St#luerl{utab=Us1}};
-do_setmetatable(nil, M, #luerl{meta=Meta0}=St) ->
-    Meta1 = Meta0#meta{nil=M},
-    {[nil],St#luerl{meta=Meta1}};
-do_setmetatable(B, M, #luerl{meta=Meta0}=St) when is_boolean(B) ->
-    Meta1 = Meta0#meta{boolean=M},
-    {[B],St#luerl{meta=Meta1}};
-do_setmetatable(N, M, #luerl{meta=Meta0}=St) when is_number(N) ->
-    Meta1 = Meta0#meta{number=M},
-    {[N],St#luerl{meta=Meta1}};
-do_setmetatable(B, M, #luerl{meta=Meta0}=St) when is_binary(B) ->
-    Meta1 = Meta0#meta{string=M},
-    {[B],St#luerl{meta=Meta1}};
-do_setmetatable(D, _, St) ->			%Do nothing for the rest
-    {[D],St}.
 
 %% getuservalue([User|_], State) -> {[Value],State}.
 %% setuservalue([User,Value|_], State) -> {[User],State}.

@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2020 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -38,10 +38,10 @@
 install(St0) ->
     St1 = luerl_emul:set_global_key(<<"require">>,
 				    #erl_func{code=fun require/2}, St0),
-    {S,St2} = luerl_emul:alloc_table(searchers_table(), St1),
-    {L,St3} = luerl_emul:alloc_table(loaded_table(), St2),
-    {P,St4} = luerl_emul:alloc_table(preload_table(), St3),
-    {T,St5} = luerl_emul:alloc_table(table(S, L, P), St4),
+    {S,St2} = luerl_heap:alloc_table(searchers_table(), St1),
+    {L,St3} = luerl_heap:alloc_table(loaded_table(), St2),
+    {P,St4} = luerl_heap:alloc_table(preload_table(), St3),
+    {T,St5} = luerl_heap:alloc_table(table(S, L, P), St4),
     {T,St5}.
 
 %% table() -> [{FuncName,Function}].
@@ -134,7 +134,7 @@ search_path_loop(_, [], Tried) ->		%Couldn't find it
 require(As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
 	[Mod] -> do_require(Mod, St);
-	nil -> badarg_error(require, As, St)
+	error -> badarg_error(require, As, St)
     end.
 
 do_require(Mod, St0) ->
@@ -156,8 +156,8 @@ require_ret(Mod, Val, Pt, St0) ->
     St1 = luerl_emul:set_table_keys(Pt, [<<"loaded">>,Mod], Res, St0),
     {[Res],St1}.
 
-search_loaders(Mod, #tref{i=N}, #luerl{ttab=Ts}=St) ->
-    #table{a=Arr} = ?GET_TABLE(N, Ts),
+search_loaders(Mod, Tref, St) ->
+    #table{a=Arr} = luerl_heap:get_table(Tref, St),
     Ls = array:sparse_to_list(Arr),
     search_loaders_loop(Mod, Ls, <<>>, St).
 
@@ -192,7 +192,7 @@ preload_searcher(As, St0) ->
 		{nil,St2} -> {[],St2};
 		{Val,St2} -> {[Val],St2}	%Return the chunk
 	    end;
-	nil -> badarg_error(preload_searcher, As, St0)
+	error -> badarg_error(preload_searcher, As, St0)
     end.
 
 lua_searcher(As, St0) ->
@@ -207,7 +207,7 @@ lua_searcher(As, St0) ->
 		{error,Tried} ->
 		    {[Tried],St1}
 	    end;
-	nil -> badarg_error(lua_searcher, As, St0)
+	error -> badarg_error(lua_searcher, As, St0)
     end.
 
 lua_searcher_ret({ok,Chunk}, File, St0) ->
