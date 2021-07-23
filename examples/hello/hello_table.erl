@@ -19,4 +19,5 @@ run() ->
     {Bye, Lua6} = luerl:get_table1([<<"hello_table">>, <<"goodbye">>], Lua5),
     {HelloTab, _Lua7} = luerl:get_table1([<<"hello_table">>], Lua6),
     io:format("(2) ~s - ~p~n", [Bye, HelloTab]),
+
     done.
