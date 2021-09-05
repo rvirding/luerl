@@ -194,13 +194,13 @@ format_integer(Fl, F, P, N, Str0) ->
 %%  Print float Number in e/f/g format.
 
 e_float(Fl, F, P, N) ->
-    format_float(Fl, F, e_float_precision(P), "~.*e", N).
+    format_float(Fl, F, e_float_precision(P), "~.*e", float(N)).
 
 f_float(Fl, F, P, N) ->
-    format_float(Fl, F, f_float_precision(P), "~.*f", N).
+    format_float(Fl, F, f_float_precision(P), "~.*f", float(N)).
 
 g_float(Fl, F, P, N) ->
-    format_float(Fl, F, g_float_precision(P), "~.*g", N).
+    format_float(Fl, F, g_float_precision(P), "~.*g", float(N)).
 
 format_float(Fl, F, P, Format, N) ->
     Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
