@@ -75,7 +75,8 @@ string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
     St0 = #luacomp{opts=Opts,code=Str},
-    St1 = filenames(?NOFILE, St0),
+    File = prop(module, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
     do_compile(list_passes(), St1).
 
 %% forms(Forms) ->
@@ -87,16 +88,17 @@ forms(Forms) -> forms(Forms, [verbose,report]).
 
 forms(Forms, Opts) ->
     St0 = #luacomp{opts=Opts,code=Forms},
-    St1 = filenames(?NOFILE, St0),
+    File = prop(module, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
     do_compile(forms_passes(), St1).
 
-do_compile(Ps, St0) ->
+do_compile(Passes, St0) ->
     %% The compiler state already contains the filenames.
     Cinfo = compiler_info(St0),                 %The compiler info
     St1 = St0#luacomp{cinfo=Cinfo},
-    case do_passes(Ps, St1) of
+    case do_passes(Passes, St1) of
         {ok,St2} -> do_ok_return(St2);
-        {error, St2} -> do_error_return(St2)
+        {error,St2} -> do_error_return(St2)
     end.
 
 %% filenames(File, State) -> State.
