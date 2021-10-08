@@ -242,7 +242,7 @@ load_chunk_is([], Funrs, St) -> {[],Funrs,St}.
 
 load_chunk_i(?PUSH_FDEF(Anno, Lsz, Esz, Pars, B0), Funrs0, St0) ->
     {B1,Funrs,St1} = load_chunk_is(B0, [], St0),
-    Fdef = #lua_func{anno=Anno,funrefs=Funrs,lsz=Lsz,esz=Esz,pars=Pars,b=B1},
+    Fdef = #lua_func{anno=Anno,funrefs=Funrs,lsz=Lsz,esz=Esz,pars=Pars,body=B1},
     {Funref,St2} = luerl_heap:alloc_funcdef(Fdef, St1),
     Funrs1 = ordsets:add_element(Funref, Funrs0),
     {?PUSH_FDEF(Funref),Funrs1,St2};
@@ -747,7 +747,7 @@ functioncall(Func, Args, Stk, Cs, St) ->
 %%  Make the local variable and Env frames and push them onto
 %%  respective stacks and call the function.
 
-call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,b=Fis},
+call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
 	     Args, Stk0, Env0, Cs, St0) ->
     L = make_loc_frame(Lsz),
     {Eref,St1} = make_env_frame(Esz, St0),

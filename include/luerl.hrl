@@ -56,13 +56,15 @@
 -record(call_frame, {func,args,			%Function, arguments
 		     lvs,			%Local variables
 		     env,			%Environment
-		     is=[],cont=[]		%Instructions, continuation
+		     is=[],			%Instructions
+		     cont=[]			%Continuation
 		    }).
 %% Loop break frame
 -record(loop_frame, {lvs,			%Local variables
 		     stk,			%Stack
 		     env,			%Environment
-		     is=[],cont=[]		%Instructions, continuation
+		     is=[],			%Instructions
+		     cont=[]			%Continuation
 		    }).
 %% Current line
 -record(current_line, {line,			%Line
@@ -102,7 +104,7 @@
 		  esz,				%Env var size
 		  %% env=not_used,		%Local env block template
 		  pars,				%Parameter types
-		  b}).				%Code block
+		  body}).			%Code block
 -define(IS_LUAFUNC(F), is_record(F, lua_func)).
 
 -record(erl_func,{code}).			%Erlang code (fun)
