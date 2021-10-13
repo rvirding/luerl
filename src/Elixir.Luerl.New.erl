@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2021 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -37,6 +37,10 @@
          get_stacktrace/1
         ]).
 
+%% Tracing.
+-export([set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1]).
+
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
@@ -45,6 +49,18 @@ init() ->
 
 gc(St) ->
     luerl_new:gc(St).
+
+set_trace_func(St, Func) ->
+    luerl:set_trace_func(Func, St).
+
+clear_trace_func(St) ->
+    luerl:clear_trace_func(St).
+
+get_trace_data(St) ->
+    luerl:get_trace_data(St).
+
+set_trace_data(St, Tdata) ->
+    luerl:set_trace_data(Tdata, St).
 
 load(St, Bin) ->
     luerl_new:load(Bin, St).

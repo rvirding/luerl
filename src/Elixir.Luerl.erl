@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2021 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -34,8 +34,13 @@
          call_method/3,call_method1/3,method_list/2,
          get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
          init/0,stop/1,gc/1,
-         encode/2,encode_list/2,decode/2,decode_list/2
+         set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1,
+         get_stacktrace/1
         ]).
+
+%% Encoding and decoding.
+-export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
 eval(St, Chunk) ->
      luerl:eval(Chunk, St).
@@ -123,6 +128,21 @@ stop(St) ->
 
 gc(St) ->
     luerl:gc(St).
+
+set_trace_func(St, Func) ->
+    luerl:set_trace_func(Func, St).
+
+clear_trace_func(St) ->
+    luerl:clear_trace_func(St).
+
+get_trace_data(St) ->
+    luerl:get_trace_data(St).
+
+set_trace_data(St, Tdata) ->
+    luerl:set_trace_data(Tdata, St).
+
+get_stacktrace(St) ->
+    luerl:get_stacktrace(St).
 
 encode_list(St, Ts) ->
     luerl:encode_list(Ts, St).
