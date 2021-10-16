@@ -258,9 +258,9 @@ tonumber(_) -> nil.
 
 tostring([Arg|_], St) ->
     case luerl_heap:get_metamethod(Arg, <<"__tostring">>, St) of
-	nil -> {[tostring(Arg)],St};
-	M when ?IS_FUNCTION(M) ->
-	    luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
+        nil -> {[tostring(Arg)],St};
+        M when ?IS_FUNCTION(M) ->
+            luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
     end.
 
 tostring(nil) -> <<"nil">>;
@@ -270,19 +270,23 @@ tostring(N) when is_number(N) ->
     %% A = abs(N),
     %% %% Print really big/small "integers" as floats as well.
     %% S = if ?IS_FLOAT_INT(N), A < 1.0e14 ->
-    %% 		integer_to_list(round(N));
-    %% 	   true -> io_lib:write(N)
-    %% 	end,
+    %%             integer_to_list(round(N));
+    %%        true -> io_lib:write(N)
+    %%     end,
     iolist_to_binary(io_lib:write(N));
 tostring(S) when is_binary(S) -> S;
-tostring(#tref{i=I}) -> iolist_to_binary(["table: ",integer_to_list(I)]);
-tostring(#usdref{i=I}) -> iolist_to_binary(["userdata: ",integer_to_list(I)]);
-tostring(#funref{}) -> <<"function:">>;	%Functions defined in Lua
-tostring(#erl_func{}) -> <<"function:">>;	%Internal functions
+tostring(#tref{i=I}) ->
+    iolist_to_binary([<<"table: ">>,integer_to_list(I)]);
+tostring(#usdref{i=I}) ->
+    iolist_to_binary([<<"userdata: ">>,integer_to_list(I)]);
+tostring(#funref{i=I}) ->                       %Functions defined in Lua
+    iolist_to_binary([<<"function: ">>,integer_to_list(I)]);
+tostring(#erl_func{code=C}) ->                  %Erlang functions
+    iolist_to_binary([<<"function: ">>,io_lib:write(C)]);
 tostring(#thread{}) -> <<"thread">>;
 tostring(_) -> <<"unknown">>.
 
-type([Arg|_], St) -> {[type(Arg)],St}.		%Only one return value!
+type([Arg|_], St) -> {[type(Arg)],St}.          %Only one return value!
 
 type(nil) -> <<"nil">>;
 type(N) when is_number(N) -> <<"number">>;
@@ -290,8 +294,8 @@ type(S) when is_binary(S) -> <<"string">>;
 type(B) when is_boolean(B) -> <<"boolean">>;
 type(#tref{}) -> <<"table">>;
 type(#usdref{}) -> <<"userdata">>;
-type(#funref{}) -> <<"function">>;		%Functions defined in Lua
-type(#erl_func{}) -> <<"function">>;		%Internal functions
+type(#funref{}) -> <<"function">>;              %Functions defined in Lua
+type(#erl_func{}) -> <<"function">>;            %Internal functions
 type(#thread{}) -> <<"thread">>;
 type(_) -> <<"unknown">>.
 
