@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2021 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -381,13 +381,23 @@ match_caps(Cas, S, I) -> [ match_cap(Ca, S, I) || Ca <- Cas ].
 rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
 rep([_,_,_|_]=As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_string]) of
-	[S,I,Sep] ->
-	    if I > 0 ->
-		    {[iolist_to_binary([S|lists:duplicate(I-1, [Sep,S])])],St};
-	       true -> {[<<>>],St}
-	    end;
-	error ->				%Error or bad values
-	    badarg_error(rep, As, St)
+        [S,I,Sep] ->
+            Part = [Sep,S],
+            if I > 100 ->
+                    %% For many repetitions.
+                    I1 = (I-1) div 100,
+                    I2 = (I-1) rem 100,
+                    D100 = iolist_to_binary(lists:duplicate(100, Part)),
+                    {[iolist_to_binary([S,
+                                        lists:duplicate(I1, D100),
+                                        lists:duplicate(I2, Part)])],
+                     St};
+               I > 0 ->
+                    {[iolist_to_binary([S|lists:duplicate(I-1, Part)])],St};
+               true -> {[<<>>],St}
+            end;
+        error ->                                %Error or bad values
+            badarg_error(rep, As, St)
     end;
 rep(As, St) -> badarg_error(rep, As, St).
 
