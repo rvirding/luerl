@@ -26,7 +26,8 @@
 
 -module(luerl_comp).
 
--export([file/1,file/2,string/1,string/2,forms/1,forms/2]).
+-export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
+-export([forms/1,forms/2]).
 
 -export([debug_print/3]).
 
@@ -79,18 +80,28 @@ string(Str, Opts) when is_list(Str) ->
     St1 = filenames(File, St0),
     do_compile(list_passes(), St1).
 
-%% forms(Forms) ->
+%% chunk(Chunk) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
-%% forms(Forms, Options) ->
+%% chunk(Chunk, Options) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
-forms(Forms) -> forms(Forms, [verbose,report]).
+chunk(Chunk) -> chunk(Chunk, [verbose,report]).
 
-forms(Forms, Opts) ->
-    St0 = #luacomp{opts=Opts,code=Forms},
+chunk(Chunk, Opts) ->
+    St0 = #luacomp{opts=Opts,code=Chunk},
     File = prop(module, Opts, ?NOFILE),
     St1 = filenames(File, St0),
-    do_compile(forms_passes(), St1).
+    do_compile(chunk_passes(), St1).
+
+%% forms(Forms)
+%% forms(Forms, Options)
+%%  The deprecated fuuncttions for compiling a chunk.
+
+forms(C) -> chunk(C).
+forms(C, Opts) -> chunk(C, Opts).
+
+%% do_compile(Passes, CompilerState) ->
+%%     {ok,Code} | {error,Error,Warnings} | error.
 
 do_compile(Passes, St0) ->
     %% The compiler state already contains the filenames.
@@ -139,20 +150,20 @@ compiler_info(#luacomp{lfile=F,opts=Opts}) ->
 
 %% file_passes() -> [Pass].
 %% list_passes() -> [Pass].
-%% forms_passes() -> [Pass].
+%% chunk_passes() -> [Pass].
 %%  Build list of passes.
 
 file_passes() ->				%Reading from file
     [{do,fun do_read_file/1},
      {do,fun do_parse/1}|
-     forms_passes()].
+     chunk_passes()].
 
 list_passes() ->				%Scanning string
     [{do,fun do_scan/1},
      {do,fun do_parse/1}|
-     forms_passes()].
+     chunk_passes()].
 
-forms_passes() ->				%Doing the forms
+chunk_passes() ->				%Doing the chunk
     [{do,fun do_init_comp/1},
      {do,fun do_comp_normalise/1},
      {when_flag,to_norm,{done,fun(St) -> {ok,St} end}},
