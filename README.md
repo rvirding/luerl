@@ -20,4 +20,6 @@ Join the Community
 
 [Luerl on Slack](https://luerl.slack.com), join by requesting an invite [here](https://erlef.org/slack-invite/luerl)
 
+[Luerl Forum - Erlang Forums](https://erlangforums.com/luerl)
+
 Luerl embraces both [#Erlang](https://twitter.com/hashtag/erlang?src=hash) and [#LuaLang](https://twitter.com/hashtag/lualang?src=hash) communities and ecosystems.
