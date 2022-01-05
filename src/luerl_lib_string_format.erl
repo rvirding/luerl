@@ -125,27 +125,30 @@ build({$x,Fl,F,P}, [A|As], St) ->
 build({$X,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:arg_to_integer(A),
     {format_HEX(Fl, F, P, I),As,St};
+build({$u,Fl,F,P}, [A|As], St) ->
+    N = luerl_lib:arg_to_integer(A),
+    {format_unsigned(Fl, F, P, N),As,St};
 %% Float formats.
 build({$e,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {e_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_e_float(Fl, F, P, N),As,St};
 build({$E,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {e_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_e_float(Fl, F, P, N),As,St};
 build({$f,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {f_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_f_float(Fl, F, P, N),As,St};
 build({$F,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {f_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_f_float(Fl, F, P, N),As,St};
 build({$g,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {g_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_g_float(Fl, F, P, N),As,St};
 build({$G,Fl,F,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_number(A),
-    {g_float(Fl, F, P, N),As,St};
+    N = luerl_lib:arg_to_float(A),
+    {format_g_float(Fl, F, P, N),As,St};
 %% Literal % format.
-build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!
+build({$%,?FL_NONE,none,none}, As, St) ->       %No flags, field or precision!
     {"%",As,St}.
 
 %% format_decimal(Flags, Field, Precision, Number) -> String.
@@ -155,6 +158,15 @@ build({$%,?FL_NONE,none,none}, As, St) ->	%No flags, field or precision!
 %% format_integer(Flags, Field, Precision, Number, String) -> String.
 %%  Print integer Number with base Base. This is a bit messy as we are
 %%  following string.format handling.
+
+format_unsigned(Fl, F, P, N) ->
+    %% We have to make the number always positive so we are assuming
+    %% 124 bit integers which matches Lua 5.3.
+    I = if N >= 0 -> N;
+           true -> N band 16#FFFFFFFFFFFFFFFF
+        end,
+    Str = integer_to_list(I),
+    format_integer(Fl, F, P, I, Str).
 
 format_decimal(Fl, F, P, N) ->
     Str = integer_to_list(abs(N), 10),
@@ -188,18 +200,18 @@ format_integer(Fl, F, P, N, Str0) ->
 	    adjust_str(Str1, Fl, F)
     end.
 
-%% e_float(Flags, Field, Precision, Number) -> String.
-%% f_float(Flags, Field, Precision, Number) -> String.
-%% g_float(Flags, Field, Precision, Number) -> String.
+%% format_e_float(Flags, Field, Precision, Number) -> String.
+%% format_f_float(Flags, Field, Precision, Number) -> String.
+%% format_g_float(Flags, Field, Precision, Number) -> String.
 %%  Print float Number in e/f/g format.
 
-e_float(Fl, F, P, N) ->
+format_e_float(Fl, F, P, N) ->
     format_float(Fl, F, e_float_precision(P), "~.*e", float(N)).
 
-f_float(Fl, F, P, N) ->
+format_f_float(Fl, F, P, N) ->
     format_float(Fl, F, f_float_precision(P), "~.*f", float(N)).
 
-g_float(Fl, F, P, N) ->
+format_g_float(Fl, F, P, N) ->
     format_float(Fl, F, g_float_precision(P), "~.*g", float(N)).
 
 format_float(Fl, F, P, Format, N) ->
