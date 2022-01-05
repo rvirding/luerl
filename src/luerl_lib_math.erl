@@ -43,14 +43,14 @@
 -define(RAND_UNIFORM(S), random:uniform_s(S)).
 -define(RAND_UNIFORM(L, S), random:uniform_s(L, S)).
 -define(RAND_SEED(), random:seed0()).
--define(RAND_SEED(S1,S2,S3),			%Naughty, copied from source
-	{(abs(S1) rem (30269-1) + 1),		%PRIME1
-	 (abs(S2) rem (30307-1) + 1),		%PRIME2
-	 (abs(S3) rem (30323-1) + 1)}).		%PRIME3
+-define(RAND_SEED(S1,S2,S3),                    %Naughty, copied from source
+        {(abs(S1) rem (30269-1) + 1),           %PRIME1
+         (abs(S2) rem (30307-1) + 1),           %PRIME2
+         (abs(S3) rem (30323-1) + 1)}).         %PRIME3
 -endif.
 
 install(St0) ->
-    St1 = St0#luerl{rand=?RAND_SEED()},		%Default initial random seed
+    St1 = St0#luerl{rand=?RAND_SEED()},        	%Default initial random seed
     luerl_heap:alloc_table(table(), St1).
 
 table() ->
@@ -58,21 +58,23 @@ table() ->
      {<<"acos">>,#erl_func{code=fun acos/2}},
      {<<"asin">>,#erl_func{code=fun asin/2}},
      {<<"atan">>,#erl_func{code=fun atan/2}},
-     {<<"atan2">>,#erl_func{code=fun atan2/2}},
+     {<<"atan2">>,#erl_func{code=fun atan2/2}}, %For 5.2 backwards compatibility
      {<<"ceil">>,#erl_func{code=fun ceil/2}},
      {<<"cos">>,#erl_func{code=fun cos/2}},
-     {<<"cosh">>,#erl_func{code=fun cosh/2}},
+     {<<"cosh">>,#erl_func{code=fun cosh/2}},   %For 5.2 backwards compatibility
      {<<"deg">>,#erl_func{code=fun deg/2}},
      {<<"exp">>,#erl_func{code=fun exp/2}},
      {<<"floor">>,#erl_func{code=fun floor/2}},
      {<<"fmod">>,#erl_func{code=fun fmod/2}},
-     {<<"frexp">>,#erl_func{code=fun frexp/2}},
-     {<<"huge">>,1.7976931348623157e308},	%From the specs
-     {<<"ldexp">>,#erl_func{code=fun ldexp/2}},
+     {<<"frexp">>,#erl_func{code=fun frexp/2}}, %For 5.2 backwards compatibility
+     {<<"huge">>,1.7976931348623157e308},       %From the specs
+     {<<"ldexp">>,#erl_func{code=fun ldexp/2}}, %For 5.2 backwards compatibility
      {<<"log">>,#erl_func{code=fun log/2}},
-     {<<"log10">>,#erl_func{code=fun log10/2}},	%For 5.1 backwards compatibility
+     {<<"log10">>,#erl_func{code=fun log10/2}}, %For 5.1 backwards compatibility
      {<<"max">>,#erl_func{code=fun max/2}},
+     {<<"maxinteger">>,16#7FFFFFFFFFFFFFFF},    %From Lua 5.4.3
      {<<"min">>,#erl_func{code=fun min/2}},
+     {<<"mininteger">>,-16#8000000000000000},   %From Lua 5.4.3
      {<<"modf">>,#erl_func{code=fun modf/2}},
      {<<"pi">>,math:pi()},
      {<<"pow">>,#erl_func{code=fun pow/2}},
@@ -80,10 +82,10 @@ table() ->
      {<<"random">>,#erl_func{code=fun random/2}},
      {<<"randomseed">>,#erl_func{code=fun randomseed/2}},
      {<<"sin">>,#erl_func{code=fun sin/2}},
-     {<<"sinh">>,#erl_func{code=fun sinh/2}},
+     {<<"sinh">>,#erl_func{code=fun sinh/2}},   %For 5.2 backwards compatibility
      {<<"sqrt">>,#erl_func{code=fun sqrt/2}},
      {<<"tan">>,#erl_func{code=fun tan/2}},
-     {<<"tanh">>,#erl_func{code=fun tanh/2}},
+     {<<"tanh">>,#erl_func{code=fun tanh/2}},   %For 5.2 backwards compatibility
      {<<"tointeger">>,#erl_func{code=fun tointeger/2}},
      {<<"type">>,#erl_func{code=fun type/2}}
     ].
@@ -116,7 +118,7 @@ atan(As, St) ->
 	_ -> badarg_error(atan, As, St)
     end.
 
-atan2(As, St) ->
+atan2(As, St) ->                                %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1), is_number(N2) ->
 	    {[math:atan2(N1, N2)],St};
@@ -143,7 +145,7 @@ cos(As, St) ->
 	_ -> badarg_error(cos, As, St)
     end.
 
-cosh(As, St) ->
+cosh(As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:cosh(N)],St};
 	_ -> badarg_error(cosh, As, St)
@@ -184,22 +186,27 @@ fmod(As, St) ->
 	_ -> badarg_error(fmod, As, St)
     end.
 
-frexp(As, St) ->				%M,E such that X = M*2^E
+frexp(As, St) ->                                %For 5.2 backwards compatibility
+    %% M,E such that X = M * 2 ^ E.
     case get_number_args(As) of
 	[X|_] when is_number(X)  ->
 	    %% The sneaky bit!
-	    <<_:1,E0:11,M0:52>> = <<(X+0.0)/float>>,
+	    <<Sign:1,Exp0:11,Man0:52>> = <<(X+0.0)/float>>,
 	    Two52 = 1 bsl 52,
-	    M1 = (M0 bor Two52)/Two52,
-	    if M1 >= 1.0 -> M2 = M1/2, E1 = E0 - 1022; %Export M2, E1
-	       M1 < 0.5 -> M2 = M1*2.0, E1 = E0 - 1024;
-	       true -> M2 = M1, E1 = E0 - 1023
+	    Man1 = (Man0 bor Two52)/Two52,
+	    %% Bit naughty here, export Man2, Exp1
+	    if Man1 >= 1.0 -> Man2 = Man1/2, Exp1 = Exp0 - 1022;
+	       Man1 < 0.5 -> Man2 = Man1*2.0, Exp1 = Exp0 - 1024;
+	       true -> Man2 = Man1, Exp1 = Exp0 - 1023
 	    end,
-	    {[float(M2),E1],St};
+	    Ret = if Sign =:= 1 -> -Man2;
+		     true -> Man2
+		  end,
+	    {[float(Ret),Exp1],St};
 	_ -> badarg_error(frexp, As, St)
     end.
 
-ldexp(As, St) ->
+ldexp(As, St) ->                                %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[M,E|_] when is_float(M), is_integer(E) ->
 	    {[M*math:pow(2, E)],St};
@@ -248,7 +255,7 @@ modf(As, St) ->
 	_ -> badarg_error(modf, As, St)
     end.
 
-pow(As, St) ->
+pow(As, St) ->                                  %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1) and is_number(N2) ->
 	    {[math:pow(N1, N2)],St};
@@ -258,7 +265,7 @@ pow(As, St) ->
 rad(As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:pi()*N/180.0],St};
-	_ -> badarg_error(sinh, As, St)
+	_ -> badarg_error(rad, As, St)
     end.
 
 random(As, #luerl{rand=S0}=St) ->
@@ -290,7 +297,7 @@ sin(As, St) ->
 	_ -> badarg_error(sin, As, St)
     end.
 
-sinh(As, St) ->
+sinh(As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:sinh(N)],St};
 	_ -> badarg_error(sinh, As, St)
@@ -308,7 +315,7 @@ tan(As, St) ->
 	_ -> badarg_error(tan, As, St)
     end.
 
-tanh(As, St) ->
+tanh(As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:tanh(N)],St};
 	_ -> badarg_error(tanh, As, St)
