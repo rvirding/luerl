@@ -45,7 +45,7 @@ See luerl.hrl for the field names of the records.
 All tables are combinations of ttdicts and arrays. In each table an
 array is used for integer keys >= 1 while an ttdict is used for all
 other keys. We use this information when building/processing
-tables. Seems like Lua internaly stores elements as a (unordered)
+tables. Seems like Lua internally stores elements as a (unordered)
 sequence of key-value elements, except maybe for the table part. Some
 tests show that using ttdicts for all elements results the system
 being 10-20% slower and using more memory.
@@ -81,7 +81,7 @@ depending on how they are defined:
   stack of tuples, the LocalVars or Lvs, and referenced by offset in stack
   and offset in tuple.
 
-- Environemnt variables that are defined in functions which are
+- Environment variables that are defined in functions which are
   defined in this block or in sub-blocks. This mean they must be kept
   around as long as the functions are alive and are stored in the
   global heap as each invocation can modify them. They are kept in a
@@ -108,7 +108,7 @@ values from the environment where we can only have one value. This
 means a lot of calls to first_value/1 in luerl_emul.erl, but the
 consistency is worth it.
 
-Similarily all the arguments in a function call are passed in a list.
+Similarly all the arguments in a function call are passed in a list.
 The function then unpacks the list into its arguments, including
 '...'.
 

@@ -468,7 +468,7 @@ func_pars([#lvar{i=I}|Ps]) -> [I|func_pars(Ps)];
 func_pars([]) -> [].				%No varargs
 
 %% Experiments testing case where we push the args onto the stack and
-%% have explicit instructions which pop them ans store them in the LVs
+%% have explicit instructions which pop them and store them in the LVs
 %% and Upvs.
 
 gen_store([V|Vs], Is) when V > 0 ->

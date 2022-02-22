@@ -187,7 +187,7 @@ end
 --------------------------------------------------------------------------------
 
 -- TODO: From lua-nucleo/test/table.lua.
--- Make that avaliable to other projects and reuse.
+-- Make that available to other projects and reuse.
 local function gen_random_dataset(num, nesting, visited, random)
   random = random or math_random
 

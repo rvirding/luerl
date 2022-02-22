@@ -331,7 +331,7 @@ methodcall(Obj, Meth, Args, St0) ->
 %% emul(Instrs, State).
 %% emul(Instrs, Continuation, LocalVariables, Stack, Env, CallStack, State).
 %%  The cost of checking the itrace process variable is very slight
-%%  compared to everythin else.
+%%  compared to everything else.
 
 emul(Is, St) ->
     emul(Is, [], {}, [], [], [], St).

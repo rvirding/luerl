@@ -141,7 +141,7 @@ prop(Key, [_|Plist], Def) ->  prop(Key, Plist, Def);
 prop(_Key, [], Def) -> Def.
 
 %% compiler_info(State) -> CompInfo.
-%%  Initialse the #cinfo record passed into all compiler passes.
+%%  Initialise the #cinfo record passed into all compiler passes.
 
 compiler_info(#luacomp{lfile=F,opts=Opts}) ->
     %% The file option may get a binary so we are helpful.

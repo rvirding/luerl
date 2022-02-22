@@ -94,7 +94,7 @@ field_value(Fmt, F) -> {F,Fmt}.
 %%  No length modifiers, h L l, no conversions n p S C allowed.
 
 build({$q,_,_,_}, [A|As], St0) ->
-    %% No triming or adjusting of the $q string, we only get all of
+    %% No trimming or adjusting of the $q string, we only get all of
     %% it. Use an RE to split string on quote needing characters.
     {[S0],St1} = luerl_lib_basic:tostring([A], St0),
     RE = "([\\0-\\39\\\n\\\"\\\\\\177-\\237])",	%You don't really want to know!
