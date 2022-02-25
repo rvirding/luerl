@@ -106,14 +106,16 @@ alloc_table(St) -> alloc_table([], St).
 
 %% alloc_table(InitialTable, State) -> {Tref,State}
 %%
-%% The InitialTable is [{Key,Value}], there is no longer any need
-%% to have it as an orddict.
+%% The InitialTable is [{Key,Value}] or map, there is no longer any
+%% need to have it as an orddict.
 
 alloc_table(Itab, #luerl{tabs=Tst0}=St) ->
     Tab = create_table(Itab),
     {N,Tst1} = alloc_tstruct(Tab, Tst0),
     {#tref{i=N},St#luerl{tabs=Tst1}}.
 
+create_table(Itab) when is_map(Itab) ->
+    create_table(maps:to_list(Itab));
 create_table(Itab) ->
     D0 = ttdict:new(),
     A0 = array:new([{default,nil}]),            %Arrays with 'nil' as default
@@ -267,14 +269,14 @@ get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
-get_table_key(Tab, Key, St) ->                  %Just find the metamethod
-    Meta = get_metamethod(Tab, <<"__index">>, St),
-    io:format("gtk ~p ~p -> ~p\n", [Tab,Key,Meta]),
+get_table_key(Other, Key, St) ->                %Just find the metamethod
+    Meta = get_metamethod(Other, <<"__index">>, St),
+    %% io:format("gtk ~p ~p -> ~p\n", [Other,Key,Meta]),
     case Meta of
         nil ->
-            {error,{illegal_index,Tab,Key},St};
+            {error,{illegal_index,Other,Key},St};
         Meth when ?IS_FUNCTION(Meth) ->
-            {meta,Meth,[Tab,Key],St};
+            {meta,Meth,[Other,Key],St};
         Meth ->                                 %Recurse down the metatable
             get_table_key(Meth, Key, St)
     end.
@@ -461,7 +463,8 @@ get_metamethod(O1, O2, E, St) ->
     end.
 
 get_metamethod(O, E, St) ->
-    Meta = get_metatable(O, St),                        %Can be nil
+    Meta = get_metatable(O, St),                %Can be nil
+    %% io:format("gm ~p ~p -> ~p\n", [O,E,Meta]),
     get_metamethod_tab(Meta, E, St#luerl.tabs#tstruct.data).
 
 get_metamethod_tab(#tref{i=M}, E, Ts) ->

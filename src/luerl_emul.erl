@@ -604,6 +604,7 @@ do_get_key(Is, Cont, Lvs, Stk, Env, Cs, St0, Tab, Key) ->
 %% do_op2(Instrs, LocalVars, Stack, Env, State, Op) -> ReturnFromEmul.
 
 do_op1(Is, Cont, Lvs, [A|Stk], Env, Cs, St0, Op) ->
+    %% We must handle the metamethod and error here.
     case op(Op, A, St0) of
 	{value,Res,St1} -> emul(Is, Cont, Lvs, [Res|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
@@ -613,6 +614,7 @@ do_op1(Is, Cont, Lvs, [A|Stk], Env, Cs, St0, Op) ->
     end.
 
 do_op2(Is, Cont, Lvs, [A2,A1|Stk], Env, Cs, St0, Op) ->
+    %% We must handle the metamethod and error here.
     case op(Op, A1, A2, St0) of
 	{value,Res,St1} -> emul(Is, Cont, Lvs, [Res|Stk], Env, Cs, St1);
 	{meta,Meth,Args,St1} ->
@@ -708,11 +710,20 @@ do_mcall(Is, Cont, Lvs, [Args,Obj|Stk], Env, Cs, St, M) ->
 
 methodcall(Is, Cont, Lvs, Stk, Env, Cs, St0, Obj, Meth, Args) ->
     %% Get the function to call from object and method.
-    case get_table_key(Obj, Meth, St0) of
-	{nil,St1} ->				%No method
-	    lua_error({undefined_method,Obj,Meth}, St1#luerl{stk=Stk,cs=Cs});
-	{Func,St1} ->
-	    functioncall(Is, Cont, Lvs, Stk, Env, Cs, St1, Func, [Obj|Args])
+    %% We must handle the metamethod and error here.
+    %% io:format("mc1 ~p ~p ~p\n", [Obj,Meth,Args]),
+    case luerl_heap:get_table_key(Obj, Meth, St0) of
+	{value,Func,St1} ->
+	    %% io:format("mc2 ~p\n", [Func]),
+	    functioncall(Is, Cont, Lvs, Stk, Env, Cs, St1, Func, [Obj|Args]);
+	{meta,Mmeth,Margs,St1} ->
+	    %% io:format("mc3 ~p ~p\n", [Mmeth,Margs]),
+	    %% Must first meta method to get function and then call it.
+	    %% Need to swap to get arguments for call in right order.
+	    Is1 = [?FCALL,?SINGLE,?SWAP,?FCALL|Is],
+	    emul(Is1, Cont, Lvs, [Margs,Mmeth,[Obj|Args]|Stk], Env, Cs, St1);
+	{error,_Error,St1} ->				%No method
+	    lua_error({undefined_method,Obj,Meth}, St1#luerl{stk=Stk,cs=Cs})
     end.
 
 %% do_tail_mcall(Instrs, Cont, LocalVars, Stack, Env, State, Method) ->
@@ -738,7 +749,8 @@ functioncall(#erl_func{code=Func}, Args, Stk, Cs, St) ->
     call_erlfunc(Func, Args, Stk, Cs, St);
 functioncall(Func, Args, Stk, Cs, St) ->
     case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
-	nil -> lua_error({undefined_function,Func}, St#luerl{stk=Stk,cs=Cs});
+	nil ->
+	    lua_error({undefined_function,Func}, St#luerl{stk=Stk,cs=Cs});
 	Meta ->
 	    functioncall(Meta, [Func|Args], Stk, Cs, St)
     end.
