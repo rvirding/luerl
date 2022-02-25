@@ -51,16 +51,16 @@ gc(St) ->
     luerl_new:gc(St).
 
 set_trace_func(St, Func) ->
-    luerl:set_trace_func(Func, St).
+    luerl_new:set_trace_func(Func, St).
 
 clear_trace_func(St) ->
-    luerl:clear_trace_func(St).
+    luerl_new:clear_trace_func(St).
 
 get_trace_data(St) ->
-    luerl:get_trace_data(St).
+    luerl_new:get_trace_data(St).
 
 set_trace_data(St, Tdata) ->
-    luerl:set_trace_data(Tdata, St).
+    luerl_new:set_trace_data(Tdata, St).
 
 load(St, Bin) ->
     luerl_new:load(Bin, St).

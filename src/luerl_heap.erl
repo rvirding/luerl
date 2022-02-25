@@ -34,7 +34,9 @@
          get_global_key/2,set_global_key/3,
          get_table_key/3,set_table_key/4,
          raw_get_table_key/3,raw_set_table_key/4,
-         alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
+         alloc_userdata/2,alloc_userdata/3,
+         get_userdata/2,set_userdata/3,upd_userdata/3,
+         set_userdata_data/3,get_userdata_data/2,
          alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
          alloc_environment/2,get_env_var/3,set_env_var/4,
          get_metamethod/3,get_metamethod/4,
@@ -266,7 +268,9 @@ get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
 get_table_key(Tab, Key, St) ->                  %Just find the metamethod
-    case get_metamethod(Tab, <<"__index">>, St) of
+    Meta = get_metamethod(Tab, <<"__index">>, St),
+    io:format("gtk ~p ~p -> ~p\n", [Tab,Key,Meta]),
+    case Meta of
         nil ->
             {error,{illegal_index,Tab,Key},St};
         Meth when ?IS_FUNCTION(Meth) ->
@@ -381,17 +385,43 @@ alloc_userdata(Data, Meta, #luerl{usds=Ust0}=St) ->
 
 %% get_userdata(Usdref, State) -> {UserData,State}
 %%
-%% Get the userdata data.
+%% Get the userdata refered to by Usdref,
 
 get_userdata(#usdref{i=N}, #luerl{usds=Ust}=St) ->
     #userdata{} = Udata = get_tstruct(N, Ust),
     {Udata,St}.
 
-%% set_userdata(Usdref, UserData, State) -> State
+%% set_userdata(Usdref, Data, State) -> State
 %%
-%% Set the data in the userdata.
+%% Set a new userdata at the location referred to by Usdref
+%% overwriting the existing one.
 
-set_userdata(#usdref{i=N}, Data, #luerl{usds=Ust0}=St) ->
+set_userdata(#usdref{i=N}, #userdata{}=Udata, #luerl{usds=Ust0}=St) ->
+    Ust1 = set_tstruct(N, Udata, Ust0),
+    St#luerl{usds=Ust1}.
+
+%% upd_userdata(Usdref, Fun, State) -> State
+%%
+%% Update the data in the userdata referred to by Usdref.
+
+upd_userdata(#usdref{i=N}, Upd, #luerl{usds=Ust0}=St) ->
+    Ust1 = upd_tstruct(N, Upd, Ust0),
+    St#luerl{usds=Ust1}.
+
+%% get_userdata_data(Usdref, State) -> {Data,State}
+%%
+%% Get the data form the userdata refered to by Usdref.
+
+get_userdata_data(#usdref{i=N}, #luerl{usds=Ust}=St) ->
+    Udata = get_tstruct(N, Ust),
+    {Udata#userdata.d,St}.
+
+%% set_userdata_data(Usdref, Data, State) -> State
+%%
+%% Set a new userdata at the location referred to by Usdref
+%% overwriting the existing one.
+
+set_userdata_data(#usdref{i=N}, Data, #luerl{usds=Ust0}=St) ->
     Ust1 = upd_tstruct(N, fun (Ud) -> Ud#userdata{d=Data} end, Ust0),
     St#luerl{usds=Ust1}.
 
