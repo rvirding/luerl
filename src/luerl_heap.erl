@@ -198,8 +198,17 @@ set_table_key(Tab, nil=Key, _, St) ->
     {error,{illegal_index,Tab,Key},St};
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
-set_table_key(Tab, Key, _, St) ->
-    {error,{illegal_index,Tab,Key},St}.
+set_table_key(Other, Key, Val, St) ->
+    Meta = get_metamethod(Other, <<"__newindex">>, St),
+    %% io:format("stk ~p ~p ~p -> ~p\n", [Other,Key,Val,aMeta]),
+    case Meta of
+        nil ->
+            {error,{illegal_index,Other,Key},St};
+        Meth when ?IS_FUNCTION(Meth) ->
+            {meta,Meth,[Other,Key,Val],St};
+        Meth ->                                 %Recurse down the metatable
+            set_table_key(Meth, Key, Val, St)
+    end.
 
 set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
     Ts0 = Tst0#tstruct.data,

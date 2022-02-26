@@ -55,8 +55,8 @@ badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St).
 
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
-format_error({illegal_index,Where,I}) ->
-    io_lib:format("invalid index in ~w: ~w", [Where,I]);
+format_error({illegal_index,Where,Index}) ->
+    io_lib:format("invalid index in ~w: ~w", [Where,Index]);
 format_error({illegal_value,Where,Val}) ->
     io_lib:format("invalid value in ~w: ~w", [Where,Val]);
 format_error({illegal_value,Val}) ->
@@ -67,8 +67,8 @@ format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
 format_error({undefined_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
-format_error({undefined_method,Obj,Name}) ->
-    io_lib:format("undefined method in ~w: ~w", [Obj,Name]);
+format_error({undefined_method,Object,Name}) ->
+    io_lib:format("undefined method in ~w: ~w", [Object,Name]);
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);

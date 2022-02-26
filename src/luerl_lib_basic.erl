@@ -24,7 +24,7 @@
 -export([install/1]).
 
 %% Export some functions which can be called from elsewhere.
--export([print/2,tostring/1,tostring/2]).
+-export([print/2,tostring/1,tostring/2,type/1]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
