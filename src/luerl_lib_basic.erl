@@ -261,7 +261,11 @@ tostring([Arg|_], St) ->
         nil -> {[tostring(Arg)],St};
         M when ?IS_FUNCTION(M) ->
             luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
-    end.
+    end;
+tostring(As, St) -> badarg_error(tostring, As, St).
+
+%% tostring([Arg|_], Stated) -> {String,State}.
+%%  Return the type as a string.
 
 tostring(nil) -> <<"nil">>;
 tostring(false) -> <<"false">>;
@@ -286,7 +290,11 @@ tostring(#erl_func{code=C}) ->                  %Erlang functions
 tostring(#thread{}) -> <<"thread">>;
 tostring(_) -> <<"unknown">>.
 
-type([Arg|_], St) -> {[type(Arg)],St}.          %Only one return value!
+%% type([Data|_], State) -> {Type,State}.
+%%  Return the type of the argument.
+
+type([Arg|_], St) -> {[type(Arg)],St};          %Only one return value!
+type(As, St) -> badarg_error(type, As, St).
 
 type(nil) -> <<"nil">>;
 type(N) when is_number(N) -> <<"number">>;
@@ -314,7 +322,9 @@ getmetatable([Obj|_], St) ->
 		error -> {[Meta],St}
 	    end;
 	nil -> {[nil],St}
-    end.
+    end;
+getmetatable(As, St) -> badarg_error(getmetatable, As, St).
+
 
 setmetatable([#tref{}=T,#tref{}=M|_], St) ->
     do_setmetatable(T, M, St);
