@@ -297,7 +297,11 @@ do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
                    end,
             File = luerl_anno:get(file, Anno),
             {Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
-        #erl_func{} -> {Line,Trace};            %Skip these for now
+        #erl_func{code=Fun} ->
+            {module,Module} = erlang:fun_info(Fun, module),
+            {name,Name} = erlang:fun_info(Fun, name),
+            FileName = get_filename(Module),
+            {Line,[{{Module,Name},Args,[{file,FileName}]} | Trace]};
         Other ->
             {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
@@ -305,6 +309,16 @@ do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
     {Line,Trace};
 do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
     Acc.
+
+get_filename(Mod) ->
+    Comp = erlang:get_module_info(Mod, compile),
+    case lists:keyfind(source, 1, Comp) of
+        {source,FileName} ->
+            BaseName = filename:basename(FileName),
+            list_to_binary(BaseName);
+        false ->                                %The compiler doesn't know
+            <<"-no-file-">>
+    end.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
