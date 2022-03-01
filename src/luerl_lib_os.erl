@@ -22,7 +22,7 @@
 
 -export([install/1]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
 
 %% For `remove/2'.
 -include_lib("kernel/include/file.hrl").
@@ -49,9 +49,9 @@ table() ->
 getenv([<<>>|_], St) -> {[nil],St};
 getenv([A|_], St) when is_binary(A) ; is_number(A) ->
     case os:getenv(luerl_lib:arg_to_list(A)) of
-	Env when is_list(Env) ->
-	    {[list_to_binary(Env)],St};
-	false -> {[nil],St}
+        Env when is_list(Env) ->
+            {[list_to_binary(Env)],St};
+        false -> {[nil],St}
     end;
 getenv(As, St) -> badarg_error(getenv, As, St).
 
@@ -74,7 +74,6 @@ execute([A|_], St) ->
         error -> badarg_error(execute, [A], St)
     end;
 execute(As, St) -> badarg_error(execute, As, St).
-
 
 execute_handle(P) ->
     receive
@@ -177,7 +176,8 @@ rename([S,D|_], St) ->
         {S1,D1} when is_binary(S1) ,
                      not is_binary(D1) ->
             badarg_error(rename, [D1], St)
-    end.
+    end;
+rename(As, St) -> badarg_error(rename, As, St).
 
 %% remove([Path|_], State)
 %%  Deletes the file (or empty directory) with the given `Path'. If this
@@ -204,7 +204,9 @@ remove([A|_], St) ->
                     {remove_geterr(R, A), St}
             end;
         error -> badarg_error(remove, [A], St)
-    end.
+    end;
+remove(As, St) -> badarg_error(remove, As, St).
+
 
 %% Utility function to get a preformatted list to return from `remove/2'.
 remove_geterr(R, F) ->
@@ -216,11 +218,11 @@ remove_geterr(R, F) ->
 %% Time functions.
 
 clock(As, St) ->
-    Type = case As of				%Choose which we want
+    Type = case As of                           %Choose which we want
                [<<"runtime">>|_] -> runtime;
                _ -> wall_clock
            end,
-    {Tot,_} = erlang:statistics(Type),		%Milliseconds
+    {Tot,_} = erlang:statistics(Type),          %Milliseconds
     {[Tot*1.0e-3],St}.
 
 date(_, St) ->
@@ -230,8 +232,10 @@ date(_, St) ->
     {[iolist_to_binary(Str)],St}.
 
 difftime([A1,A2|_], St) ->
-    {[A2-A1],St}.
+    {[A2-A1],St};
+difftime(As, St) -> badarg_error(difftime, As, St).
 
-time(_, St) ->					%Time since 1 Jan 1970
+
+time(_, St) ->                                  %Time since 1 Jan 1970
     {Mega,Sec,Micro} = os:timestamp(),
     {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
