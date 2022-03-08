@@ -365,6 +365,8 @@ encode(F, St) when is_function(F, 1) ->
 		 encode_list(Res, State)
 	 end,
     {#erl_func{code=F1}, St};
+encode(Pid, St) when is_pid(Pid) -> 
+    {erlang:list_to_binary(erlang:pid_to_list(Pid)),St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).			%Can't encode anything else
