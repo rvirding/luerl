@@ -1,6 +1,6 @@
 %% File    : hello_table.erl
 %% Purpose : Brief demonstration of Luerl table access.
-%% Use     $ erlc hello_table.erl && erl -pa ../../ebin  -s hello_table run -s init stop -noshell
+%% Use     $ erlc hello_table_new.erl && erl -pa ../../ebin  -s hello_table_new run -s init stop -noshell
 
 -module(hello_table_new).
 -export([run/0]).
