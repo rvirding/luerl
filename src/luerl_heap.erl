@@ -359,6 +359,9 @@ raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St)
                _NegFalse ->
                    raw_set_table_key_key(Tref, Key, Val, Tst0)
            end,
+    St#luerl{tabs=Tst1};
+raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St) ->
+    Tst1 = raw_set_table_key_key(Tref, Key, Val, Tst0),
     St#luerl{tabs=Tst1}.
 
 raw_set_table_key_key(#tref{i=N}, Key, Val, Tst0) ->
@@ -606,12 +609,14 @@ mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
                  GcT#gct{s=Ts1}, GcE, GcU, GcF)
     end;
 mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
+    %% io:format("eref0: ~p\ ~p ~pn", [F,Et,Es0]),
     case ordsets:is_element(F, Es0) of
         true ->                                 %Already done
             mark(Todo, More, GcT, GcE, GcU, GcF);
         false ->                                %Mark it and add to todo
             Es1 = ordsets:add_element(F, Es0),
             Ses = tuple_to_list(?GET_TABLE(F, Et)),
+	    %% io:format("eref1: ~p ~p\n", [Et,Es1]),
             mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
     end;
 mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
@@ -624,6 +629,7 @@ mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
     end;
 mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
      #gct{t=Ft0,s=Fs0}=GcF) ->
+    %% io:format("funref0: ~p ~p ~p\n", [F,Fs0,Erefs]),
     case ordsets:is_element(F, Fs0) of
         true ->
             mark(ToDo, More, GcT, GcE, GcU, GcF);
@@ -631,6 +637,7 @@ mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
             Fs1 = ordsets:add_element(F, Fs0),
             Fdef = ?GET_TABLE(F, Ft0),
             %% And mark the function definition.
+	    %% io:format("funref1: ~p ~p ~p\n", [F,Fs1,Erefs]),
             mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
 mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
@@ -690,6 +697,10 @@ filter_environment(Seen, Ef0, Et0) ->
                                end
                        end, Ef0, Et0),
     Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
+
+    %% io:format("env0: ~p ~p ~p\n", [Seen,Ef0,Et0]),
+    %% io:format("env1: ~p ~p\n", [Ef1,Et1]),
+
     {Ef1,Et1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->

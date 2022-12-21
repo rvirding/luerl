@@ -71,6 +71,10 @@
 		       file			%File name
 		      }).
 
+%% Return
+-record(return, {rets                           %Return values
+                }).
+
 %% Data types.
 
 -record(tref, {i}).				%Table reference, index

@@ -108,9 +108,13 @@ wait_reductions(Runner, MaxR) ->
 
 receive_response(Runner, Timeout) ->
     receive
-        {Runner, Reply} -> Reply;
+        {Runner, Reply} ->
+            %% The runner has terminated.
+            Reply;
         {error, Error} -> Error
     after
-      Timeout ->
-        {error, timeout}
+        Timeout ->
+            %% Kill the runner as its time is up.
+            exit(Runner, kill),
+            {error, timeout}
     end.

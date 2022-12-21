@@ -131,11 +131,11 @@ Rules.
 Erlang code.
 
 -export([is_keyword/1]).
--export([chars/1]).
+-export([string_chars/1,chars/1]).
 
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
-%% Build a name from list of legal characters, else error.
+%%  Build a name from list of legal characters, else error.
 
 name_token(Cs, L) ->
     case catch {ok,list_to_binary(Cs)} of
@@ -152,7 +152,7 @@ name_string(Name) ->
 
 %% hex_float_token(TokenChars, TokenLine) ->
 %%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
-%% Build a float form a hex float string.
+%%  Build a float form a hex float string.
 
 hex_float_token(TokenChars, TokenLine) ->
     Tcs = string:substr(TokenChars, 3),
@@ -204,13 +204,13 @@ hex_fraction([], _Pow, SoFar) -> SoFar.
 
 %% string_token(InputChars, Length, Line) ->
 %%      {token,{'LITERALSTRING',Line,Cs}} | {error,E}.
-%% Convert an input string into the corresponding string characters.
-%% We know that the input string is correct.
+%%  Convert an input string into the corresponding string characters.
+%%  We know that the input string is correct.
 
 string_token(Cs0, Len, L) ->
     Cs1 = string:substr(Cs0, 2, Len - 2),       %Strip quotes
     try
-        Bytes = chars(Cs1),
+        Bytes = string_chars(Cs1),
         String = iolist_to_binary(Bytes),
         {token,{'LITERALSTRING',L,String}}
     catch
@@ -218,27 +218,31 @@ string_token(Cs0, Len, L) ->
             {error,"illegal string"}
     end.
 
+%% string_chars(Chars)
 %% chars(Chars)
-%% Return a list of UTF-8 encoded binaries and one byte unencoded
-%% characters.
+%%  Return a list of UTF-8 encoded binaries and one byte unencoded
+%%  characters. chars/1 is for external backwards compatibilty.
 
 chars(Cs) ->
-    chars(Cs, []).
+    string_chars(Cs).
 
-chars([$\\ | Cs], []) ->                        %Nothing here to worry about
+string_chars(Cs) ->
+    string_chars(Cs, []).
+
+string_chars([$\\ | Cs], []) ->                 %Nothing here to worry about
     bq_chars(Cs);
-chars([$\\ | Cs], Acc) ->
+string_chars([$\\ | Cs], Acc) ->
     [unicode:characters_to_binary(lists:reverse(Acc)) |
      bq_chars(Cs)];
-chars([$\n | _], _Acc) -> throw(string_error);
-chars([C | Cs], Acc) -> chars(Cs, [C|Acc]);
-chars([], []) -> [];
-chars([], Acc) ->
+string_chars([$\n | _], _Acc) -> throw(string_error);
+string_chars([C | Cs], Acc) -> string_chars(Cs, [C|Acc]);
+string_chars([], []) -> [];
+string_chars([], Acc) ->
     [unicode:characters_to_binary(lists:reverse(Acc))].
 
 %% bq_chars(Chars)
-%% Handle the backquotes characters. These always fit directly into
-%% one byte and are never UTF-8 encoded.
+%%  Handle the backquotes characters. These always fit directly into
+%%  one byte and are never UTF-8 encoded.
 
 bq_chars([C1|Cs0]) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
     I1 = C1 - $0,
@@ -251,22 +255,23 @@ bq_chars([C1|Cs0]) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
                     Byte = 100*I1 + 10*I2 + I3,
                     %% Must fit into one byte!
                     (Byte =< 255) orelse throw(string_error),
-                    [Byte | chars(Cs2, [])];
+                    [Byte | string_chars(Cs2, [])];
                 _ ->
                     Byte = 10*I1 + I2,
-                    [Byte | chars(Cs1, [])]
+                    [Byte | string_chars(Cs1, [])]
             end;
-        _ -> [I1 | chars(Cs0, [])]
+        _ -> [I1 | string_chars(Cs0, [])]
     end;
 bq_chars([$x,C1,C2|Cs]) ->                      %2 hex digits
     case hex_char(C1) and hex_char(C2) of
         true ->
             Byte = hex_val(C1)*16 + hex_val(C2),
-            [Byte | chars(Cs, [])];
+            [Byte | string_chars(Cs, [])];
         false -> throw(string_error)
     end;
-bq_chars([$z|Cs]) -> chars(skip_space(Cs), []); %Skip blanks
-bq_chars([C|Cs]) -> [escape_char(C)|chars(Cs, [])];
+bq_chars([$z|Cs]) ->                            %Skip blanks
+    string_chars(skip_space(Cs), []);
+bq_chars([C|Cs]) -> [escape_char(C)|string_chars(Cs, [])];
 bq_chars([]) ->
     [].
 
@@ -301,7 +306,7 @@ long_bracket(Line, Cs) ->
     {token,{'LITERALSTRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
-%% Test if the name is a keyword.
+%%  Test if the name is a keyword.
 
 is_keyword(<<"and">>) -> true;
 is_keyword(<<"break">>) -> true;

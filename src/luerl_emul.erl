@@ -316,7 +316,7 @@ call(#erl_func{}=Func, Args, St0) ->		%Erlang function
 functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
     Fr = #call_frame{func=Func,args=Args,lvs=[],env=[],is=[],cont=[]},
     Cs0 = [Fr],
-    {_Lvs,[Ret|_],_Env,Cs1,St1} = functioncall(Func, Args, Stk, Cs0, St0),
+    {_Lvs,[Ret|_],_Env,Cs1,St1} = call_function(Func, Args, Stk, Cs0, St0),
     {Ret,St1#luerl{stk=Stk,cs=Cs1}}.		%Reset the stacks
 
 methodcall(Obj, Meth, Args, St0) ->
@@ -648,7 +648,7 @@ do_return(Ac, Stk0, Cs0, St0) ->
 find_call_frame([#call_frame{}=Cf|Cs], _St) -> {Cf,Cs};
 find_call_frame([_|Cs], St) -> find_call_frame(Cs, St).
 
-find_loop_frame([#current_line{}|Cs], St) ->	%Skip current line info
+find_loop_frame([#current_line{}|Cs], St) ->    %Skip current line info
     find_loop_frame(Cs, St);
 find_loop_frame([#loop_frame{}=Bf|Cs], _St) -> {Bf,Cs};
 find_loop_frame(Cs, St) ->
@@ -690,7 +690,7 @@ do_fcall(Is, Cont, Lvs, [Args,Func|Stk], Env, Cs, St) ->
 functioncall(Is, Cont, Lvs, Stk, Env, Cs0, St, Func, Args) ->
     Fr = #call_frame{func=Func,args=Args,lvs=Lvs,env=Env,is=Is,cont=Cont},
     Cs1 = [Fr|Cs0],
-    functioncall(Func, Args, Stk, Cs1, St).
+    call_function(Func, Args, Stk, Cs1, St).
 
 %% do_tail_fcall(Instrs, Cont, LocalVars, Stack, Env, State) ->
 %%     ReturnFromEmul.
@@ -732,35 +732,42 @@ methodcall(Is, Cont, Lvs, Stk, Env, Cs, St0, Obj, Meth, Args) ->
 do_tail_mcall(_Is, _Cont, _Lvs, [Args,Obj|_Stk], _Env, Cs, St, Meth) ->
     error({tail_mcall,Obj,Meth,Args,Cs,St}).
 
-%% functioncall(Function, Args, Stack, CallStack, State) -> {Return,State}.
+%% call_function(Function, Args, Stack, CallStack, State) -> {Return,State}.
 %%  Setup environment for function and do the actual call.
 
-functioncall(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
-    %% When tracing bring the state up to date and call the tracer.
-    Tfunc = St0#luerl.trace_func,
-    St1 = if is_function(Tfunc) ->
-                  Tfunc({fcall,Funref,Args}, St0);
-             true -> St0
-          end,
+call_function(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
+    St1 = trace_call(Funref, Args, Stk, Cs, St0),
     %% Here we must save the stack in state as function may need it.
     {Func,St2} = luerl_heap:get_funcdef(Funref, St1#luerl{stk=Stk}),
     call_luafunc(Func, Args, Stk, Env, Cs, St2);
-functioncall(#erl_func{code=Func}, Args, Stk, Cs, St) ->
-    call_erlfunc(Func, Args, Stk, Cs, St);
-functioncall(Func, Args, Stk, Cs, St) ->
+call_function(#erl_func{code=Func}=Funref, Args, Stk, Cs, St0) ->
+    St1 = trace_call(Funref, Args, Stk, Cs, St0),
+    call_erlfunc(Func, Args, Stk, Cs, St1);
+call_function(Func, Args, Stk, Cs, St) ->
     case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
-	nil ->
-	    lua_error({undefined_function,Func}, St#luerl{stk=Stk,cs=Cs});
-	Meta ->
-	    functioncall(Meta, [Func|Args], Stk, Cs, St)
+        nil ->
+            lua_error({undefined_function,Func}, St#luerl{stk=Stk,cs=Cs});
+        Meta ->
+            call_function(Meta, [Func|Args], Stk, Cs, St)
     end.
 
-%% call_luafunc(LuaFunc, Args, Stack, Env, State) -> {Return,State}.
+%% trace_call((Function, Args, Stack, CallStack, State) -> State.
+%%  Trace the function call when required.
+
+trace_call(Funref, Args, _Stk, _Cs, St) ->
+    %% When tracing bring the state up to date and call the tracer.
+    Tfunc = St#luerl.trace_func,
+    if is_function(Tfunc) ->
+            Tfunc({fcall,Funref,Args}, St);
+       true -> St
+    end.
+
+%% call_luafunc(LuaFunc, Args, Stack, Env, CallStack, State) -> {Return,State}.
 %%  Make the local variable and Env frames and push them onto
 %%  respective stacks and call the function.
 
 call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
-	     Args, Stk0, Env0, Cs, St0) ->
+             Args, Stk0, Env0, Cs, St0) ->
     L = make_loc_frame(Lsz),
     {Eref,St1} = make_env_frame(Esz, St0),
     Lvs = [L],
@@ -770,15 +777,21 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
     %% io:fwrite("fc: ~p\n", [{Lvs,Env,St0#luerl.env}]),
     emul(Fis, [], Lvs, Stk1, Env1, Cs, St1).
 
-%% call_erlfunc(ErlFunc, Args, Stack, Env, State) -> {Return,State}.
+%% call_erlfunc(ErlFunc, Args, Stack, CallStack, State) -> {Return,State}.
 %%  Here we must save the stacks in state as function may need it.
 %%  Note we leave the call frame to the erlang function on the call
 %%  stack. It is popped when we return.
 
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
-    {Ret,St1} = Func(Args, St0#luerl{stk=Stk,cs=Cs0}),
-    [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
-    emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1}).
+    case Func(Args, St0#luerl{stk=Stk,cs=Cs0}) of
+        %% {Ret,#luerl{}=St1} when is_list(Ret) ->
+        {Ret,St1} ->
+            [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
+            emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
+        _Other ->
+            %% Don't include the erl_func in the call stack.
+            lua_error(illegal_return_value, St0#luerl{stk=Stk0,cs=tl(Cs0)})
+    end.
 
 %% do_block(Instrs, LocalVars, Stack, Env, State,
 %%          LocalSize, EnvSize, BlockInstrs) -> <emul>.

@@ -215,7 +215,7 @@ remove_geterr(R, F) ->
       errstr := Er} = luerl_util:errname_info(R),
     [nil, list_to_binary(F1 ++ ": " ++ Er), En].
 
-%% Time functions.
+%% Time and date functions.
 
 clock(As, St) ->
     Type = case As of                           %Choose which we want
@@ -231,8 +231,8 @@ date(_, St) ->
                         [Ye,Mo,Da,Ho,Mi,Sec]),
     {[iolist_to_binary(Str)],St}.
 
-difftime([A1,A2|_], St) ->
-    {[A2-A1],St};
+difftime([T2,T1|_], St) ->
+    {[T2 - T1],St};
 difftime(As, St) -> badarg_error(difftime, As, St).
 
 

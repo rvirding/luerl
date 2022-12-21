@@ -69,6 +69,8 @@ format_error({undefined_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
 format_error({undefined_method,Object,Name}) ->
     io_lib:format("undefined method in ~w: ~w", [Object,Name]);
+format_error(illegal_return_value) ->
+    <<"illegal format of return value">>;
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);
@@ -90,7 +92,7 @@ format_error({assert_error,Obj}) ->
 	     true ->
 		  [<<"error object is a ">>, luerl_lib_basic:type(Obj)]
 	  end,
-    io_lib:format("~s!", [Msg]).
+    io_lib:format(<<"~s!">>, [Msg]).
 
 %% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
