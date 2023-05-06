@@ -225,17 +225,29 @@ clock(As, St) ->
     {Tot,_} = erlang:statistics(Type),          %Milliseconds
     {[Tot*1.0e-3],St}.
 
-date(_, St) ->
-    {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
-    Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
-                        [Ye,Mo,Da,Ho,Mi,Sec]),
-    {[iolist_to_binary(Str)],St}.
+date([], St) ->
+    date([<<"%Y-%m-%d %H:%M:%S">>], St);
+date([Fmt], St) when is_binary(Fmt) ->
+    date([Fmt, current_timestamp()], St);
+date([Fmt, TimeStamp], St) when is_binary(Fmt) and is_number(TimeStamp) ->
+    DateTime = timestamp_to_datetime(TimeStamp),
+    Formatted = luerl_lib_os_date:format(DateTime, Fmt),
+    {Enc, St1} = luerl:encode(Formatted, St),
+    {[Enc],St1};
+date(As, St) ->
+    badarg_error(date, As, St).
 
 difftime([T2,T1|_], St) ->
     {[T2 - T1],St};
 difftime(As, St) -> badarg_error(difftime, As, St).
 
-
 time(_, St) ->                                  %Time since 1 Jan 1970
+    {[current_timestamp()],St}.
+
+current_timestamp() ->
     {Mega,Sec,Micro} = os:timestamp(),
-    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
+    1.0e6*Mega+Sec+Micro*1.0e-6.
+
+timestamp_to_datetime(Timestamp) ->
+    SecondsSinceEpoch = round(Timestamp),
+    calendar:system_time_to_local_time(SecondsSinceEpoch, second).
