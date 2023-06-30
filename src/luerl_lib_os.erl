@@ -35,16 +35,16 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"clock">>,#erl_mfa{m=luerl_lib_os,f=clock,a=nil}},
-     {<<"date">>,#erl_mfa{m=luerl_lib_os,f=date,a=nil}},
-     {<<"difftime">>,#erl_mfa{m=luerl_lib_os,f=difftime,a=nil}},
-     {<<"execute">>,#erl_mfa{m=luerl_lib_os,f=execute,a=nil}},
-     {<<"exit">>,#erl_mfa{m=luerl_lib_os,f=lua_exit,a=nil}},
-     {<<"getenv">>,#erl_mfa{m=luerl_lib_os,f=getenv,a=nil}},
-     {<<"remove">>,#erl_mfa{m=luerl_lib_os,f=remove,a=nil}},
-     {<<"rename">>,#erl_mfa{m=luerl_lib_os,f=rename,a=nil}},
-     {<<"time">>,#erl_mfa{m=luerl_lib_os,f=time,a=nil}},
-     {<<"tmpname">>,#erl_mfa{m=luerl_lib_os,f=tmpname,a=nil}}].
+    [{<<"clock">>,#erl_mfa{m=luerl_lib_os,f=clock}},
+     {<<"date">>,#erl_mfa{m=luerl_lib_os,f=date}},
+     {<<"difftime">>,#erl_mfa{m=luerl_lib_os,f=difftime}},
+     {<<"execute">>,#erl_mfa{m=luerl_lib_os,f=execute}},
+     {<<"exit">>,#erl_mfa{m=luerl_lib_os,f=lua_exit}},
+     {<<"getenv">>,#erl_mfa{m=luerl_lib_os,f=getenv}},
+     {<<"remove">>,#erl_mfa{m=luerl_lib_os,f=remove}},
+     {<<"rename">>,#erl_mfa{m=luerl_lib_os,f=rename}},
+     {<<"time">>,#erl_mfa{m=luerl_lib_os,f=time}},
+     {<<"tmpname">>,#erl_mfa{m=luerl_lib_os,f=tmpname}}].
 
 getenv(_, [<<>>|_], St) -> {[nil],St};
 getenv(_, [A|_], St) when is_binary(A) ; is_number(A) ->

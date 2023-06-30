@@ -21,9 +21,9 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,assert/3,collectgarbage/3,dofile/3,eprint/3,getmetatable/3,ipairs/3,load/3,loadfile/3,
-         loadstring/3,next/3,pairs/3,pcall/3,print/3,rawequal/3,rawget/3,rawlen/3,rawset/3,select/3,
-         setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
+-export([install/1,assert/3,basic_error/3,collectgarbage/3,dofile/3,eprint/3,getmetatable/3,ipairs/3,
+         ipairs_next/3,load/3,loadfile/3,loadstring/3,next/3,pairs/3,pcall/3,print/3,rawequal/3,
+         rawget/3,rawlen/3,rawset/3,select/3, setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([print/2,tostring/1,tostring/2,type/1]).
@@ -38,30 +38,30 @@ install(St) ->
 
 table() ->
     [{<<"_VERSION">>,<<"Lua 5.3">>},            %We are optimistic
-     {<<"assert">>,#erl_mfa{m=luerl_lib_basic,f=assert,a=nil}},
-     {<<"collectgarbage">>,#erl_mfa{m=luerl_lib_basic,f=collectgarbage,a=nil}},
-     {<<"dofile">>,#erl_mfa{m=luerl_lib_basic,f=dofile,a=nil}},
-     {<<"eprint">>,#erl_mfa{m=luerl_lib_basic,f=eprint,a=nil}},
-     {<<"error">>,#erl_mfa{m=luerl_lib_basic,f=basic_error,a=nil}},
-     {<<"getmetatable">>,#erl_mfa{m=luerl_lib_basic,f=getmetatable,a=nil}},
-     {<<"ipairs">>,#erl_mfa{m=luerl_lib_basic,f=ipairs,a=nil}},
-     {<<"load">>,#erl_mfa{m=luerl_lib_basic,f=load,a=nil}},
-     {<<"loadfile">>,#erl_mfa{m=luerl_lib_basic,f=loadfile,a=nil}},
-     {<<"loadstring">>,#erl_mfa{m=luerl_lib_basic,f=loadstring,a=nil}}, %For Lua 5.1 compatibility
-     {<<"next">>,#erl_mfa{m=luerl_lib_basic,f=next,a=nil}},
-     {<<"pairs">>,#erl_mfa{m=luerl_lib_basic,f=pairs,a=nil}},
-     {<<"pcall">>,#erl_mfa{m=luerl_lib_basic,f=pcall,a=nil}},
-     {<<"print">>,#erl_mfa{m=luerl_lib_basic,f=print,a=nil}},
-     {<<"rawequal">>,#erl_mfa{m=luerl_lib_basic,f=rawequal,a=nil}},
-     {<<"rawget">>,#erl_mfa{m=luerl_lib_basic,f=rawget,a=nil}},
-     {<<"rawlen">>,#erl_mfa{m=luerl_lib_basic,f=rawlen,a=nil}},
-     {<<"rawset">>,#erl_mfa{m=luerl_lib_basic,f=rawset,a=nil}},
-     {<<"select">>,#erl_mfa{m=luerl_lib_basic,f=select,a=nil}},
-     {<<"setmetatable">>,#erl_mfa{m=luerl_lib_basic,f=setmetatable,a=nil}},
-     {<<"tonumber">>,#erl_mfa{m=luerl_lib_basic,f=tonumber,a=nil}},
-     {<<"tostring">>,#erl_mfa{m=luerl_lib_basic,f=tostring,a=nil}},
-     {<<"type">>,#erl_mfa{m=luerl_lib_basic,f=type,a=nil}},
-     {<<"unpack">>,#erl_mfa{m=luerl_lib_basic,f=unpack,a=nil}}	%For Lua 5.1 compatibility
+     {<<"assert">>,#erl_mfa{m=luerl_lib_basic,f=assert}},
+     {<<"collectgarbage">>,#erl_mfa{m=luerl_lib_basic,f=collectgarbage}},
+     {<<"dofile">>,#erl_mfa{m=luerl_lib_basic,f=dofile}},
+     {<<"eprint">>,#erl_mfa{m=luerl_lib_basic,f=eprint}},
+     {<<"error">>,#erl_mfa{m=luerl_lib_basic,f=basic_error}},
+     {<<"getmetatable">>,#erl_mfa{m=luerl_lib_basic,f=getmetatable}},
+     {<<"ipairs">>,#erl_mfa{m=luerl_lib_basic,f=ipairs}},
+     {<<"load">>,#erl_mfa{m=luerl_lib_basic,f=load}},
+     {<<"loadfile">>,#erl_mfa{m=luerl_lib_basic,f=loadfile}},
+     {<<"loadstring">>,#erl_mfa{m=luerl_lib_basic,f=loadstring}}, %For Lua 5.1 compatibility
+     {<<"next">>,#erl_mfa{m=luerl_lib_basic,f=next}},
+     {<<"pairs">>,#erl_mfa{m=luerl_lib_basic,f=pairs}},
+     {<<"pcall">>,#erl_mfa{m=luerl_lib_basic,f=pcall}},
+     {<<"print">>,#erl_mfa{m=luerl_lib_basic,f=print}},
+     {<<"rawequal">>,#erl_mfa{m=luerl_lib_basic,f=rawequal}},
+     {<<"rawget">>,#erl_mfa{m=luerl_lib_basic,f=rawget}},
+     {<<"rawlen">>,#erl_mfa{m=luerl_lib_basic,f=rawlen}},
+     {<<"rawset">>,#erl_mfa{m=luerl_lib_basic,f=rawset}},
+     {<<"select">>,#erl_mfa{m=luerl_lib_basic,f=select}},
+     {<<"setmetatable">>,#erl_mfa{m=luerl_lib_basic,f=setmetatable}},
+     {<<"tonumber">>,#erl_mfa{m=luerl_lib_basic,f=tonumber}},
+     {<<"tostring">>,#erl_mfa{m=luerl_lib_basic,f=tostring}},
+     {<<"type">>,#erl_mfa{m=luerl_lib_basic,f=type}},
+     {<<"unpack">>,#erl_mfa{m=luerl_lib_basic,f=unpack}}	%For Lua 5.1 compatibility
     ].
 
 assert(_, As, St) ->

@@ -28,7 +28,7 @@
 
 -include("luerl.hrl").
 
--export([install/1,fmod/3,frexp/3,abs/3,acos/3,asin/3,atan/3,ceil/3,cos/3,deg/3,exp/3,floor/3,
+-export([install/1,abs/3,acos/3,asin/3,atan2/3,atan/3,ceil/3,cos/3,cosh/3,deg/3,exp/3,floor/3,
          fmod/3,frexp/3,ldexp/3,log/3,log10/3,max/3,min/3,modf/3,pow/3,rad/3,random/3,randomseed/3,
          sin/3,sinh/3,sqrt/3,tan/3,tanh/3,tointeger/3,type/3]).
 
@@ -56,40 +56,40 @@ install(St0) ->
     luerl_heap:alloc_table(table(), St1).
 
 table() ->
-    [{<<"abs">>,#erl_mfa{m=luerl_lib_math,f=abs,a=nil}},
-     {<<"acos">>,#erl_mfa{m=luerl_lib_math,f=acos,a=nil}},
-     {<<"asin">>,#erl_mfa{m=luerl_lib_math,f=asin,a=nil}},
-     {<<"atan">>,#erl_mfa{m=luerl_lib_math,f=atan,a=nil}},
-     {<<"atan2">>,#erl_mfa{m=luerl_lib_math,f=atan2,a=nil}}, %For 5.2 backwards compatibility
-     {<<"ceil">>,#erl_mfa{m=luerl_lib_math,f=ceil,a=nil}},
-     {<<"cos">>,#erl_mfa{m=luerl_lib_math,f=cos,a=nil}},
-     {<<"cosh">>,#erl_mfa{m=luerl_lib_math,f=cosh,a=nil}},   %For 5.2 backwards compatibility
-     {<<"deg">>,#erl_mfa{m=luerl_lib_math,f=deg,a=nil}},
-     {<<"exp">>,#erl_mfa{m=luerl_lib_math,f=exp,a=nil}},
-     {<<"floor">>,#erl_mfa{m=luerl_lib_math,f=floor,a=nil}},
-     {<<"fmod">>,#erl_mfa{m=luerl_lib_math,f=fmod,a=nil}},
-     {<<"frexp">>,#erl_mfa{m=luerl_lib_math,f=frexp,a=nil}}, %For 5.2 backwards compatibility
+    [{<<"abs">>,#erl_mfa{m=luerl_lib_math,f=abs}},
+     {<<"acos">>,#erl_mfa{m=luerl_lib_math,f=acos}},
+     {<<"asin">>,#erl_mfa{m=luerl_lib_math,f=asin}},
+     {<<"atan">>,#erl_mfa{m=luerl_lib_math,f=atan}},
+     {<<"atan2">>,#erl_mfa{m=luerl_lib_math,f=atan2}}, %For 5.2 backwards compatibility
+     {<<"ceil">>,#erl_mfa{m=luerl_lib_math,f=ceil}},
+     {<<"cos">>,#erl_mfa{m=luerl_lib_math,f=cos}},
+     {<<"cosh">>,#erl_mfa{m=luerl_lib_math,f=cosh}},   %For 5.2 backwards compatibility
+     {<<"deg">>,#erl_mfa{m=luerl_lib_math,f=deg}},
+     {<<"exp">>,#erl_mfa{m=luerl_lib_math,f=exp}},
+     {<<"floor">>,#erl_mfa{m=luerl_lib_math,f=floor}},
+     {<<"fmod">>,#erl_mfa{m=luerl_lib_math,f=fmod}},
+     {<<"frexp">>,#erl_mfa{m=luerl_lib_math,f=frexp}}, %For 5.2 backwards compatibility
      {<<"huge">>,1.7976931348623157e308},       %From the specs
-     {<<"ldexp">>,#erl_mfa{m=luerl_lib_math,f=ldexp,a=nil}}, %For 5.2 backwards compatibility
-     {<<"log">>,#erl_mfa{m=luerl_lib_math,f=log,a=nil}},
-     {<<"log10">>,#erl_mfa{m=luerl_lib_math,f=log10,a=nil}}, %For 5.1 backwards compatibility
-     {<<"max">>,#erl_mfa{m=luerl_lib_math,f=max,a=nil}},
+     {<<"ldexp">>,#erl_mfa{m=luerl_lib_math,f=ldexp}}, %For 5.2 backwards compatibility
+     {<<"log">>,#erl_mfa{m=luerl_lib_math,f=log}},
+     {<<"log10">>,#erl_mfa{m=luerl_lib_math,f=log10}}, %For 5.1 backwards compatibility
+     {<<"max">>,#erl_mfa{m=luerl_lib_math,f=max}},
      {<<"maxinteger">>,16#7FFFFFFFFFFFFFFF},    %From Lua 5.4.3
-     {<<"min">>,#erl_mfa{m=luerl_lib_math,f=min,a=nil}},
+     {<<"min">>,#erl_mfa{m=luerl_lib_math,f=min}},
      {<<"mininteger">>,-16#8000000000000000},   %From Lua 5.4.3
-     {<<"modf">>,#erl_mfa{m=luerl_lib_math,f=modf,a=nil}},
+     {<<"modf">>,#erl_mfa{m=luerl_lib_math,f=modf}},
      {<<"pi">>,math:pi()},
-     {<<"pow">>,#erl_mfa{m=luerl_lib_math,f=pow,a=nil}},
-     {<<"rad">>,#erl_mfa{m=luerl_lib_math,f=rad,a=nil}},
-     {<<"random">>,#erl_mfa{m=luerl_lib_math,f=random,a=nil}},
-     {<<"randomseed">>,#erl_mfa{m=luerl_lib_math,f=randomseed,a=nil}},
-     {<<"sin">>,#erl_mfa{m=luerl_lib_math,f=sin,a=nil}},
-     {<<"sinh">>,#erl_mfa{m=luerl_lib_math,f=sinh,a=nil}},   %For 5.2 backwards compatibility
-     {<<"sqrt">>,#erl_mfa{m=luerl_lib_math,f=sqrt,a=nil}},
-     {<<"tan">>,#erl_mfa{m=luerl_lib_math,f=tan,a=nil}},
-     {<<"tanh">>,#erl_mfa{m=luerl_lib_math,f=tanh,a=nil}},   %For 5.2 backwards compatibility
-     {<<"tointeger">>,#erl_mfa{m=luerl_lib_math,f=tointeger,a=nil}},
-     {<<"type">>,#erl_mfa{m=luerl_lib_math,f=type,a=nil}}
+     {<<"pow">>,#erl_mfa{m=luerl_lib_math,f=pow}},
+     {<<"rad">>,#erl_mfa{m=luerl_lib_math,f=rad}},
+     {<<"random">>,#erl_mfa{m=luerl_lib_math,f=random}},
+     {<<"randomseed">>,#erl_mfa{m=luerl_lib_math,f=randomseed}},
+     {<<"sin">>,#erl_mfa{m=luerl_lib_math,f=sin}},
+     {<<"sinh">>,#erl_mfa{m=luerl_lib_math,f=sinh}},   %For 5.2 backwards compatibility
+     {<<"sqrt">>,#erl_mfa{m=luerl_lib_math,f=sqrt}},
+     {<<"tan">>,#erl_mfa{m=luerl_lib_math,f=tan}},
+     {<<"tanh">>,#erl_mfa{m=luerl_lib_math,f=tanh}},   %For 5.2 backwards compatibility
+     {<<"tointeger">>,#erl_mfa{m=luerl_lib_math,f=tointeger}},
+     {<<"type">>,#erl_mfa{m=luerl_lib_math,f=type}}
     ].
 
 %% abs(Args, State) -> {[Ret],State}.
