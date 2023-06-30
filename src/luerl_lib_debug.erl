@@ -34,10 +34,10 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"getmetatable">>,#erl_mfa{m=luerl_lib_debug,f=getmetatable}},
-     {<<"getuservalue">>,#erl_mfa{m=luerl_lib_debug,f=getuservalue}},
-     {<<"setmetatable">>,#erl_mfa{m=luerl_lib_debug,f=setmetatable}},
-     {<<"setuservalue">>,#erl_mfa{m=luerl_lib_debug,f=setuservalue}}
+    [{<<"getmetatable">>,#erl_mfa{m=?MODULE,f=getmetatable}},
+     {<<"getuservalue">>,#erl_mfa{m=?MODULE,f=getuservalue}},
+     {<<"setmetatable">>,#erl_mfa{m=?MODULE,f=setmetatable}},
+     {<<"setuservalue">>,#erl_mfa{m=?MODULE,f=setuservalue}}
     ].
 
 %% getmetatable([Value|_], State) -> {[Table],State}.

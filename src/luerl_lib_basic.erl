@@ -38,30 +38,30 @@ install(St) ->
 
 table() ->
     [{<<"_VERSION">>,<<"Lua 5.3">>},            %We are optimistic
-     {<<"assert">>,#erl_mfa{m=luerl_lib_basic,f=assert}},
-     {<<"collectgarbage">>,#erl_mfa{m=luerl_lib_basic,f=collectgarbage}},
-     {<<"dofile">>,#erl_mfa{m=luerl_lib_basic,f=dofile}},
-     {<<"eprint">>,#erl_mfa{m=luerl_lib_basic,f=eprint}},
-     {<<"error">>,#erl_mfa{m=luerl_lib_basic,f=basic_error}},
-     {<<"getmetatable">>,#erl_mfa{m=luerl_lib_basic,f=getmetatable}},
-     {<<"ipairs">>,#erl_mfa{m=luerl_lib_basic,f=ipairs}},
-     {<<"load">>,#erl_mfa{m=luerl_lib_basic,f=load}},
-     {<<"loadfile">>,#erl_mfa{m=luerl_lib_basic,f=loadfile}},
-     {<<"loadstring">>,#erl_mfa{m=luerl_lib_basic,f=loadstring}}, %For Lua 5.1 compatibility
-     {<<"next">>,#erl_mfa{m=luerl_lib_basic,f=next}},
-     {<<"pairs">>,#erl_mfa{m=luerl_lib_basic,f=pairs}},
-     {<<"pcall">>,#erl_mfa{m=luerl_lib_basic,f=pcall}},
-     {<<"print">>,#erl_mfa{m=luerl_lib_basic,f=print}},
-     {<<"rawequal">>,#erl_mfa{m=luerl_lib_basic,f=rawequal}},
-     {<<"rawget">>,#erl_mfa{m=luerl_lib_basic,f=rawget}},
-     {<<"rawlen">>,#erl_mfa{m=luerl_lib_basic,f=rawlen}},
-     {<<"rawset">>,#erl_mfa{m=luerl_lib_basic,f=rawset}},
-     {<<"select">>,#erl_mfa{m=luerl_lib_basic,f=select}},
-     {<<"setmetatable">>,#erl_mfa{m=luerl_lib_basic,f=setmetatable}},
-     {<<"tonumber">>,#erl_mfa{m=luerl_lib_basic,f=tonumber}},
-     {<<"tostring">>,#erl_mfa{m=luerl_lib_basic,f=tostring}},
-     {<<"type">>,#erl_mfa{m=luerl_lib_basic,f=type}},
-     {<<"unpack">>,#erl_mfa{m=luerl_lib_basic,f=unpack}}	%For Lua 5.1 compatibility
+     {<<"assert">>,#erl_mfa{m=?MODULE,f=assert}},
+     {<<"collectgarbage">>,#erl_mfa{m=?MODULE,f=collectgarbage}},
+     {<<"dofile">>,#erl_mfa{m=?MODULE,f=dofile}},
+     {<<"eprint">>,#erl_mfa{m=?MODULE,f=eprint}},
+     {<<"error">>,#erl_mfa{m=?MODULE,f=basic_error}},
+     {<<"getmetatable">>,#erl_mfa{m=?MODULE,f=getmetatable}},
+     {<<"ipairs">>,#erl_mfa{m=?MODULE,f=ipairs}},
+     {<<"load">>,#erl_mfa{m=?MODULE,f=load}},
+     {<<"loadfile">>,#erl_mfa{m=?MODULE,f=loadfile}},
+     {<<"loadstring">>,#erl_mfa{m=?MODULE,f=loadstring}}, %For Lua 5.1 compatibility
+     {<<"next">>,#erl_mfa{m=?MODULE,f=next}},
+     {<<"pairs">>,#erl_mfa{m=?MODULE,f=pairs}},
+     {<<"pcall">>,#erl_mfa{m=?MODULE,f=pcall}},
+     {<<"print">>,#erl_mfa{m=?MODULE,f=print}},
+     {<<"rawequal">>,#erl_mfa{m=?MODULE,f=rawequal}},
+     {<<"rawget">>,#erl_mfa{m=?MODULE,f=rawget}},
+     {<<"rawlen">>,#erl_mfa{m=?MODULE,f=rawlen}},
+     {<<"rawset">>,#erl_mfa{m=?MODULE,f=rawset}},
+     {<<"select">>,#erl_mfa{m=?MODULE,f=select}},
+     {<<"setmetatable">>,#erl_mfa{m=?MODULE,f=setmetatable}},
+     {<<"tonumber">>,#erl_mfa{m=?MODULE,f=tonumber}},
+     {<<"tostring">>,#erl_mfa{m=?MODULE,f=tostring}},
+     {<<"type">>,#erl_mfa{m=?MODULE,f=type}},
+     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}	%For Lua 5.1 compatibility
     ].
 
 assert(_, As, St) ->
@@ -109,7 +109,7 @@ basic_error(_, As, St) -> badarg_error(error, As, St).
 
 ipairs(_, [#tref{}=Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__ipairs">>, St) of
-	nil -> {[#erl_mfa{m=luerl_lib_basic,f=ipairs_next},Tref,0],St};
+	nil -> {[#erl_mfa{m=?MODULE,f=ipairs_next},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 ipairs(_, As, St) -> badarg_error(ipairs, As, St).
@@ -129,7 +129,7 @@ ipairs_next(_, [Tref,K|_], St) ->
 
 pairs(_, [#tref{}=Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__pairs">>, St) of
-	nil -> {[#erl_mfa{m=luerl_lib_basic,f=next},Tref,nil],St};
+	nil -> {[#erl_mfa{m=?MODULE,f=next},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
 pairs(_, As, St) -> badarg_error(pairs, As, St).

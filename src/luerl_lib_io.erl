@@ -32,8 +32,8 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"flush">>,#erl_mfa{m=luerl_lib_io,f=flush}},
-     {<<"write">>,#erl_mfa{m=luerl_lib_io,f=write}}
+    [{<<"flush">>,#erl_mfa{m=?MODULE,f=flush}},
+     {<<"write">>,#erl_mfa{m=?MODULE,f=write}}
     ].
 
 flush(_, _, St) -> {[true],St}.

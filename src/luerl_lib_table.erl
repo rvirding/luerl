@@ -44,12 +44,12 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"concat">>,#erl_mfa{m=luerl_lib_table,f=concat}},
-     {<<"insert">>,#erl_mfa{m=luerl_lib_table,f=insert}},
-     {<<"pack">>,#erl_mfa{m=luerl_lib_table,f=pack}},
-     {<<"remove">>,#erl_mfa{m=luerl_lib_table,f=remove}},
-     {<<"sort">>,#erl_mfa{m=luerl_lib_table,f=sort}},
-     {<<"unpack">>,#erl_mfa{m=luerl_lib_table,f=unpack}}
+    [{<<"concat">>,#erl_mfa{m=?MODULE,f=concat}},
+     {<<"insert">>,#erl_mfa{m=?MODULE,f=insert}},
+     {<<"pack">>,#erl_mfa{m=?MODULE,f=pack}},
+     {<<"remove">>,#erl_mfa{m=?MODULE,f=remove}},
+     {<<"sort">>,#erl_mfa{m=?MODULE,f=sort}},
+     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}
     ].
 
 %% concat - concat the elements of a list into a string.

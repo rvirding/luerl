@@ -37,7 +37,7 @@
 
 install(St0) ->
     St1 = luerl_emul:set_global_key(<<"require">>,
-				    #erl_mfa{m=luerl_lib_package,f=require}, St0),
+				    #erl_mfa{m=?MODULE,f=require}, St0),
     {S,St2} = luerl_heap:alloc_table(searchers_table(), St1),
     {L,St3} = luerl_heap:alloc_table(loaded_table(), St2),
     {P,St4} = luerl_heap:alloc_table(preload_table(), St3),
@@ -56,12 +56,12 @@ table(S, L, P) ->
      {<<"preload">>,P},
      {<<"path">>,path()},
      {<<"searchers">>,S},
-     {<<"searchpath">>,#erl_mfa{m=luerl_lib_package,f=searchpath}}
+     {<<"searchpath">>,#erl_mfa{m=?MODULE,f=searchpath}}
     ].
 
 searchers_table() ->
-    [{1.0,#erl_mfa{m=luerl_lib_package,f=preload_searcher}},
-     {2.0,#erl_mfa{m=luerl_lib_package,f=lua_searcher}}].
+    [{1.0,#erl_mfa{m=?MODULE,f=preload_searcher}},
+     {2.0,#erl_mfa{m=?MODULE,f=lua_searcher}}].
 
 preload_table() -> [].
 

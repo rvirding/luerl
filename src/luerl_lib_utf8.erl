@@ -28,12 +28,12 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"char">>,#erl_mfa{m=luerl_lib_utf8,f=utf8_char}},
+    [{<<"char">>,#erl_mfa{m=?MODULE,f=utf8_char}},
      {<<"charpattern">>,<<"[\0-\x7F\xC2-\xF4][\x80-\xBF]*">>},
-     {<<"codes">>,#erl_mfa{m=luerl_lib_utf8,f=codes}},
-     {<<"codepoint">>,#erl_mfa{m=luerl_lib_utf8,f=codepoint}},
-     {<<"len">>,#erl_mfa{m=luerl_lib_utf8,f=utf8_len}},
-     {<<"offset">>,#erl_mfa{m=luerl_lib_utf8,f=offset}}
+     {<<"codes">>,#erl_mfa{m=?MODULE,f=codes}},
+     {<<"codepoint">>,#erl_mfa{m=?MODULE,f=codepoint}},
+     {<<"len">>,#erl_mfa{m=?MODULE,f=utf8_len}},
+     {<<"offset">>,#erl_mfa{m=?MODULE,f=offset}}
     ].
 
 %% char(...) -> String.

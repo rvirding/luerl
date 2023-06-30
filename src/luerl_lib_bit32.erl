@@ -37,18 +37,18 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"band">>,#erl_mfa{m=luerl_lib_bit32,f=fband}},
-     {<<"bnot">>,#erl_mfa{m=luerl_lib_bit32,f=fbnot}},
-     {<<"bor">>,#erl_mfa{m=luerl_lib_bit32,f=fbor}},
-     {<<"btest">>,#erl_mfa{m=luerl_lib_bit32,f=fbtest}},
-     {<<"bxor">>,#erl_mfa{m=luerl_lib_bit32,f=fbxor}},
-     {<<"lshift">>,#erl_mfa{m=luerl_lib_bit32,f=flshift}},
-     {<<"rshift">>,#erl_mfa{m=luerl_lib_bit32,f=frshift}},
-     {<<"arshift">>,#erl_mfa{m=luerl_lib_bit32,f=farshift}},
-     {<<"lrotate">>,#erl_mfa{m=luerl_lib_bit32,f=flrotate}},
-     {<<"rrotate">>,#erl_mfa{m=luerl_lib_bit32,f=frrotate}},
-     {<<"extract">>,#erl_mfa{m=luerl_lib_bit32,f=fextract}},
-     {<<"replace">>,#erl_mfa{m=luerl_lib_bit32,f=freplace}}
+    [{<<"band">>,#erl_mfa{m=?MODULE,f=fband}},
+     {<<"bnot">>,#erl_mfa{m=?MODULE,f=fbnot}},
+     {<<"bor">>,#erl_mfa{m=?MODULE,f=fbor}},
+     {<<"btest">>,#erl_mfa{m=?MODULE,f=fbtest}},
+     {<<"bxor">>,#erl_mfa{m=?MODULE,f=fbxor}},
+     {<<"lshift">>,#erl_mfa{m=?MODULE,f=flshift}},
+     {<<"rshift">>,#erl_mfa{m=?MODULE,f=frshift}},
+     {<<"arshift">>,#erl_mfa{m=?MODULE,f=farshift}},
+     {<<"lrotate">>,#erl_mfa{m=?MODULE,f=flrotate}},
+     {<<"rrotate">>,#erl_mfa{m=?MODULE,f=frrotate}},
+     {<<"extract">>,#erl_mfa{m=?MODULE,f=fextract}},
+     {<<"replace">>,#erl_mfa{m=?MODULE,f=freplace}}
      ].
 
 fband(_, As, St) ->
