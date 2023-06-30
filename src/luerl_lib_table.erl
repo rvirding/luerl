@@ -26,7 +26,7 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1]).
+-export([install/1,concat/3,insert/3,pack/3,remove/3,sort/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([concat/4,concat/5,raw_length/2,length/2,unpack/2]).
@@ -44,17 +44,17 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"concat">>,#erl_func{code=fun concat/2}},
-     {<<"insert">>,#erl_func{code=fun insert/2}},
-     {<<"pack">>,#erl_func{code=fun pack/2}},
-     {<<"remove">>,#erl_func{code=fun remove/2}},
-     {<<"sort">>,#erl_func{code=fun sort/2}},
-     {<<"unpack">>,#erl_func{code=fun unpack/2}}
+    [{<<"concat">>,#erl_mfa{m=luerl_lib_table,f=concat,a=nil}},
+     {<<"insert">>,#erl_mfa{m=luerl_lib_table,f=insert,a=nil}},
+     {<<"pack">>,#erl_mfa{m=luerl_lib_table,f=pack,a=nil}},
+     {<<"remove">>,#erl_mfa{m=luerl_lib_table,f=remove,a=nil}},
+     {<<"sort">>,#erl_mfa{m=luerl_lib_table,f=sort,a=nil}},
+     {<<"unpack">>,#erl_mfa{m=luerl_lib_table,f=unpack,a=nil}}
     ].
 
 %% concat - concat the elements of a list into a string.
 
-concat(As, St0) ->
+concat(_, As, St0) ->
     try
 	do_concat(As, St0)
     catch
@@ -139,11 +139,11 @@ concat_join([], _) -> <<>>.
 %% insert(Table, [Pos,] Value) -> []
 %%  Insert an element into a list shifting following elements.
 
-insert([Tref,V], St) when ?IS_TREF(Tref) ->
+insert(_, [Tref,V], St) when ?IS_TREF(Tref) ->
     #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
     Arr1 = do_insert_last(Arr0, V),
     {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
-insert([Tref,P0,V]=As, St) when ?IS_TREF(Tref) ->
+insert(_, [Tref,P0,V]=As, St) when ?IS_TREF(Tref) ->
     #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
     Size = length_loop(Arr0),
     case luerl_lib:arg_to_integer(P0) of
@@ -152,7 +152,7 @@ insert([Tref,P0,V]=As, St) when ?IS_TREF(Tref) ->
 	    {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
 	_ -> badarg_error(insert, As, St)
     end;
-insert(As, St) -> badarg_error(insert, As, St).
+insert(_, As, St) -> badarg_error(insert, As, St).
 
 test_insert(A, V) -> do_insert_last(A, V).
 test_insert(A, N, V) -> do_insert(A, N, V).
@@ -182,11 +182,11 @@ insert_array(Arr0, N, Here) ->			%Put this at N shifting up
 %% remove(Table [,Pos]) -> Value.
 %%  Remove an element from a list shifting following elements.
 
-remove([Tref], St) when ?IS_TREF(Tref) ->
+remove(_, [Tref], St) when ?IS_TREF(Tref) ->
     #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
     {Ret,Arr1,Dict1} = do_remove_last(Arr0, Dict0),
     {Ret,luerl_heap:set_table(Tref, T#table{a=Arr1,d=Dict1}, St)};
-remove([Tref,P0|_]=As, St) when ?IS_TREF(Tref) ->
+remove(_, [Tref,P0|_]=As, St) when ?IS_TREF(Tref) ->
     #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
     case luerl_lib:arg_to_integer(P0) of
 	P1 when P1 =/= nil ->
@@ -198,10 +198,10 @@ remove([Tref,P0|_]=As, St) when ?IS_TREF(Tref) ->
 	    end;
 	_ -> badarg_error(remove, As, St)	%nil or P < 1
     end;
-remove(As, St) -> badarg_error(remove, As, St).
+remove(_, As, St) -> badarg_error(remove, As, St).
 
 test_remove(Arr, Dict) -> do_remove_last(Arr, Dict).
-test_remove(Arr, Dict, N) -> do_remove(Arr, Dict, N). 
+test_remove(Arr, Dict, N) -> do_remove(Arr, Dict, N).
 
 %% do_remove_last(Array, Dict) -> {Return,Array,Dict}.
 %%  Find the length and remove the last element. Return it even if it
@@ -252,7 +252,7 @@ remove_array_1(Arr0, N) ->
 
 %% pack - pack arguments in to a table.
 
-pack(As, St0) ->
+pack(_, As, St0) ->
     T = pack_loop(As, 0),			%Indexes are integers!
     {Tab,St1} = luerl_heap:alloc_table(T, St0),
     {[Tab],St1}.
@@ -263,7 +263,7 @@ pack_loop([], N) -> [{<<"n">>,N}].
 
 %% unpack - unpack table into return values.
 
-unpack([#tref{}=Tref|As], St) ->
+unpack(_, [#tref{}=Tref|As], St) ->
     #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
@@ -277,7 +277,9 @@ unpack([#tref{}=Tref|As], St) ->
 	error ->				%Not numbers
 	    badarg_error(unpack, [Tref|As], St)
     end;
-unpack([], St) -> badarg_error(unpack, [], St).
+unpack(_, [], St) -> badarg_error(unpack, [], St).
+
+unpack(As, St) -> unpack(nil, As, St).
 
 %% unpack_args(Args) -> Args.
 %% Fix args for unpack getting defaults right and handling 'nil'.
@@ -344,17 +346,17 @@ length_loop(I, Arr) ->
 %% sort(Table [,SortFun])
 %%  Sort the elements of the list after their values.
 
-sort([Tref], St0) when ?IS_TREF(Tref) ->
+sort(_, [Tref], St0) when ?IS_TREF(Tref) ->
     Comp = fun (A, B, St) -> lt_comp(A, B, St) end,
     St1 = do_sort(Comp, St0, Tref),
     {[],St1};
-sort([Tref,Func|_], St0) when ?IS_TREF(Tref) ->
+sort(_, [Tref,Func|_], St0) when ?IS_TREF(Tref) ->
     Comp = fun (A, B, St) ->
 		   luerl_emul:functioncall(Func, [A,B], St)
 	   end,
     St1 = do_sort(Comp, St0, Tref),
     {[],St1};
-sort(As, St) -> badarg_error(sort, As, St).
+sort(_, As, St) -> badarg_error(sort, As, St).
 
 do_sort(Comp, St0, Tref) ->
     #table{a=Arr0} = T = luerl_heap:get_table(Tref, St0),
