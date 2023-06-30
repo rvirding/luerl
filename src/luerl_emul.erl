@@ -311,6 +311,9 @@ call(#funref{}=Funref, Args, St0) ->		%Lua function
 call(#erl_func{}=Func, Args, St0) ->		%Erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
+    {Ret,St1};
+call(#erl_mfa{}=Func, Args, St0) ->   %Erlang function as MFA triplet
+    {Ret,St1} = functioncall(Func, Args, St0),
     {Ret,St1}.
 
 functioncall(Func, Args, #luerl{stk=Stk}=St0) ->
@@ -743,6 +746,9 @@ call_function(#funref{env=Env}=Funref, Args, Stk, Cs, St0) ->
 call_function(#erl_func{code=Func}=Funref, Args, Stk, Cs, St0) ->
     St1 = trace_call(Funref, Args, Stk, Cs, St0),
     call_erlfunc(Func, Args, Stk, Cs, St1);
+call_function(#erl_mfa{m=M,f=F,a=A}=Funref, Args, Stk, Cs, St0) ->
+    St1 = trace_call(Funref, Args, Stk, Cs, St0),
+    call_erlmfa({M,F,A}, Args, Stk, Cs, St1);
 call_function(Func, Args, Stk, Cs, St) ->
     case luerl_heap:get_metamethod(Func, <<"__call">>, St) of
         nil ->
@@ -785,6 +791,22 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
     case Func(Args, St0#luerl{stk=Stk,cs=Cs0}) of
         %% {Ret,#luerl{}=St1} when is_list(Ret) ->
+        {Ret,St1} ->
+            [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
+            emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
+        _Other ->
+            %% Don't include the erl_func in the call stack.
+            lua_error(illegal_return_value, St0#luerl{stk=Stk0,cs=tl(Cs0)})
+    end.
+
+%% call_erlmfa({M,F,A}, Args, Stack, CallStack, State) -> {Return,State}.
+%%  We have two sets of arguments here: the "configured" ones that always
+%%  get passed to the function (A) and the "runtime" ones that are specific
+%%  to this call (Args). For simplicity, we combine them into a list so you
+%%  get a ternary function receiving (A, Args, State).
+
+call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
+    case apply(M, F, [A, Args, St0]) of
         {Ret,St1} ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
@@ -962,7 +984,7 @@ do_numfor_loop(Is, Cont, Lvs, Stk, Env, Cs, St, N, Limit, Step, Fis) ->
 	    emul([?BREAK|Is], Cont, Lvs, Stk, Env, Cs, St)
     end.
 
-%% do_genfor(Instrs, LocalVars, Stack, Env, 
+%% do_genfor(Instrs, LocalVars, Stack, Env,
 %%           CallStack, State, Vars, FromInstrs) -> <emul>
 %%  The top of the stack will contain the return values from the explist.
 
