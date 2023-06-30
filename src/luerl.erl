@@ -33,7 +33,8 @@
 	 init/0,stop/1,gc/1,
          set_trace_func/2,clear_trace_func/1,
          set_trace_data/2,get_trace_data/1,
-	 get_stacktrace/1
+	 get_stacktrace/1,
+     externalize/1,internalize/1
 	]).
 
 %% Encoding and decoding.
@@ -424,3 +425,13 @@ decode_table(#tref{i=N}=T, St, In0) ->
 decode_userdata(U, St) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
+
+%% Externalize and Internalize ensure that the VM state passed in
+%% can be stored externally or can be recreated from external storage.
+%% Currently very simple: only random state needs special treatment.
+
+externalize(S) ->
+    luerl_lib_math:externalize(S).
+
+internalize(S) ->
+    luerl_lib_math:internalize(S).

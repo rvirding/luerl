@@ -32,7 +32,10 @@
          fmod/3,frexp/3,ldexp/3,log/3,log10/3,max/3,min/3,modf/3,pow/3,rad/3,random/3,randomseed/3,
          sin/3,sinh/3,sqrt/3,tan/3,tanh/3,tointeger/3,type/3]).
 
+-export([internalize/1,externalize/1]).
+
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+
 
 %% Use the correct random number module.
 
@@ -41,6 +44,8 @@
 -define(RAND_UNIFORM(L, S), rand:uniform_s(L, S)).
 -define(RAND_SEED(), rand:seed_s(exs1024)).
 -define(RAND_SEED(S1,S2,S3), rand:seed_s(exs1024, {S1,S2,S3})).
+-define(RAND_EXTERNALIZE(S), rand_externalize(S)).
+-define(RAND_INTERNALIZE(S), rand_internalize(S)).
 -else.
 -define(RAND_UNIFORM(S), random:uniform_s(S)).
 -define(RAND_UNIFORM(L, S), random:uniform_s(L, S)).
@@ -49,6 +54,8 @@
         {(abs(S1) rem (30269-1) + 1),           %PRIME1
          (abs(S2) rem (30307-1) + 1),           %PRIME2
          (abs(S3) rem (30323-1) + 1)}).         %PRIME3
+-define(RAND_EXTERNALIZE(S), S).                % random has just three integers for state so no special work needed.
+-define(RAND_INTERNALIZE(S), S).
 -endif.
 
 install(St0) ->
@@ -358,3 +365,17 @@ get_number_args(As) ->
 %% 	nil -> []
 %%     end;
 %% get_number_args([]) -> [].
+
+internalize(S) ->
+   ?RAND_INTERNALIZE(S).
+
+externalize(S) ->
+   ?RAND_EXTERNALIZE(S).
+
+-ifdef(NEW_RAND).
+rand_externalize(#luerl{rand=S0}=St) ->
+    St#luerl{rand=rand:export_seed_s(S0)}.
+
+rand_internalize(#luerl{rand=S0}=St) ->
+    St#luerl{rand=rand:seed_s(S0)}.
+-endif.

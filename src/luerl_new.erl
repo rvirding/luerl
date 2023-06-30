@@ -42,6 +42,9 @@
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
+%% Helping with storing VM state
+-export([externalize/1,internalize/1]).
+
 %% init() -> State.
 
 init() ->
@@ -442,3 +445,14 @@ decode_table(#tref{i=N}=T, St, In0) ->
 decode_userdata(U, St) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
+
+
+%% Externalize and Internalize ensure that the VM state passed in
+%% can be stored externally or can be recreated from external storage.
+%% Currently very simple: only random state needs special treatment.
+
+externalize(S) ->
+    luerl_lib_math:externalize(S).
+
+internalize(S) ->
+    luerl_lib_math:internalize(S).
