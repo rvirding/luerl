@@ -21,7 +21,9 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1]).
+-export([install/1,assert/3,collectgarbage/3,dofile/3,eprint/3,getmetatable/3,ipairs/3,load/3,loadfile/3,
+         loadstring/3,next/3,pairs/3,pcall/3,print/3,rawequal/3,rawget/3,rawlen/3,rawset/3,select/3,
+         setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([print/2,tostring/1,tostring/2,type/1]).
@@ -36,33 +38,33 @@ install(St) ->
 
 table() ->
     [{<<"_VERSION">>,<<"Lua 5.3">>},            %We are optimistic
-     {<<"assert">>,#erl_func{code=fun assert/2}},
-     {<<"collectgarbage">>,#erl_func{code=fun collectgarbage/2}},
-     {<<"dofile">>,#erl_func{code=fun dofile/2}},
-     {<<"eprint">>,#erl_func{code=fun eprint/2}},
-     {<<"error">>,#erl_func{code=fun basic_error/2}},
-     {<<"getmetatable">>,#erl_func{code=fun getmetatable/2}},
-     {<<"ipairs">>,#erl_func{code=fun ipairs/2}},
-     {<<"load">>,#erl_func{code=fun load/2}},
-     {<<"loadfile">>,#erl_func{code=fun loadfile/2}},
-     {<<"loadstring">>,#erl_func{code=fun loadstring/2}}, %For Lua 5.1 compatibility
-     {<<"next">>,#erl_func{code=fun next/2}},
-     {<<"pairs">>,#erl_func{code=fun pairs/2}},
-     {<<"pcall">>,#erl_func{code=fun pcall/2}},
-     {<<"print">>,#erl_func{code=fun print/2}},
-     {<<"rawequal">>,#erl_func{code=fun rawequal/2}},
-     {<<"rawget">>,#erl_func{code=fun rawget/2}},
-     {<<"rawlen">>,#erl_func{code=fun rawlen/2}},
-     {<<"rawset">>,#erl_func{code=fun rawset/2}},
-     {<<"select">>,#erl_func{code=fun select/2}},
-     {<<"setmetatable">>,#erl_func{code=fun setmetatable/2}},
-     {<<"tonumber">>,#erl_func{code=fun tonumber/2}},
-     {<<"tostring">>,#erl_func{code=fun tostring/2}},
-     {<<"type">>,#erl_func{code=fun type/2}},
-     {<<"unpack">>,#erl_func{code=fun unpack/2}}	%For Lua 5.1 compatibility
+     {<<"assert">>,#erl_mfa{m=luerl_lib_basic,f=assert,a=nil}},
+     {<<"collectgarbage">>,#erl_mfa{m=luerl_lib_basic,f=collectgarbage,a=nil}},
+     {<<"dofile">>,#erl_mfa{m=luerl_lib_basic,f=dofile,a=nil}},
+     {<<"eprint">>,#erl_mfa{m=luerl_lib_basic,f=eprint,a=nil}},
+     {<<"error">>,#erl_mfa{m=luerl_lib_basic,f=basic_error,a=nil}},
+     {<<"getmetatable">>,#erl_mfa{m=luerl_lib_basic,f=getmetatable,a=nil}},
+     {<<"ipairs">>,#erl_mfa{m=luerl_lib_basic,f=ipairs,a=nil}},
+     {<<"load">>,#erl_mfa{m=luerl_lib_basic,f=load,a=nil}},
+     {<<"loadfile">>,#erl_mfa{m=luerl_lib_basic,f=loadfile,a=nil}},
+     {<<"loadstring">>,#erl_mfa{m=luerl_lib_basic,f=loadstring,a=nil}}, %For Lua 5.1 compatibility
+     {<<"next">>,#erl_mfa{m=luerl_lib_basic,f=next,a=nil}},
+     {<<"pairs">>,#erl_mfa{m=luerl_lib_basic,f=pairs,a=nil}},
+     {<<"pcall">>,#erl_mfa{m=luerl_lib_basic,f=pcall,a=nil}},
+     {<<"print">>,#erl_mfa{m=luerl_lib_basic,f=print,a=nil}},
+     {<<"rawequal">>,#erl_mfa{m=luerl_lib_basic,f=rawequal,a=nil}},
+     {<<"rawget">>,#erl_mfa{m=luerl_lib_basic,f=rawget,a=nil}},
+     {<<"rawlen">>,#erl_mfa{m=luerl_lib_basic,f=rawlen,a=nil}},
+     {<<"rawset">>,#erl_mfa{m=luerl_lib_basic,f=rawset,a=nil}},
+     {<<"select">>,#erl_mfa{m=luerl_lib_basic,f=select,a=nil}},
+     {<<"setmetatable">>,#erl_mfa{m=luerl_lib_basic,f=setmetatable,a=nil}},
+     {<<"tonumber">>,#erl_mfa{m=luerl_lib_basic,f=tonumber,a=nil}},
+     {<<"tostring">>,#erl_mfa{m=luerl_lib_basic,f=tostring,a=nil}},
+     {<<"type">>,#erl_mfa{m=luerl_lib_basic,f=type,a=nil}},
+     {<<"unpack">>,#erl_mfa{m=luerl_lib_basic,f=unpack,a=nil}}	%For Lua 5.1 compatibility
     ].
 
-assert(As, St) ->
+assert(_, As, St) ->
     case luerl_lib:boolean_value(As) of
 	true -> {As,St};
 	false ->
@@ -73,14 +75,14 @@ assert(As, St) ->
 	    lua_error({assert_error,M}, St)
     end.
 
-collectgarbage([], St) -> collectgarbage([<<"collect">>], St);
-collectgarbage([<<"collect">>|_], St) ->
+collectgarbage(_, [], St) -> collectgarbage(nil, [<<"collect">>], St);
+collectgarbage(_, [<<"collect">>|_], St) ->
     {[],luerl_heap:gc(St)};
     %% {[],St};					%No-op for the moment
-collectgarbage(_, St) ->			%Ignore everything else
+collectgarbage(_, _, St) ->			%Ignore everything else
     {[],St}.
 
-eprint(Args, St) ->
+eprint(_, Args, St) ->
     lists:foreach(fun (#tref{}=Tref) ->
 			  Tab = luerl_heap:get_table(Tref, St),
 			  io:format("~w ", [Tab]);
@@ -89,31 +91,31 @@ eprint(Args, St) ->
     io:nl(),
     {[],St}.
 
--spec basic_error(_, _) -> no_return().
+-spec basic_error(_, _, _) -> no_return().
 
-basic_error([{tref, _}=T|_], St0) ->
+basic_error(_, [{tref, _}=T|_], St0) ->
     case luerl_heap:get_metamethod(T, <<"__tostring">>, St0) of
         nil -> lua_error({error_call, T}, St0);
         Meta ->
             {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
             lua_error({error_call, Ret}, St1)
     end;
-basic_error([M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
-basic_error(As, St) -> badarg_error(error, As, St).
+basic_error(_, [M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
+basic_error(_, As, St) -> badarg_error(error, As, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
 %%  Return a function which on successive calls returns successive
 %%  key-value pairs of integer keys.
 
-ipairs([#tref{}=Tref|_], St) ->
+ipairs(_, [#tref{}=Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__ipairs">>, St) of
-	nil -> {[#erl_func{code=fun ipairs_next/2},Tref,0],St};
+	nil -> {[#erl_mfa{m=luerl_lib_basic,f=ipairs_next},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
-ipairs(As, St) -> badarg_error(ipairs, As, St).
-    
-ipairs_next([A], St) -> ipairs_next([A,0], St);
-ipairs_next([Tref,K|_], St) ->
+ipairs(_, As, St) -> badarg_error(ipairs, As, St).
+
+ipairs_next(_, [A], St) -> ipairs_next(nil, [A,0], St);
+ipairs_next(_, [Tref,K|_], St) ->
     %% Get the table.
     #table{a=Arr} = luerl_heap:get_table(Tref, St),
     Next = K + 1,
@@ -125,20 +127,20 @@ ipairs_next([Tref,K|_], St) ->
 %% pairs(Args, State) -> {[Func,Table,Key],State}.
 %%  Return a function to step over all the key-value pairs in a table.
 
-pairs([#tref{}=Tref|_], St) ->
+pairs(_, [#tref{}=Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__pairs">>, St) of
-	nil -> {[#erl_func{code=fun next/2},Tref,nil],St};
+	nil -> {[#erl_mfa{m=luerl_lib_basic,f=next},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
     end;
-pairs(As, St) -> badarg_error(pairs, As, St).
+pairs(_, As, St) -> badarg_error(pairs, As, St).
 
 %% next(Args, State) -> {[Key,Value] | [nil], State}.
 %%  Given a table and a key return the next key-value pair in the
 %%  table, or nil if there is no next key. The key 'nil' gives the
 %%  first key-value pair.
 
-next([A], St) -> next([A,nil], St);
-next([#tref{}=Tref,K|_], St) ->
+next(_, [A], St) -> next(nil, [A,nil], St);
+next(_, [#tref{}=Tref,K|_], St) ->
     %% Get the table.
     #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
     if K == nil ->
@@ -155,7 +157,7 @@ next([#tref{}=Tref,K|_], St) ->
 	    end;
        true -> next_key(K, Dict, St)
     end;
-next(As, St) -> badarg_error(next, As, St).
+next(_, As, St) -> badarg_error(next, As, St).
 
 next_index(I0, Arr, Dict, St) ->
     case next_index_loop(I0+1, Arr, array:size(Arr)) of
@@ -190,7 +192,7 @@ next_key(K, Dict, St) ->
 %%  string. print is not intended for formatted output, but only as a
 %%  quick way to show a value, for instance for debugging.
 
-print(Args, St0) ->
+print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
 			      {[Str],S1} = tostring([A], S0),
 			      io:format("~ts ", [print_string(Str)]),
@@ -198,6 +200,7 @@ print(Args, St0) ->
 		      end, St0, Args),
     io:nl(),
     {[],St1}.
+print(Args, St0) -> print(nil, Args, St0).
 
 print_string(<<C/utf8,S/binary>>) -> [C|print_string(S)];
 print_string(<<_,S/binary>>) -> [$?|print_string(S)];
@@ -208,30 +211,30 @@ print_string(<<>>) -> [].
 %% rawget([Table,Key|_], State) -> {[Val],State)}.
 %% rawset([Table,Key,Value|_]], State) -> {[Table],State)}.
 
-rawequal([A1,A2|_], St) -> {[A1 =:= A2],St};
-rawequal(As, St) -> badarg_error(rawequal, As, St).
+rawequal(_, [A1,A2|_], St) -> {[A1 =:= A2],St};
+rawequal(_, As, St) -> badarg_error(rawequal, As, St).
 
-rawlen([A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
-rawlen([#tref{}=T|_], St) ->
+rawlen(_, [A|_], St) when is_binary(A) -> {[float(byte_size(A))],St};
+rawlen(_, [#tref{}=T|_], St) ->
     {[luerl_lib_table:raw_length(T, St)],St};
-rawlen(As, St) -> badarg_error(rawlen, As, St).
+rawlen(_, As, St) -> badarg_error(rawlen, As, St).
 
-rawget([#tref{}=Tref,Key|_], St) ->
+rawget(_, [#tref{}=Tref,Key|_], St) ->
     Val = luerl_heap:raw_get_table_key(Tref, Key, St),
     {[Val],St};
-rawget(As, St) -> badarg_error(rawget, As, St).
+rawget(_, As, St) -> badarg_error(rawget, As, St).
 
-rawset([Tref,nil=Key,_|_], St) ->
+rawset(_, [Tref,nil=Key,_|_], St) ->
     lua_error({illegal_index,Tref,Key}, St);
-rawset([#tref{}=Tref,Key,Val|_], St0) ->
+rawset(_, [#tref{}=Tref,Key,Val|_], St0) ->
     St1 = luerl_heap:raw_set_table_key(Tref, Key, Val, St0),
     {[Tref],St1};
-rawset(As, St) -> badarg_error(rawset, As, St).
+rawset(_, As, St) -> badarg_error(rawset, As, St).
 
 %% select(Args, State) -> {[Element],State}.
 
-select([<<$#>>|As], St) -> {[float(length(As))],St};
-select([A|As], St) ->
+select(_, [<<$#>>|As], St) -> {[float(length(As))],St};
+select(_, [A|As], St) ->
     %%io:fwrite("sel:~p\n", [[A|As]]),
     Len = length(As),
     case luerl_lib:arg_to_integer(A) of
@@ -239,7 +242,7 @@ select([A|As], St) ->
 	N when is_integer(N), N < 0 -> {select_back(-N, As, Len),St};
 	_ -> badarg_error(select, [A|As], St)
     end;
-select(As, St) -> badarg_error(select, As, St).
+select(_, As, St) -> badarg_error(select, As, St).
 
 select_front(N, As, Len) when N =< Len ->
     lists:nthtail(N-1, As);
@@ -249,20 +252,22 @@ select_back(N, As, Len) when N =< Len ->
     lists:nthtail(Len-N, As);
 select_back(_, As, _) -> As.
 
-tonumber([Arg], St) -> {[tonumber(luerl_lib:arg_to_number(Arg))],St};
-tonumber([Arg,B|_], St) -> {[tonumber(luerl_lib:arg_to_number(Arg, B))],St};
-tonumber(As, St) -> badarg_error(tonumber, As, St).
+tonumber(_, [Arg], St) -> {[tonumber(luerl_lib:arg_to_number(Arg))],St};
+tonumber(_, [Arg,B|_], St) -> {[tonumber(luerl_lib:arg_to_number(Arg, B))],St};
+tonumber(_, As, St) -> badarg_error(tonumber, As, St).
 
 tonumber(Num) when is_number(Num) -> Num;
 tonumber(_) -> nil.
 
-tostring([Arg|_], St) ->
+tostring(_, [Arg|_], St) ->
     case luerl_heap:get_metamethod(Arg, <<"__tostring">>, St) of
         nil -> {[tostring(Arg)],St};
         M when ?IS_FUNCTION(M) ->
             luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
     end;
-tostring(As, St) -> badarg_error(tostring, As, St).
+tostring(_, As, St) -> badarg_error(tostring, As, St).
+
+tostring(As, St) -> tostring(nil, As, St).
 
 %% tostring([Arg|_], Stated) -> {String,State}.
 %%  Return the type as a string.
@@ -287,14 +292,16 @@ tostring(#funref{i=I}) ->                       %Functions defined in Lua
     iolist_to_binary([<<"function: ">>,integer_to_list(I)]);
 tostring(#erl_func{code=C}) ->                  %Erlang functions
     iolist_to_binary([<<"function: ">>,io_lib:write(C)]);
+tostring(#erl_mfa{m=M,f=F}) ->                  %Erlang MFA triplets
+    iolist_to_binary([<<"function: ">>,io_lib:write_atom(M),<<":">>,io_lib:write_atom(F)]);
 tostring(#thread{}) -> <<"thread">>;
 tostring(_) -> <<"unknown">>.
 
 %% type([Data|_], State) -> {Type,State}.
 %%  Return the type of the argument.
 
-type([Arg|_], St) -> {[type(Arg)],St};          %Only one return value!
-type(As, St) -> badarg_error(type, As, St).
+type(_, [Arg|_], St) -> {[type(Arg)],St};          %Only one return value!
+type(_, As, St) -> badarg_error(type, As, St).
 
 type(nil) -> <<"nil">>;
 type(N) when is_number(N) -> <<"number">>;
@@ -304,6 +311,7 @@ type(#tref{}) -> <<"table">>;
 type(#usdref{}) -> <<"userdata">>;
 type(#funref{}) -> <<"function">>;              %Functions defined in Lua
 type(#erl_func{}) -> <<"function">>;            %Internal functions
+type(#erl_mfa{}) -> <<"function">>;
 type(#thread{}) -> <<"thread">>;
 type(_) -> <<"unknown">>.
 
@@ -313,7 +321,7 @@ type(_) -> <<"unknown">>.
 %%  values, for tables and userdata it is the table of the object,
 %%  else the metatable for the type.
 
-getmetatable([Obj|_], St) ->
+getmetatable(_, [Obj|_], St) ->
     case luerl_heap:get_metatable(Obj, St) of
 	#tref{}=Meta ->
 	    #table{d=Dict} = luerl_heap:get_table(Meta, St),
@@ -323,14 +331,14 @@ getmetatable([Obj|_], St) ->
 	    end;
 	nil -> {[nil],St}
     end;
-getmetatable(As, St) -> badarg_error(getmetatable, As, St).
+getmetatable(_, As, St) -> badarg_error(getmetatable, As, St).
 
 
-setmetatable([#tref{}=T,#tref{}=M|_], St) ->
+setmetatable(_, [#tref{}=T,#tref{}=M|_], St) ->
     do_setmetatable(T, M, St);
-setmetatable([#tref{}=T,nil|_], St) ->
+setmetatable(_, [#tref{}=T,nil|_], St) ->
     do_setmetatable(T, nil, St);
-setmetatable(As, St) -> badarg_error(setmetatable, As, St).
+setmetatable(_, As, St) -> badarg_error(setmetatable, As, St).
 
 do_setmetatable(#tref{}=Tref, Meta, St0) ->
     case luerl_heap:get_metamethod(Tref, <<"__metatable">>, St0) of
@@ -343,7 +351,7 @@ do_setmetatable(#tref{}=Tref, Meta, St0) ->
 
 %% Do files.
 
-dofile(As, St) ->
+dofile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
 	[File] ->
 	    Ret = luerl_comp:file(File),	%Compile the file
@@ -359,7 +367,7 @@ dofile_ret({error,_,_}, As, St) ->
 
 %% Load string and files.
 
-load(As, St) ->
+load(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_string,lua_any]) of
 	[S|_] ->
 	    Ret = luerl_comp:string(S),		%Compile the string
@@ -367,15 +375,15 @@ load(As, St) ->
 	error -> badarg_error(load, As, St)
     end.
 
-loadfile(As, St) ->
+loadfile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_any]) of
 	[F|_] ->
 	    Ret = luerl_comp:file(F),		%Compile the file
 	    load_ret(Ret, St);
 	error -> badarg_error(loadfile, As, St)
     end.
- 
-loadstring(As, St) ->
+
+loadstring(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
 	[S] ->
 	    Ret = luerl_comp:string(S),		%Compile the string
@@ -390,7 +398,7 @@ load_ret({error,[{_,Mod,E}|_],_}, St) ->
     Msg = iolist_to_binary(Mod:format_error(E)),
     {[nil,Msg],St}.
 
-pcall([F|As], St0) ->
+pcall(_, [F|As], St0) ->
     try
 	{Rs,St1} = luerl_emul:functioncall(F, As, St0),
 	{[true|Rs],St1}
@@ -406,4 +414,4 @@ pcall([F|As], St0) ->
 
 %% Lua 5.1 compatibility functions.
 
-unpack(As, St) -> luerl_lib_table:unpack(As, St).
+unpack(_, As, St) -> luerl_lib_table:unpack(As, St).
