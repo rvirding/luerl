@@ -42,6 +42,9 @@
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
+%% Helping with storing VM state
+-export([externalize/1,internalize/1]).
+
 %% init() -> State.
 
 init() ->
@@ -318,6 +321,9 @@ do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
             {name,Name} = erlang:fun_info(Fun, name),
             FileName = get_filename(Module),
             {Line,[{{Module,Name},Args,[{file,FileName}]} | Trace]};
+        #erl_mfa{m=M,f=F,a=A} ->
+            FileName = get_filename(M),
+            {Line,[{{M,F},{A,Args},[{file,FileName}]} | Trace]};
         Other ->
             {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
@@ -383,6 +389,8 @@ encode(F, St) when is_function(F, 1) ->
                  encode_list(Res, State)
          end,
     {#erl_func{code=F1}, St};
+encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
+    {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).                  %Can't encode anything else
@@ -415,6 +423,7 @@ decode(#funref{}=Fun, State, _) ->
         end,
     F;                                          %Just a bare fun
 decode(#erl_func{code=Fun}, _, _) -> Fun;
+decode(#erl_mfa{m=M,f=F,a=A}, _, _) -> {M,F,A};
 decode(_, _, _) -> error(badarg).               %Shouldn't have anything else
 
 decode_table(#tref{i=N}=T, St, In0) ->
@@ -436,3 +445,14 @@ decode_table(#tref{i=N}=T, St, In0) ->
 decode_userdata(U, St) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
+
+
+%% Externalize and Internalize ensure that the VM state passed in
+%% can be stored externally or can be recreated from external storage.
+%% Currently very simple: only random state needs special treatment.
+
+externalize(S) ->
+    luerl_lib_math:externalize(S).
+
+internalize(S) ->
+    luerl_lib_math:internalize(S).

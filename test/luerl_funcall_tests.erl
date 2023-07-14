@@ -33,7 +33,7 @@ external_fun_test() ->
     ?assertEqual(true, BoolVal),
     ?assertEqual(true, BoolVal2),
     ?assertEqual(true, BoolVal3).
-    
+
 external_nostate_fun_test() ->
     State = luerl:init(),
     F = fun([A]) ->
@@ -54,8 +54,8 @@ external_nostate_fun_test() ->
 return_lib_function_test() ->
     State = luerl:init(),
     {_, State1} = luerl:do(<<"function test()\n  return string.find  end\n">>, State),
-    {[Fun], _State2} = luerl:call_function([test], [1], State1),
-    {Res, _State3} = Fun([<<"barfooblafasel">>, <<"foo">>], State1),
+    {[{M,F,A}], _State2} = luerl:call_function([test], [1], State1),
+    {Res, _State3} = apply(M, F, [A, [<<"barfooblafasel">>, <<"foo">>], State1]),
     ?assertEqual([4, 6], Res).
 
 define_fun_in_lua_test() ->

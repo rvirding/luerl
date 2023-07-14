@@ -179,7 +179,7 @@ set_global_key(Key, Val, #luerl{g=G}=St) ->
 
 get_global_key(Key, #luerl{g=G}=St) ->
     get_table_key(G, Key, St).
- 
+
 %% set_table_key(Table, Key, Val, State) ->
 %%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}
 %%
@@ -654,6 +654,8 @@ mark([#loop_frame{lvs=Lvs,stk=Stk,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
     mark(Todo, More1, GcT, GcE, GcU, GcF);
 %% Specifically catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#erl_mfa{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
 mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);

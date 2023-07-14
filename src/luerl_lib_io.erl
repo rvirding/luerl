@@ -22,7 +22,7 @@
 
 -include("luerl.hrl").
 
--export([install/1]).
+-export([install/1,flush/3,write/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
 
@@ -32,13 +32,13 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"flush">>,#erl_func{code=fun flush/2}},
-     {<<"write">>,#erl_func{code=fun write/2}}
+    [{<<"flush">>,#erl_mfa{m=?MODULE,f=flush}},
+     {<<"write">>,#erl_mfa{m=?MODULE,f=write}}
     ].
 
-flush(_, St) -> {[true],St}.
+flush(_, _, St) -> {[true],St}.
 
-write(As, St) ->
+write(_, As, St) ->
     case luerl_lib:args_to_strings(As) of
 	error -> badarg_error(write, As, St);
 	Ss ->
