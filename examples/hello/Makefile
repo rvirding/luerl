@@ -5,7 +5,7 @@ EXAMPLES = hello \
 	   hello_userdata \
 	   hello_userdata_new \
 	   hello_sandbox \
-       hello_funcalls
+	   hello_funcalls
 
 ROOTDIR = ../..
 SRCDIR  = $(ROOTDIR)/src
