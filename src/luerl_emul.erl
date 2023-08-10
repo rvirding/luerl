@@ -806,7 +806,7 @@ call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
 %%  get a ternary function receiving (A, Args, State).
 
 call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
-    case apply(M, F, [A, Args, St0]) of
+    case apply(M, F, [A, Args, St0#luerl{stk=Stk,cs=Cs0}]) of
         {Ret,St1} ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
