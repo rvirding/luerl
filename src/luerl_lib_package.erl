@@ -28,7 +28,7 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1]).
+-export([install/1,require/3,searchpath/3,preload_searcher/3,lua_searcher/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([search_path/5]).
@@ -37,7 +37,7 @@
 
 install(St0) ->
     St1 = luerl_emul:set_global_key(<<"require">>,
-				    #erl_func{code=fun require/2}, St0),
+				    #erl_mfa{m=?MODULE,f=require}, St0),
     {S,St2} = luerl_heap:alloc_table(searchers_table(), St1),
     {L,St3} = luerl_heap:alloc_table(loaded_table(), St2),
     {P,St4} = luerl_heap:alloc_table(preload_table(), St3),
@@ -56,12 +56,12 @@ table(S, L, P) ->
      {<<"preload">>,P},
      {<<"path">>,path()},
      {<<"searchers">>,S},
-     {<<"searchpath">>,#erl_func{code=fun searchpath/2}}
+     {<<"searchpath">>,#erl_mfa{m=?MODULE,f=searchpath}}
     ].
 
 searchers_table() ->
-    [{1.0,#erl_func{code=fun preload_searcher/2}},
-     {2.0,#erl_func{code=fun lua_searcher/2}}].
+    [{1.0,#erl_mfa{m=?MODULE,f=preload_searcher}},
+     {2.0,#erl_mfa{m=?MODULE,f=lua_searcher}}].
 
 preload_table() -> [].
 
@@ -91,7 +91,7 @@ path() ->
 
 %% searchpath(Name, Path [, Sep [, Rep]]) -> [File] | [nil|Files].
 
-searchpath(As, St) ->
+searchpath(_, As, St) ->
     case luerl_lib:conv_list(search_args(As),
 			     [lua_string,lua_string,lua_string,lua_string]) of
 	[N,P,S,R] ->				%Name, path, sep, rep
@@ -126,12 +126,12 @@ search_path_loop(Name, [T|Ts], Tried) ->
 search_path_loop(_, [], Tried) ->		%Couldn't find it
     {error,iolist_to_binary(Tried)}.
 
--spec require([_], _) -> {_,_} | no_return().	%To keep dialyzer quiet
+-spec require(_, [_], _) -> {_,_} | no_return().	%To keep dialyzer quiet
 
 %% require([File|_], State) ->{Value,State}.
 %%  Main require interface.
 
-require(As, St) ->
+require(_, As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
 	[Mod] -> do_require(Mod, St);
 	error -> badarg_error(require, As, St)
@@ -183,7 +183,7 @@ search_loaders_loop(Mod, [], Estr, St) ->	%No successful loader found
 %%  Predefined search functions in package.searchers. These must be Lua
 %%  callable functions as they are visible.
 
-preload_searcher(As, St0) ->
+preload_searcher(_, As, St0) ->
     case luerl_lib:conv_list(As, [lua_string]) of
 	[Mod] ->
 	    {Pre,St1} = luerl_emul:get_table_keys([<<"package">>,<<"preload">>],
@@ -195,7 +195,7 @@ preload_searcher(As, St0) ->
 	error -> badarg_error(preload_searcher, As, St0)
     end.
 
-lua_searcher(As, St0) ->
+lua_searcher(_, As, St0) ->
     case luerl_lib:conv_list(As, [lua_string]) of
 	[Mod] ->
 	    {Path,St1} = luerl_emul:get_table_keys([<<"package">>,<<"path">>],

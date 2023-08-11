@@ -114,8 +114,11 @@
 -record(erl_func,{code}).			%Erlang code (fun)
 -define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
+-record(erl_mfa,{m,f,a}).           %Erlang code (MFA)
+-define(IS_ERLMFA(F), is_record(F, erl_mfa)).
+
 %% Test if it a function, of either sort.
--define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F))).
+-define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F) orelse ?IS_ERLMFA(F))).
 
 %% Testing for integers/integer floats or booleans.
 -define(IS_FLOAT_INT(N), (round(N) == N)).

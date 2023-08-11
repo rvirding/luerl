@@ -42,6 +42,9 @@
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
 
+%%Helping with storing VM state
+-export([externalize/1,internalize/1]).
+
 eval(St, Chunk) ->
      luerl:eval(Chunk, St).
 
@@ -155,3 +158,9 @@ decode_list(St, Lts) ->
 
 decode(St, V) ->
     luerl:decode(V, St).
+
+externalize(St) ->
+    luerl_new:externalize(St).
+
+internalize(St) ->
+    luerl_new:internalize(St).

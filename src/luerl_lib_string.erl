@@ -21,7 +21,8 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1]).
+-export([install/1,byte/3,char/3,dump/3,find/3,format/3,gmatch/3,gsub/3,len/3,lower/3,
+         match/3,rep/3,reverse/3,sub/3,upper/3]).
 
 %% Export some test functions.
 -export([test_gsub/3,test_match_pat/3,test_pat/1,
@@ -45,26 +46,26 @@ metatable(T) ->					%String type metatable
     [{<<"__index">>,T}].
 
 table() ->					%String table
-    [{<<"byte">>,#erl_func{code=fun byte/2}},
-     {<<"char">>,#erl_func{code=fun char/2}},
-     {<<"dump">>,#erl_func{code=fun dump/2}},
-     {<<"find">>,#erl_func{code=fun find/2}},
-     {<<"format">>,#erl_func{code= fun format/2}},
-     {<<"gmatch">>,#erl_func{code=fun gmatch/2}},
-     {<<"gsub">>,#erl_func{code=fun gsub/2}},
-     {<<"len">>,#erl_func{code=fun len/2}},
-     {<<"lower">>,#erl_func{code=fun lower/2}},
-     {<<"match">>,#erl_func{code=fun match/2}},
-     {<<"rep">>,#erl_func{code=fun rep/2}},
-     {<<"reverse">>,#erl_func{code=fun reverse/2}},
-     {<<"sub">>,#erl_func{code=fun sub/2}},
-     {<<"upper">>,#erl_func{code=fun upper/2}}
+    [{<<"byte">>,#erl_mfa{m=?MODULE,f=byte}},
+     {<<"char">>,#erl_mfa{m=?MODULE,f=char}},
+     {<<"dump">>,#erl_mfa{m=?MODULE,f=dump}},
+     {<<"find">>,#erl_mfa{m=?MODULE,f=find}},
+     {<<"format">>,#erl_mfa{m=?MODULE,f=format}},
+     {<<"gmatch">>,#erl_mfa{m=?MODULE,f=gmatch}},
+     {<<"gsub">>,#erl_mfa{m=?MODULE,f=gsub}},
+     {<<"len">>,#erl_mfa{m=?MODULE,f=len}},
+     {<<"lower">>,#erl_mfa{m=?MODULE,f=lower}},
+     {<<"match">>,#erl_mfa{m=?MODULE,f=match}},
+     {<<"rep">>,#erl_mfa{m=?MODULE,f=rep}},
+     {<<"reverse">>,#erl_mfa{m=?MODULE,f=reverse}},
+     {<<"sub">>,#erl_mfa{m=?MODULE,f=sub}},
+     {<<"upper">>,#erl_mfa{m=?MODULE,f=upper}}
     ].
 
 %% byte(String [, I [, J]] ) -> [Code]
 %%  Return numerical codes of string between I and J.
 
-byte(As, St) ->
+byte(_, As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]) of
 	[S|Is] ->
 	    Bs = do_byte(S, byte_size(S), Is),
@@ -94,8 +95,8 @@ do_byte_ij(S, _, I, J) ->
 %% char(...) -> String
 %%  Return string of the numerical arguments.
 
-char([nil], St) -> {[<<>>],St};
-char(As, St) ->
+char(_, [nil], St) -> {[<<>>],St};
+char(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	error -> badarg_error(char, As, St);
 	Bs ->
@@ -106,14 +107,14 @@ char(As, St) ->
 %% dump(Function) -> String.
 %%  Return a string with binary representation of Function.
 
--spec dump([_], _) -> no_return().
+-spec dump(_, [_], _) -> no_return().
 
-dump(As, St) -> badarg_error(dump, As, St).
+dump(_, As, St) -> badarg_error(dump, As, St).
 
 %% find(String, Pattern [, Init [, Plain]]) -> [Indice].
 %%  Return first occurrence of Pattern in String.
 
-find(As, St0) ->
+find(_, As, St0) ->
     try
 	do_find(As, St0)
     catch
@@ -161,7 +162,7 @@ do_find(S, L, Pat0, I, false) ->		%Pattern search string
 %%  Format a string. All errors are badarg errors.
 %%  Do all the work in luerl_string_format but generate errors here.
 
-format([F|As], St0) ->
+format(_, [F|As], St0) ->
     try
 	luerl_lib_string_format:format(F, As, St0)
     catch
@@ -170,17 +171,17 @@ format([F|As], St0) ->
 	throw:{error,E} -> lua_error(E, St0);
 	_:_ -> badarg_error(format, [F|As], St0)
     end;
-format(As, St) -> badarg_error(format, As, St).
+format(_, As, St) -> badarg_error(format, As, St).
 
--spec gmatch([_], _) -> no_return().		%To keep dialyzer quiet
+-spec gmatch(_, [_], _) -> no_return().		%To keep dialyzer quiet
 
 %% gmatch(String, Pattern) -> [Function].
 
-gmatch(As, St) -> badarg_error(gmatch, As, St).
+gmatch(_, As, St) -> badarg_error(gmatch, As, St).
 
 %% gsub(String, Pattern, Repl [, N]) -> [String]
 
-gsub(As, St0) ->
+gsub(_, As, St0) ->
     try
 	do_gsub(As, St0)
     catch
@@ -291,14 +292,14 @@ gsub_repl_val(S, Val, Ca) ->
 
 %% len(String) -> Length.
 
-len([A|_], St) when is_binary(A) -> {[byte_size(A)],St};
-len([A|_], St) when is_number(A) ->
+len(_, [A|_], St) when is_binary(A) -> {[byte_size(A)],St};
+len(_, [A|_], St) when is_number(A) ->
     {[length(luerl_lib:number_to_list(A))],St};
-len(As, St) -> badarg_error(len, As, St).
+len(_, As, St) -> badarg_error(len, As, St).
 
 %% lower(String) -> String.
 
-lower(As, St) ->
+lower(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_list]) of
 	[S] -> {[list_to_binary(string:to_lower(S))],St};
 	_ -> badarg_error(lower, As, St)	%nil or []
@@ -306,7 +307,7 @@ lower(As, St) ->
 
 %% match(String, Pattern [, Init]) -> [Match].
 
-match(As, St0) ->
+match(_, As, St0) ->
     try
 	do_match(As, St0)
     catch
@@ -378,8 +379,8 @@ match_caps(Cas, S, I) -> [ match_cap(Ca, S, I) || Ca <- Cas ].
 
 %% rep(String, N [, Separator]) -> [String].
 
-rep([A1,A2], St) -> rep([A1,A2,<<>>], St);
-rep([_,_,_|_]=As, St) ->
+rep(_, [A1,A2], St) -> rep(nil, [A1,A2,<<>>], St);
+rep(_, [_,_,_|_]=As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_string]) of
         [S,I,Sep] ->
             Part = [Sep,S],
@@ -399,18 +400,18 @@ rep([_,_,_|_]=As, St) ->
         error ->                                %Error or bad values
             badarg_error(rep, As, St)
     end;
-rep(As, St) -> badarg_error(rep, As, St).
+rep(_, As, St) -> badarg_error(rep, As, St).
 
 %% reverse([String], State) -> {[Res],St}.
 
-reverse([A|_], St) when is_binary(A) ; is_number(A) ->
+reverse(_, [A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:arg_to_list(A),
     {[list_to_binary(lists:reverse(S))],St};
-reverse(As, St) -> badarg_error(reverse, As, St).
+reverse(_, As, St) -> badarg_error(reverse, As, St).
 
 %% sub([String, I [, J]], State) -> {[Res],State}.
 
-sub(As, St) ->
+sub(_, As, St) ->
     case luerl_lib:conv_list(As, [lua_string,lua_integer,lua_integer]) of
 	[S,I|Js] ->
 	    Len = byte_size(S),
@@ -440,10 +441,10 @@ do_sub_ij(_, _, I, J) when I > J -> <<>>;
 do_sub_ij(S, _, I, J) ->
     binary:part(S, I-1, J-I+1).			%Zero-based, yuch!
 
-upper([A|_], St) when is_binary(A) ; is_number(A) ->
+upper(_, [A|_], St) when is_binary(A) ; is_number(A) ->
     S = luerl_lib:arg_to_list(A),
     {[list_to_binary(string:to_upper(S))],St};
-upper(As, St) -> badarg_error(upper, As, St).
+upper(_, As, St) -> badarg_error(upper, As, St).
 
 %% This is the pattern grammar used. It may actually be overkill to
 %% first parse the pattern as the pattern is relativey simple and we
