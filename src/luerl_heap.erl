@@ -531,7 +531,7 @@ set_metatable(_, _, St) ->                      %Do nothing for the rest
 
 %% alloc_environment(Size, State) -> {Fref,State}
 %%
-%% Allocate the environment in the environemnt table and return
+%% Allocate the environment in the environment table and return
 %% its eref.
 
 alloc_environment(Size, #luerl{envs=Est0}=St) ->

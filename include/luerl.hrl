@@ -128,7 +128,7 @@
 %% Different methods for storing tables in the global data #luerl{}.
 %% Access through macros to allow testing with different storage
 %% methods. This is inefficient with ETS tables where it would
-%% probably be better to use bags and acces with match/select.
+%% probably be better to use bags and access with match/select.
 
 %% Set which table store to use. We check if we have full maps before
 %% we use them just to protect ourselves.
