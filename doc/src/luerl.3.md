@@ -2,6 +2,9 @@
 % Jean Chassoul, Robert Virding
 % 2018-2023
 
+# Name
+luerl - Basic interface to the Luerl system
+
 # Interface functions
 The **Lua State** parameter is the state of a Lua VM instance. It must be created with the **luerl:init()** call and  be carried from one call to the next.
 
