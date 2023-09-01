@@ -579,6 +579,7 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
     {Ef1,Et1} = filter_environment(SeenE, Ef0, Et0),
     {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
     {Ff1,Ft1} = filter_funcdefs(SeenF, Ff0, Ft0),
+    %% And update the tables.
     Tab1 = Tab0#tstruct{data=Tt1,free=Tf1},
     Env1 = Env0#tstruct{data=Et1,free=Ef1},
     Usd1 = Usd0#tstruct{data=Ut1,free=Uf1},
@@ -616,7 +617,7 @@ mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
         false ->                                %Mark it and add to todo
             Es1 = ordsets:add_element(F, Es0),
             Ses = tuple_to_list(?GET_TABLE(F, Et)),
-	    %% io:format("eref1: ~p ~p\n", [Et,Es1]),
+            %% io:format("eref1: ~p ~p\n", [Et,Es1]),
             mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
     end;
 mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
@@ -630,14 +631,16 @@ mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
 mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
      #gct{t=Ft0,s=Fs0}=GcF) ->
     %% io:format("funref0: ~p ~p ~p\n", [F,Fs0,Erefs]),
+    %% Each funref has its own environments but we only need to add
+    %% the function definition once.
     case ordsets:is_element(F, Fs0) of
         true ->
-            mark(ToDo, More, GcT, GcE, GcU, GcF);
+            mark(ToDo, [Erefs|More], GcT, GcE, GcU, GcF);
         false ->
+            %% And mark the function definition.
             Fs1 = ordsets:add_element(F, Fs0),
             Fdef = ?GET_TABLE(F, Ft0),
-            %% And mark the function definition.
-	    %% io:format("funref1: ~p ~p ~p\n", [F,Fs1,Erefs]),
+            %% io:format("funref1: ~p ~p ~p\n", [F,Fs1,Erefs]),
             mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
 mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
@@ -691,6 +694,7 @@ filter_tables(Seen, Tf0, Tt0) ->
     {Tf1,Tt1}.
 
 filter_environment(Seen, Ef0, Et0) ->
+    %% io:format("env0: ~p ~p ~p\n", [Seen,Ef0,Et0]),
     %% Update the free list.
     Ef1 = ?FOLD_TABLES(fun (K, _, Free) ->
                                case ordsets:is_element(K, Seen) of
@@ -699,10 +703,7 @@ filter_environment(Seen, Ef0, Et0) ->
                                end
                        end, Ef0, Et0),
     Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
-
-    %% io:format("env0: ~p ~p ~p\n", [Seen,Ef0,Et0]),
     %% io:format("env1: ~p ~p\n", [Ef1,Et1]),
-
     {Ef1,Et1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->
