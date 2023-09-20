@@ -102,6 +102,7 @@ run(S, Flags, St) when ?IS_MAP(Flags) ->
     run(S, maps:to_list(Flags), St);
 run(S, Flags, #luerl{}=St) when is_list(Flags) ->
     do_run(S, Flags ++ default_flags(), St);
+
 %% The old interface.
 run(S, St, MaxR) when is_integer(MaxR) ->
     run(S, St, MaxR, []);
@@ -111,6 +112,9 @@ run(S, St, Flags) when is_list(Flags) ->
 run(S, St, MaxR, Flags) ->
     run(S, St, MaxR, Flags, ?MAX_TIME).
 
+run(S, St, 0, Opts, MaxT) ->
+    %% Need to get the old no reductions to the new no reductions.
+    run(S, St, none, Opts, MaxT);
 run(S, St, MaxR, Opts, MaxT) ->
     Flags = [{max_time,MaxT},{max_reductions,MaxR},{spawn_opts,Opts}],
     do_run(S, Flags, St).
