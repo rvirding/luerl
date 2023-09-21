@@ -30,8 +30,20 @@ Create a new sandboxed state. If a state is given as an argument then that state
 
 #### run(String | Binary) -> {Result, State} | {error, Reason}.
 #### run(String | Binary, State) -> {Result, State} | {error, Reason}.
+#### run(String | Binary, Flags, State) -> {Result, State} | {error, Reason}.
+
+Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `Flags` is a map or keyword list which can contain the following fields
+
+    #{max_time => MaxTime,
+      max_reductions => MaxReds,
+      spawn_opts => SpawnOpts}
+
+`MaxReds` limits the number of reductions and `MaxTime` (default 100 msecs) the time to run the string, `SpawnOpts` are spawn options to the process running the evaluation.
+
+#### run(String | Binary) -> {Result, State} | {error, Reason}.
+#### run(String | Binary, State) -> {Result, State} | {error, Reason}.
 #### run(String | Binary, State, [ MexReds | Flags ]) -> {Result, State} | {error, Reason}.
 #### run(String | Binary, State, MexReds, Flags) -> {Result, State} | {error, Reason}.
 #### run(String | Binary, State, MexReds, Flags, Timeout) -> {Result, State} | {error, Reason}.
 
-Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `MaxReds` limits the number of reductions and `TimeOut` (default 100 msecs) the time to run the string, `Flags` are spawn options to the process running the evaluation.
+This is the old interface to run. It still works but the new interface is recommended. Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `MaxReds` limits the number of reductions and `TimeOut` (default 100 msecs) the time to run the string, `Flags` are spawn options to the process running the evaluation.

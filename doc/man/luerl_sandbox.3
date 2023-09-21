@@ -77,10 +77,33 @@ blocked.
 If none is given then the default list will be used.
 .SS run(String | Binary) -> {Result, State} | {error, Reason}.
 .SS run(String | Binary, State) -> {Result, State} | {error, Reason}.
+.SS run(String | Binary, Flags, State) -> {Result, State} | {error, Reason}.
+.PP
+Spawn a new process which runs the string \f[V]String\f[R] in
+\f[V]State\f[R] where the default sandbox state will be used if none is
+given.
+\f[V]Flags\f[R] is a map or keyword list which can contain the following
+fields
+.IP
+.nf
+\f[C]
+#{max_time => MaxTime,
+  max_reductions => MaxReds,
+  spawn_opts => SpawnOpts}
+\f[R]
+.fi
+.PP
+\f[V]MaxReds\f[R] limits the number of reductions and \f[V]MaxTime\f[R]
+(default 100 msecs) the time to run the string, \f[V]SpawnOpts\f[R] are
+spawn options to the process running the evaluation.
+.SS run(String | Binary) -> {Result, State} | {error, Reason}.
+.SS run(String | Binary, State) -> {Result, State} | {error, Reason}.
 .SS run(String | Binary, State, [ MexReds | Flags ]) -> {Result, State} | {error, Reason}.
 .SS run(String | Binary, State, MexReds, Flags) -> {Result, State} | {error, Reason}.
 .SS run(String | Binary, State, MexReds, Flags, Timeout) -> {Result, State} | {error, Reason}.
 .PP
+This is the old interface to run.
+It still works but the new interface is recommended.
 Spawn a new process which runs the string \f[V]String\f[R] in
 \f[V]State\f[R] where the default sandbox state will be used if none is
 given.
