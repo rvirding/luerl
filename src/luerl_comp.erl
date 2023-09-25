@@ -154,12 +154,12 @@ compiler_info(#luacomp{lfile=F,opts=Opts}) ->
 %%  Build list of passes.
 
 file_passes() ->				%Reading from file
-    [{do,fun do_read_file/1},
+    [{do,fun do_scan_file/1},
      {do,fun do_parse/1}|
      chunk_passes()].
 
 list_passes() ->				%Scanning string
-    [{do,fun do_scan/1},
+    [{do,fun do_scan_string/1},
      {do,fun do_parse/1}|
      chunk_passes()].
 
@@ -205,8 +205,8 @@ do_passes([{done,Fun}|_], St) ->
     Fun(St);
 do_passes([], St) -> {ok,St}.
 
-%% do_read_file(State) -> {ok,State} | {error,State}.
-%% do_scan(State) -> {ok,State} | {error,State}.
+%% do_scan_file(State) -> {ok,State} | {error,State}.
+%% do_scan_string(State) -> {ok,State} | {error,State}.
 %% do_parse(State) -> {ok,State} | {error,State}.
 %% do_init_comp(State) -> {ok,State} | {error,State}.
 %% do_comp_normalise(State) -> {ok,State} | {error,State}.
@@ -217,7 +217,7 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
+do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
     case file:open(Name, [read]) of
 	{ok,F} ->
@@ -233,14 +233,14 @@ do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		      {ok,Ts,_} ->
 			  debug_print(Opts, "scan: ~p\n", [Ts]),
 			  {ok,St#luacomp{code=Ts}};
-		      {error,E,L} -> {error,St#luacomp{errors=[{L,io,E}]}}
+		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
 		  end,
 	    file:close(F),
 	    Ret;
 	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#luacomp{code=Str,opts=Opts}=St) ->
+do_scan_string(#luacomp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
 	{ok,Ts,_} ->
 	    debug_print(Opts, "scan: ~p\n", [Ts]),
