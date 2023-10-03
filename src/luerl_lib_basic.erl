@@ -105,9 +105,10 @@ basic_error(_, As, St) -> badarg_error(error, As, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
 %%  Return a function which on successive calls returns successive
-%%  key-value pairs of integer keys.
+%%  key-value pairs of integer keys. We check that it is a table first
+%%  when we access it.
 
-ipairs(_, [#tref{}=Tref|_], St) ->
+ipairs(_, [Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__ipairs">>, St) of
 	nil -> {[#erl_mfa{m=?MODULE,f=ipairs_next},Tref,0],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
@@ -115,19 +116,21 @@ ipairs(_, [#tref{}=Tref|_], St) ->
 ipairs(_, As, St) -> badarg_error(ipairs, As, St).
 
 ipairs_next(_, [A], St) -> ipairs_next(nil, [A,0], St);
-ipairs_next(_, [Tref,K|_], St) ->
+ipairs_next(_, [Tref,K|_], St) when ?IS_TREF(Tref), is_integer(K) ->
     %% Get the table.
     #table{a=Arr} = luerl_heap:get_table(Tref, St),
     Next = K + 1,
     case array:get(Next, Arr) of
 	nil -> {[nil],St};
 	V -> {[Next,V],St}
-    end.
+    end;
+ipairs_next(_, As, St) -> badarg_error(ipairs, As, St).
 
 %% pairs(Args, State) -> {[Func,Table,Key],State}.
-%%  Return a function to step over all the key-value pairs in a table.
+%%  Return a function to step over all the key-value pairs in a
+%%  table. We check that it is a table first when we access it.
 
-pairs(_, [#tref{}=Tref|_], St) ->
+pairs(_, [Tref|_], St) ->
     case luerl_heap:get_metamethod(Tref, <<"__pairs">>, St) of
 	nil -> {[#erl_mfa{m=?MODULE,f=next},Tref,nil],St};
 	Meta -> luerl_emul:functioncall(Meta, [Tref], St)
