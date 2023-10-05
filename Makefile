@@ -16,16 +16,31 @@
 # Building from .xrl, .yrl and .erl
 # Intermediaries from leex and yecc stay in ./src
 
-SRCDIR        =./src
-EBINDIR       =./ebin
+BINDIR        = ./bin
+EBINDIR       = ./ebin
+SRCDIR        = ./src
 
+LIB = luerl
+
+# To run erl as bash
+FINISH = -run init stop -noshell
+
+# Scripts to be evaluated
+
+GET_VERSION = '{ok,[App]}=file:consult("src/$(LIB).app.src"), \
+	V=proplists:get_value(vsn,element(3,App)), \
+	io:format("~p~n",[V])' \
+	$(FINISH)
+
+
+## The .erl, .xrl, .yrl and .beam files
 ESRCS  := $(notdir $(wildcard $(SRCDIR)/*.erl))
 XSRCS  := $(notdir $(wildcard $(SRCDIR)/*.xrl))
 YSRCS  := $(notdir $(wildcard $(SRCDIR)/*.yrl))
 EBINS = $(ESRCS:.erl=.beam) $(XSRCS:.xrl=.beam) $(YSRCS:.yrl=.beam)
 
 ERLCFLAGS = -W1
-ERLC = erlc
+ERLC ?= erlc
 
 all: compile
 
@@ -55,8 +70,18 @@ clean:
 	@ rm comp_opts.mk
 	$(MAKE) -C examples clean
 
+clean-all: clean
+	rm -rf _build
+
 echo: 
 	echo $(OBJECTS) 
+
+get-version:
+	@echo
+	@echo "Getting version info ..."
+	@echo
+	@echo -n app.src: ''
+	@erl -eval $(GET_VERSION)
 
 examples: all
 	$(MAKE) -C examples
@@ -66,3 +91,15 @@ debug:
 
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
+
+################
+### RELEASES ###
+################
+
+hex-publish: clean-all compile
+	rebar3 hex publish package
+
+tags:
+	git tag $(shell erl -eval $(GET_VERSION)|tr -d '"')
+	git tag v$(shell erl -eval $(GET_VERSION)|tr -d '"')
+	git push --tags
