@@ -305,7 +305,9 @@ do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
             {Line,[{{Module,Name},Args,[{file,FileName}]} | Trace]};
         #erl_mfa{m=M,f=F,a=A} ->
             FileName = get_filename(M),
-            {Line,[{{M,F},{A,Args},[{file,FileName}]} | Trace]};
+            %% {Line,[{{M,F},{A,Args},[{file,FileName}]} | Trace]};
+            %% {Line,[{{M,F},[A | Args],[{file,FileName}]} | Trace]};
+            {Line,[{{M,F,A},Args,[{file,FileName}]} | Trace]};
         Other ->
             {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
