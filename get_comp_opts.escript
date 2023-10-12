@@ -3,16 +3,14 @@
 %% Define a number of compiler options. We first work out the current
 %% Erlang version and from the we can define the various options.
 
-%% Bloody useful.
--define(IF(Test,True,False), case Test of true -> True; false -> False end).
-
 %% Define the makefile variables HAS_MAPS, HAS_FULL_KEYS,
 %% NEW_REC_CORE, NEW_RAND, HAS_FLOOR, HAS_CEIL and NEW_STACKTRACE
 %% depending on version of Erlang.
 
-main(_) -> Version = otp_release(), CompOpts = comp_opts(Version),
-    file:write_file("comp_opts.mk", "COMP_OPTS = " ++ CompOpts ++
-    "\n").
+main(_) ->
+    Version = otp_release(),
+    CompOpts = comp_opts(Version),
+    file:write_file("comp_opts.mk", "COMP_OPTS = " ++ CompOpts ++ "\n").
 
 %% Get the release number.
 %% We have stolen the idea and most of the code from rebar3.
@@ -51,7 +49,8 @@ comp_opts(Version) ->
                                      {"20","NEW_BOOL_GUARD"},
                                      {"20","HAS_FLOOR"},
                                      {"20","HAS_CEIL"},
-                                     {"21","NEW_STACKTRACE"}]).
+                                     {"21","NEW_STACKTRACE"},
+                                     {"23","EEP48"}]).
 
 append_copts(Version, [{Ver,Opt}|Opts]) ->
     Rest = append_copts(Version, Opts),

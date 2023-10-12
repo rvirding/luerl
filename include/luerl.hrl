@@ -56,18 +56,24 @@
 -record(call_frame, {func,args,			%Function, arguments
 		     lvs,			%Local variables
 		     env,			%Environment
-		     is=[],cont=[]		%Instructions, continuation
+		     is=[],			%Instructions
+		     cont=[]			%Continuation
 		    }).
 %% Loop break frame
 -record(loop_frame, {lvs,			%Local variables
 		     stk,			%Stack
 		     env,			%Environment
-		     is=[],cont=[]		%Instructions, continuation
+		     is=[],			%Instructions
+		     cont=[]			%Continuation
 		    }).
 %% Current line
 -record(current_line, {line,			%Line
 		       file			%File name
 		      }).
+
+%% Return
+-record(return, {rets                           %Return values
+                }).
 
 %% Data types.
 
@@ -102,14 +108,17 @@
 		  esz,				%Env var size
 		  %% env=not_used,		%Local env block template
 		  pars,				%Parameter types
-		  b}).				%Code block
+		  body}).			%Code block
 -define(IS_LUAFUNC(F), is_record(F, lua_func)).
 
 -record(erl_func,{code}).			%Erlang code (fun)
 -define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
+-record(erl_mfa,{m,f,a}).           %Erlang code (MFA)
+-define(IS_ERLMFA(F), is_record(F, erl_mfa)).
+
 %% Test if it a function, of either sort.
--define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F))).
+-define(IS_FUNCTION(F), (?IS_FUNREF(F) orelse ?IS_ERLFUNC(F) orelse ?IS_ERLMFA(F))).
 
 %% Testing for integers/integer floats or booleans.
 -define(IS_FLOAT_INT(N), (round(N) == N)).
@@ -119,7 +128,7 @@
 %% Different methods for storing tables in the global data #luerl{}.
 %% Access through macros to allow testing with different storage
 %% methods. This is inefficient with ETS tables where it would
-%% probably be better to use bags and acces with match/select.
+%% probably be better to use bags and access with match/select.
 
 %% Set which table store to use. We check if we have full maps before
 %% we use them just to protect ourselves.

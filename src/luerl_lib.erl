@@ -36,6 +36,8 @@
 
 -export([arg_to_integer/1,args_to_integers/1,args_to_integers/2]).
 
+-export([arg_to_float/1,args_to_floats/1,args_to_floats/2]).
+
 -export([arg_to_string/1,args_to_strings/1,args_to_strings/2]).
 
 -export([conv_list/2,conv_list/3]).
@@ -53,8 +55,8 @@ badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St).
 
 format_error({badarg,Where,As}) ->
     io_lib:format("badarg in ~w: ~w", [Where,As]);
-format_error({illegal_index,Where,I}) ->
-    io_lib:format("invalid index in ~w: ~w", [Where,I]);
+format_error({illegal_index,Where,Index}) ->
+    io_lib:format("invalid index in ~w: ~w", [Where,Index]);
 format_error({illegal_value,Where,Val}) ->
     io_lib:format("invalid value in ~w: ~w", [Where,Val]);
 format_error({illegal_value,Val}) ->
@@ -65,8 +67,10 @@ format_error({invalid_order,Where}) ->		%Keep text!
     io_lib:format("invalid order function in ~w", [Where]);
 format_error({undefined_function,Name}) ->
     io_lib:format("undefined function ~w", [Name]);
-format_error({undefined_method,Obj,Name}) ->
-    io_lib:format("undefined method in ~w: ~w", [Obj,Name]);
+format_error({undefined_method,Object,Name}) ->
+    io_lib:format("undefined method in ~w: ~w", [Object,Name]);
+format_error(illegal_return_value) ->
+    <<"illegal format of return value">>;
 %% Pattern errors.
 format_error(invalid_pattern) ->		%Keep text!
     io_lib:format("malformed pattern", []);
@@ -80,7 +84,15 @@ format_error(invalid_char_set) ->		%Keep text!
 format_error({illegal_op,Op}) ->
     io_lib:format("illegal op: ~w", [Op]);
 format_error({no_module,Mod}) ->
-    io_lib:format("module '~s' not found", [Mod]).
+    io_lib:format("module '~s' not found", [Mod]);
+%% Assertions
+format_error({assert_error,Obj}) ->
+    Msg = if is_binary(Obj) ->
+		  Obj;
+	     true ->
+		  [<<"error object is a ">>, luerl_lib_basic:type(Obj)]
+	  end,
+    io_lib:format(<<"~s!">>, [Msg]).
 
 %% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
@@ -107,10 +119,11 @@ str_to_number(S) ->
     end.
 
 number_to_list(N) ->
-    case ?IS_FLOAT_INT(N, I) of			%Is it an "integer"?
-	true -> integer_to_list(I);
-	false -> io_lib:write(N)
-    end.
+    io_lib:write(N).
+    %% case ?IS_FLOAT_INT(N, I) of			%Is it an "integer"?
+    %%     true -> integer_to_list(I);
+    %%     false -> io_lib:write(N)
+    %% end.
 
 %% arg_to_list(Arg) -> List | 'error'.
 %% args_to_lists(Args) -> Lists | 'error'.
@@ -194,6 +207,35 @@ args_to_integers(A1, A2) ->
 
 args_to_integers(As) ->
     to_loop(As, fun arg_to_integer/1, []).
+
+%% arg_to_float(Arg) -> Float | 'error'.
+%% args_to_floats(Args) -> Floats | 'error'.
+%% args_to_floats(Arg, Arg) -> Floats | 'error'.
+%%  Convert arguments to rounded floats.
+
+arg_to_float(A) ->
+    case arg_to_number(A) of
+	N when is_integer(N) -> float(N);
+	N when is_float(N) -> N;
+	_Other -> error
+    end.
+
+args_to_floats(A1, A2) ->
+    case arg_to_float(A1) of
+	error -> error;
+	N1 ->
+	    case arg_to_float(A2) of
+		error -> error;
+		N2 -> [N1,N2]
+	    end
+    end.
+
+args_to_floats(As) ->
+    to_loop(As, fun arg_to_float/1, []).
+
+%% arg_to_string(Arg) -> String | error.
+%% arg_to_strings(Args) -> Strings | error.
+%% arg_to_strings(Arg, Arg) -> Strings | error.
 
 arg_to_string(N) when is_number(N) -> list_to_binary(number_to_list(N));
 arg_to_string(B) when is_binary(B) -> B;

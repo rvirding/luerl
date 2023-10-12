@@ -271,7 +271,7 @@ functiondef(Line, Name, {Pars,Body}) ->
 functiondef(Line, {Pars,Body}) ->
     {functiondef,Line,Pars,Body}.
 
-%% dot_append(DotList, Last) -> DotList.
+%% dot_append(Line, DotList, Last) -> DotList.
 %%  Append Last to the end of a dotlist.
 
 dot_append(Line, {'.',L,H,T}, Last) ->

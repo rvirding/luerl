@@ -22,7 +22,8 @@
 
 -include("luerl.hrl").
 
--export([install/1]).
+-export([install/1,fband/3,fbnot/3,fbor/3,fbtest/3,fbxor/3,flshift/3,frshift/3,
+         farshift/3,flrotate/3,frrotate/3,fextract/3,freplace/3]).
 
 -import(luerl_lib, [badarg_error/3]).	%Shorten this
 
@@ -36,21 +37,21 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"band">>,#erl_func{code=fun fband/2}},
-     {<<"bnot">>,#erl_func{code=fun fbnot/2}},
-     {<<"bor">>,#erl_func{code=fun fbor/2}},
-     {<<"btest">>,#erl_func{code=fun fbtest/2}},
-     {<<"bxor">>,#erl_func{code=fun fbxor/2}},
-     {<<"lshift">>,#erl_func{code=fun flshift/2}},
-     {<<"rshift">>,#erl_func{code=fun frshift/2}},
-     {<<"arshift">>,#erl_func{code=fun farshift/2}},
-     {<<"lrotate">>,#erl_func{code=fun flrotate/2}},
-     {<<"rrotate">>,#erl_func{code=fun frrotate/2}},
-     {<<"extract">>,#erl_func{code=fun fextract/2}},
-     {<<"replace">>,#erl_func{code=fun freplace/2}}
+    [{<<"band">>,#erl_mfa{m=?MODULE,f=fband}},
+     {<<"bnot">>,#erl_mfa{m=?MODULE,f=fbnot}},
+     {<<"bor">>,#erl_mfa{m=?MODULE,f=fbor}},
+     {<<"btest">>,#erl_mfa{m=?MODULE,f=fbtest}},
+     {<<"bxor">>,#erl_mfa{m=?MODULE,f=fbxor}},
+     {<<"lshift">>,#erl_mfa{m=?MODULE,f=flshift}},
+     {<<"rshift">>,#erl_mfa{m=?MODULE,f=frshift}},
+     {<<"arshift">>,#erl_mfa{m=?MODULE,f=farshift}},
+     {<<"lrotate">>,#erl_mfa{m=?MODULE,f=flrotate}},
+     {<<"rrotate">>,#erl_mfa{m=?MODULE,f=frrotate}},
+     {<<"extract">>,#erl_mfa{m=?MODULE,f=fextract}},
+     {<<"replace">>,#erl_mfa{m=?MODULE,f=freplace}}
      ].
 
-fband(As, St) ->
+fband(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	L when is_list(L) -> {[aband(L)], St};
 	error -> badarg_error('band', As, St)
@@ -62,7 +63,7 @@ aband([X|T]) -> aband(T, checkint32(X)).
 aband([], A) -> float(A);
 aband([X|T], A) -> aband(T, checkint32(X) band A).
 
-fbnot(As, St) ->
+fbnot(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[N|_] ->
 	    NotN = bnot checkint32(N),
@@ -70,7 +71,7 @@ fbnot(As, St) ->
 	error -> badarg_error('bnot', As, St)
     end.
 
-fbor(As, St) ->
+fbor(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	L when is_list(L) -> {[abor(L)], St};
 	error -> badarg_error('bor', As, St)
@@ -82,13 +83,13 @@ abor([X|T]) -> abor(T, checkint32(X)).
 abor([], A) -> float(A);
 abor([X|T], A) -> abor(T, checkint32(X) bor A).
 
-fbtest(As, St) ->
+fbtest(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	L when is_list(L) -> {[aband(L) /= 0], St};
 	error -> badarg_error('btest', As, St)
     end.
 
-fbxor(As, St) ->
+fbxor(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	L when is_list(L) -> {[abxor(L)], St};
 	error -> badarg_error('bxor', As, St)
@@ -100,19 +101,19 @@ abxor([X|T]) -> abxor(T, checkint32(X)).
 abxor([], A) -> float(A);
 abxor([X|T], A) -> abxor(T, checkint32(X) bxor A).
 
-flshift(As, St) ->
+flshift(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[X,Y|_] -> {[float(checkint32(X) bsl trunc(Y))], St};
 	_ -> badarg_error('lshift', As, St)
     end.
 
-frshift(As, St) ->
+frshift(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[X,Y|_] -> {[float(checkint32(X) bsr trunc(Y))], St};
 	_ -> badarg_error('rshift', As, St)
     end.
 
-farshift(As, St) ->
+farshift(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[X,Y|_] ->
 	    Disp = trunc(Y),
@@ -123,19 +124,19 @@ farshift(As, St) ->
 	_ -> badarg_error('arshift', As, St)
     end.
 
-flrotate(As, St) ->
+flrotate(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[X,Y|_] -> {[float(lrotate(checkint32(X), trunc(Y)))], St};
 	_ -> badarg_error('lrotate', As, St)
     end.
 
-frrotate(As, St) ->
+frrotate(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[X,Y|_] -> {[float(rrotate(checkint32(X), trunc(Y)))], St};
 	_ -> badarg_error('rrotate', As, St)
     end.
 
-fextract(As, St) ->
+fextract(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[N,Field,Width|_] ->
 	    {[float(extract(N, Field, Width, As, St))], St};
@@ -144,7 +145,7 @@ fextract(As, St) ->
 	_ -> badarg_error('extract', As, St)
     end.
 
-freplace(As, St) ->
+freplace(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	[N,V,Field,Width|_] ->
 	    {[float(replace(N, V, Field, Width, As, St))], St};

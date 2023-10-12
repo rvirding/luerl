@@ -34,7 +34,9 @@
          get_global_key/2,set_global_key/3,
          get_table_key/3,set_table_key/4,
          raw_get_table_key/3,raw_set_table_key/4,
-         alloc_userdata/2,alloc_userdata/3,get_userdata/2,set_userdata/3,
+         alloc_userdata/2,alloc_userdata/3,
+         get_userdata/2,set_userdata/3,upd_userdata/3,
+         set_userdata_data/3,get_userdata_data/2,
          alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
          alloc_environment/2,get_env_var/3,set_env_var/4,
          get_metamethod/3,get_metamethod/4,
@@ -104,14 +106,16 @@ alloc_table(St) -> alloc_table([], St).
 
 %% alloc_table(InitialTable, State) -> {Tref,State}
 %%
-%% The InitialTable is [{Key,Value}], there is no longer any need
-%% to have it as an orddict.
+%% The InitialTable is [{Key,Value}] or map, there is no longer any
+%% need to have it as an orddict.
 
 alloc_table(Itab, #luerl{tabs=Tst0}=St) ->
     Tab = create_table(Itab),
     {N,Tst1} = alloc_tstruct(Tab, Tst0),
     {#tref{i=N},St#luerl{tabs=Tst1}}.
 
+create_table(Itab) when is_map(Itab) ->
+    create_table(maps:to_list(Itab));
 create_table(Itab) ->
     D0 = ttdict:new(),
     A0 = array:new([{default,nil}]),            %Arrays with 'nil' as default
@@ -175,7 +179,7 @@ set_global_key(Key, Val, #luerl{g=G}=St) ->
 
 get_global_key(Key, #luerl{g=G}=St) ->
     get_table_key(G, Key, St).
- 
+
 %% set_table_key(Table, Key, Val, State) ->
 %%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}
 %%
@@ -194,8 +198,17 @@ set_table_key(Tab, nil=Key, _, St) ->
     {error,{illegal_index,Tab,Key},St};
 set_table_key(#tref{}=Tref, Key, Val, St) ->
     set_table_key_key(Tref, Key, Val, St);
-set_table_key(Tab, Key, _, St) ->
-    {error,{illegal_index,Tab,Key},St}.
+set_table_key(Other, Key, Val, St) ->
+    Meta = get_metamethod(Other, <<"__newindex">>, St),
+    %% io:format("stk ~p ~p ~p -> ~p\n", [Other,Key,Val,aMeta]),
+    case Meta of
+        nil ->
+            {error,{illegal_index,Other,Key},St};
+        Meth when ?IS_FUNCTION(Meth) ->
+            {meta,Meth,[Other,Key,Val],St};
+        Meth ->                                 %Recurse down the metatable
+            set_table_key(Meth, Key, Val, St)
+    end.
 
 set_table_key_key(#tref{i=N}=Tab, Key, Val, #luerl{tabs=Tst0}=St) ->
     Ts0 = Tst0#tstruct.data,
@@ -265,12 +278,14 @@ get_table_key(#tref{}=Tref, Key, St) when is_float(Key) ->
     end;
 get_table_key(#tref{}=Tref, Key, St) ->
     get_table_key_key(Tref, Key, St);
-get_table_key(Tab, Key, St) ->                  %Just find the metamethod
-    case get_metamethod(Tab, <<"__index">>, St) of
+get_table_key(Other, Key, St) ->                %Just find the metamethod
+    Meta = get_metamethod(Other, <<"__index">>, St),
+    %% io:format("gtk ~p ~p -> ~p\n", [Other,Key,Meta]),
+    case Meta of
         nil ->
-            {error,{illegal_index,Tab,Key},St};
+            {error,{illegal_index,Other,Key},St};
         Meth when ?IS_FUNCTION(Meth) ->
-            {meta,Meth,[Tab,Key],St};
+            {meta,Meth,[Other,Key],St};
         Meth ->                                 %Recurse down the metatable
             get_table_key(Meth, Key, St)
     end.
@@ -344,6 +359,9 @@ raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St)
                _NegFalse ->
                    raw_set_table_key_key(Tref, Key, Val, Tst0)
            end,
+    St#luerl{tabs=Tst1};
+raw_set_table_key(#tref{}=Tref, Key, Val, #luerl{tabs=Tst0}=St) ->
+    Tst1 = raw_set_table_key_key(Tref, Key, Val, Tst0),
     St#luerl{tabs=Tst1}.
 
 raw_set_table_key_key(#tref{i=N}, Key, Val, Tst0) ->
@@ -381,17 +399,43 @@ alloc_userdata(Data, Meta, #luerl{usds=Ust0}=St) ->
 
 %% get_userdata(Usdref, State) -> {UserData,State}
 %%
-%% Get the userdata data.
+%% Get the userdata refered to by Usdref,
 
 get_userdata(#usdref{i=N}, #luerl{usds=Ust}=St) ->
     #userdata{} = Udata = get_tstruct(N, Ust),
     {Udata,St}.
 
-%% set_userdata(Usdref, UserData, State) -> State
+%% set_userdata(Usdref, Data, State) -> State
 %%
-%% Set the data in the userdata.
+%% Set a new userdata at the location referred to by Usdref
+%% overwriting the existing one.
 
-set_userdata(#usdref{i=N}, Data, #luerl{usds=Ust0}=St) ->
+set_userdata(#usdref{i=N}, #userdata{}=Udata, #luerl{usds=Ust0}=St) ->
+    Ust1 = set_tstruct(N, Udata, Ust0),
+    St#luerl{usds=Ust1}.
+
+%% upd_userdata(Usdref, Fun, State) -> State
+%%
+%% Update the data in the userdata referred to by Usdref.
+
+upd_userdata(#usdref{i=N}, Upd, #luerl{usds=Ust0}=St) ->
+    Ust1 = upd_tstruct(N, Upd, Ust0),
+    St#luerl{usds=Ust1}.
+
+%% get_userdata_data(Usdref, State) -> {Data,State}
+%%
+%% Get the data form the userdata refered to by Usdref.
+
+get_userdata_data(#usdref{i=N}, #luerl{usds=Ust}=St) ->
+    Udata = get_tstruct(N, Ust),
+    {Udata#userdata.d,St}.
+
+%% set_userdata_data(Usdref, Data, State) -> State
+%%
+%% Set a new userdata at the location referred to by Usdref
+%% overwriting the existing one.
+
+set_userdata_data(#usdref{i=N}, Data, #luerl{usds=Ust0}=St) ->
     Ust1 = upd_tstruct(N, fun (Ud) -> Ud#userdata{d=Data} end, Ust0),
     St#luerl{usds=Ust1}.
 
@@ -431,7 +475,8 @@ get_metamethod(O1, O2, E, St) ->
     end.
 
 get_metamethod(O, E, St) ->
-    Meta = get_metatable(O, St),                        %Can be nil
+    Meta = get_metatable(O, St),                %Can be nil
+    %% io:format("gm ~p ~p -> ~p\n", [O,E,Meta]),
     get_metamethod_tab(Meta, E, St#luerl.tabs#tstruct.data).
 
 get_metamethod_tab(#tref{i=M}, E, Ts) ->
@@ -486,7 +531,7 @@ set_metatable(_, _, St) ->                      %Do nothing for the rest
 
 %% alloc_environment(Size, State) -> {Fref,State}
 %%
-%% Allocate the environment in the environemnt table and return
+%% Allocate the environment in the environment table and return
 %% its eref.
 
 alloc_environment(Size, #luerl{envs=Est0}=St) ->
@@ -534,6 +579,7 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
     {Ef1,Et1} = filter_environment(SeenE, Ef0, Et0),
     {Uf1,Ut1} = filter_userdata(SeenU, Uf0, Ut0),
     {Ff1,Ft1} = filter_funcdefs(SeenF, Ff0, Ft0),
+    %% And update the tables.
     Tab1 = Tab0#tstruct{data=Tt1,free=Tf1},
     Env1 = Env0#tstruct{data=Et1,free=Ef1},
     Usd1 = Usd0#tstruct{data=Ut1,free=Uf1},
@@ -564,12 +610,14 @@ mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
                  GcT#gct{s=Ts1}, GcE, GcU, GcF)
     end;
 mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
+    %% io:format("eref0: ~p\ ~p ~pn", [F,Et,Es0]),
     case ordsets:is_element(F, Es0) of
         true ->                                 %Already done
             mark(Todo, More, GcT, GcE, GcU, GcF);
         false ->                                %Mark it and add to todo
             Es1 = ordsets:add_element(F, Es0),
             Ses = tuple_to_list(?GET_TABLE(F, Et)),
+            %% io:format("eref1: ~p ~p\n", [Et,Es1]),
             mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
     end;
 mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
@@ -582,13 +630,17 @@ mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
     end;
 mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
      #gct{t=Ft0,s=Fs0}=GcF) ->
+    %% io:format("funref0: ~p ~p ~p\n", [F,Fs0,Erefs]),
+    %% Each funref has its own environments but we only need to add
+    %% the function definition once.
     case ordsets:is_element(F, Fs0) of
         true ->
-            mark(ToDo, More, GcT, GcE, GcU, GcF);
+            mark(ToDo, [Erefs|More], GcT, GcE, GcU, GcF);
         false ->
+            %% And mark the function definition.
             Fs1 = ordsets:add_element(F, Fs0),
             Fdef = ?GET_TABLE(F, Ft0),
-            %% And mark the function definition.
+            %% io:format("funref1: ~p ~p ~p\n", [F,Fs1,Erefs]),
             mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
     end;
 mark([#lua_func{funrefs=Funrefs}|Todo], More, GcT, GcE, GcU, GcF) ->
@@ -605,6 +657,8 @@ mark([#loop_frame{lvs=Lvs,stk=Stk,env=Env}|Todo], More0, GcT, GcE, GcU, GcF) ->
     mark(Todo, More1, GcT, GcE, GcU, GcF);
 %% Specifically catch these as they would match table key-value pair.
 mark([#erl_func{}|Todo], More, GcT, GcE, GcU, GcF) ->
+    mark(Todo, More, GcT, GcE, GcU, GcF);
+mark([#erl_mfa{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
 mark([#thread{}|Todo], More, GcT, GcE, GcU, GcF) ->
     mark(Todo, More, GcT, GcE, GcU, GcF);
@@ -640,6 +694,7 @@ filter_tables(Seen, Tf0, Tt0) ->
     {Tf1,Tt1}.
 
 filter_environment(Seen, Ef0, Et0) ->
+    %% io:format("env0: ~p ~p ~p\n", [Seen,Ef0,Et0]),
     %% Update the free list.
     Ef1 = ?FOLD_TABLES(fun (K, _, Free) ->
                                case ordsets:is_element(K, Seen) of
@@ -648,6 +703,7 @@ filter_environment(Seen, Ef0, Et0) ->
                                end
                        end, Ef0, Et0),
     Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
+    %% io:format("env1: ~p ~p\n", [Ef1,Et1]),
     {Ef1,Et1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->

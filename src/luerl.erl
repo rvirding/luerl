@@ -33,7 +33,8 @@
 	 init/0,stop/1,gc/1,
          set_trace_func/2,clear_trace_func/1,
          set_trace_data/2,get_trace_data/1,
-	 get_stacktrace/1
+	 get_stacktrace/1,
+     externalize/1,internalize/1
 	]).
 
 %% Encoding and decoding.
@@ -297,7 +298,16 @@ do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
                    end,
             File = luerl_anno:get(file, Anno),
             {Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
-        #erl_func{} -> {Line,Trace};            %Skip these for now
+        #erl_func{code=Fun} ->
+            {module,Module} = erlang:fun_info(Fun, module),
+            {name,Name} = erlang:fun_info(Fun, name),
+            FileName = get_filename(Module),
+            {Line,[{{Module,Name},Args,[{file,FileName}]} | Trace]};
+        #erl_mfa{m=M,f=F,a=A} ->
+            FileName = get_filename(M),
+            %% {Line,[{{M,F},{A,Args},[{file,FileName}]} | Trace]};
+            %% {Line,[{{M,F},[A | Args],[{file,FileName}]} | Trace]};
+            {Line,[{{M,F,A},Args,[{file,FileName}]} | Trace]};
         Other ->
             {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
@@ -305,6 +315,16 @@ do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
     {Line,Trace};
 do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
     Acc.
+
+get_filename(Mod) ->
+    Comp = erlang:get_module_info(Mod, compile),
+    case lists:keyfind(source, 1, Comp) of
+        {source,FileName} ->
+            BaseName = filename:basename(FileName),
+            list_to_binary(BaseName);
+        false ->                                %The compiler doesn't know
+            <<"-no-file-">>
+    end.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
@@ -351,6 +371,8 @@ encode(F, St) when is_function(F, 1) ->
 		 encode_list(Res, State)
 	 end,
     {#erl_func{code=F1}, St};
+encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
+    {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).			%Can't encode anything else
@@ -383,6 +405,7 @@ decode(#funref{}=Fun, State, _) ->
 	end,
     F;						%Just a bare fun
 decode(#erl_func{code=Fun}, _, _) -> Fun;
+decode(#erl_mfa{m=M,f=F,a=A}, _, _) -> {M,F,A};
 decode(_, _, _) -> error(badarg).		%Shouldn't have anything else
 
 decode_table(#tref{i=N}=T, St, In0) ->
@@ -404,3 +427,13 @@ decode_table(#tref{i=N}=T, St, In0) ->
 decode_userdata(U, St) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
+
+%% Externalize and Internalize ensure that the VM state passed in
+%% can be stored externally or can be recreated from external storage.
+%% Currently very simple: only random state needs special treatment.
+
+externalize(S) ->
+    luerl_lib_math:externalize(S).
+
+internalize(S) ->
+    luerl_lib_math:internalize(S).

@@ -131,10 +131,11 @@ Rules.
 Erlang code.
 
 -export([is_keyword/1]).
+-export([string_chars/1,chars/1]).
 
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
-%% Build a name from list of legal characters, else error.
+%%  Build a name from list of legal characters, else error.
 
 name_token(Cs, L) ->
     case catch {ok,list_to_binary(Cs)} of
@@ -151,7 +152,7 @@ name_string(Name) ->
 
 %% hex_float_token(TokenChars, TokenLine) ->
 %%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
-%% Build a float form a hex float string.
+%%  Build a float form a hex float string.
 
 hex_float_token(TokenChars, TokenLine) ->
     Tcs = string:substr(TokenChars, 3),
@@ -203,66 +204,76 @@ hex_fraction([], _Pow, SoFar) -> SoFar.
 
 %% string_token(InputChars, Length, Line) ->
 %%      {token,{'LITERALSTRING',Line,Cs}} | {error,E}.
-%% Convert an input string into the corresponding string
-%% characters. We know that the input string is correct.
+%%  Convert an input string into the corresponding string characters.
+%%  We know that the input string is correct.
 
 string_token(Cs0, Len, L) ->
-    Cs1 = string:substr(Cs0, 2, Len - 2),	%Strip quotes
-    case catch {ok,chars(Cs1)} of
-	{ok,Cs2} ->
-	    %% Strings are utf8 encoded.
-	    %% io:format("before: ~w\n", [Cs2]),
-	    Str = case is_valid_utf8(Cs2) of
-		      true ->
-			  list_to_binary(Cs2);
-		      false ->
-			  unicode:characters_to_binary(Cs2, unicode, unicode)
-		  end,
-	    %% io:format("after: ~w\n", [Str]),
-	    {token,{'LITERALSTRING',L,Str}};
-	error -> {error,"illegal string"}
+    Cs1 = string:substr(Cs0, 2, Len - 2),       %Strip quotes
+    try
+        Bytes = string_chars(Cs1),
+        String = iolist_to_binary(Bytes),
+        {token,{'LITERALSTRING',L,String}}
+    catch
+        _:_ ->
+            {error,"illegal string"}
     end.
 
-%% Valid UTF-8 bytes and where they can occur.
-%% ascii          0 - 7F    0 - 127
-%% continutaion  80 - BF  128 - 191
-%% first with 1  C2 - DF  194 - 223
-%% first with 2  E0 - EF  224 - 239
-%% first with 3  F0 - F4  240 - 244
+%% string_chars(Chars)
+%% chars(Chars)
+%%  Return a list of UTF-8 encoded binaries and one byte unencoded
+%%  characters. chars/1 is for external backwards compatibilty.
 
-is_valid_utf8([C|Cs]) when C >= 0, C =< 127 -> is_valid_utf8(Cs);
-is_valid_utf8([F1|Cs]) when F1 >= 194, F1 =< 223 -> is_cont_utf8(1, Cs);
-is_valid_utf8([F2|Cs]) when F2 >= 224, F2 =< 239 -> is_cont_utf8(2, Cs);
-is_valid_utf8([F3|Cs]) when F3 >= 240, F3 =< 244 -> is_cont_utf8(3, Cs);
-is_valid_utf8([]) -> true;
-is_valid_utf8(_Cs) -> false.
+chars(Cs) ->
+    string_chars(Cs).
 
-is_cont_utf8(1, [C|Cs]) when C >= 128, C =< 191 -> is_valid_utf8(Cs);
-is_cont_utf8(N, [C|Cs]) when C >= 128, C =< 191 -> is_cont_utf8(N-1, Cs);
-is_cont_utf8(_N, _Cs) -> false.
+string_chars(Cs) ->
+    string_chars(Cs, []).
 
-chars([$\\,C1|Cs0]) when C1 >= $0, C1 =< $9 ->	%1-3 decimal digits
+string_chars([$\\ | Cs], []) ->                 %Nothing here to worry about
+    bq_chars(Cs);
+string_chars([$\\ | Cs], Acc) ->
+    [unicode:characters_to_binary(lists:reverse(Acc)) |
+     bq_chars(Cs)];
+string_chars([$\n | _], _Acc) -> throw(string_error);
+string_chars([C | Cs], Acc) -> string_chars(Cs, [C|Acc]);
+string_chars([], []) -> [];
+string_chars([], Acc) ->
+    [unicode:characters_to_binary(lists:reverse(Acc))].
+
+%% bq_chars(Chars)
+%%  Handle the backquotes characters. These always fit directly into
+%%  one byte and are never UTF-8 encoded.
+
+bq_chars([C1|Cs0]) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
     I1 = C1 - $0,
     case Cs0 of
-	[C2|Cs1] when C2 >= $0, C2 =< $9 ->
-	    I2 = C2 - $0,
-	    case Cs1 of
-		[C3|Cs2] when C3 >= $0, C3 =< $9 ->
-		    [100*I1 + 10*I2 + (C3-$0)|chars(Cs2)];
-		_ -> [10*I1 + I2|chars(Cs1)]
-	    end;
-	_ -> [I1|chars(Cs0)]
+        [C2|Cs1] when C2 >= $0, C2 =< $9 ->
+            I2 = C2 - $0,
+            case Cs1 of
+                [C3|Cs2] when C3 >= $0, C3 =< $9 ->
+                    I3 = C3 - $0,
+                    Byte = 100*I1 + 10*I2 + I3,
+                    %% Must fit into one byte!
+                    (Byte =< 255) orelse throw(string_error),
+                    [Byte | string_chars(Cs2, [])];
+                _ ->
+                    Byte = 10*I1 + I2,
+                    [Byte | string_chars(Cs1, [])]
+            end;
+        _ -> [I1 | string_chars(Cs0, [])]
     end;
-chars([$\\,$x,C1,C2|Cs]) ->			%2 hex digits
+bq_chars([$x,C1,C2|Cs]) ->                      %2 hex digits
     case hex_char(C1) and hex_char(C2) of
-	true -> [hex_val(C1)*16+hex_val(C2)|chars(Cs)];
-	false -> throw(error)
+        true ->
+            Byte = hex_val(C1)*16 + hex_val(C2),
+            [Byte | string_chars(Cs, [])];
+        false -> throw(string_error)
     end;
-chars([$\\,$z|Cs]) -> chars(skip_space(Cs));	%Skip blanks
-chars([$\\,C|Cs]) -> [escape_char(C)|chars(Cs)];
-chars([$\n|_]) -> throw(error);
-chars([C|Cs]) -> [C|chars(Cs)];
-chars([]) -> [].
+bq_chars([$z|Cs]) ->                            %Skip blanks
+    string_chars(skip_space(Cs), []);
+bq_chars([C|Cs]) -> [escape_char(C)|string_chars(Cs, [])];
+bq_chars([]) ->
+    [].
 
 skip_space([C|Cs]) when C >= 0, C =< $\s -> skip_space(Cs);
 skip_space(Cs) -> Cs.
@@ -295,7 +306,7 @@ long_bracket(Line, Cs) ->
     {token,{'LITERALSTRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
-%% Test if the name is a keyword.
+%%  Test if the name is a keyword.
 
 is_keyword(<<"and">>) -> true;
 is_keyword(<<"break">>) -> true;

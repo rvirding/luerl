@@ -62,10 +62,8 @@
 %% best choice?) but it makes the code consistent.
 
 -type ttdict() :: empty |
-		  {empty,any(),any(),empty} |
-		  {any(),any(),any(),any()} |
-		  {empty,any(),any(),empty,any(),any(),empty} |
-		  {any(),any(),any(),any(),any(),any(),any()}.
+		  {ttdict(),any(),any(),ttdict()} |
+		  {ttdict(),any(),any(),ttdict(),any(),any(),ttdict()}.
 
 -export_type([ttdict/0]).
 

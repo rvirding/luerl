@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2021 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -37,14 +37,33 @@
          get_stacktrace/1
         ]).
 
+%% Tracing.
+-export([set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1]).
+
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
+
+%%Helping with storing VM state
+-export([externalize/1,internalize/1]).
 
 init() ->
     luerl_new:init().
 
 gc(St) ->
     luerl_new:gc(St).
+
+set_trace_func(St, Func) ->
+    luerl_new:set_trace_func(Func, St).
+
+clear_trace_func(St) ->
+    luerl_new:clear_trace_func(St).
+
+get_trace_data(St) ->
+    luerl_new:get_trace_data(St).
+
+set_trace_data(St, Tdata) ->
+    luerl_new:set_trace_data(Tdata, St).
 
 load(St, Bin) ->
     luerl_new:load(Bin, St).
@@ -135,3 +154,9 @@ decode(St, V) ->
 
 decode_list(St, Lts) ->
     luerl_new:decode_list(Lts, St).
+
+externalize(St) ->
+    luerl_new:externalize(St).
+
+internalize(St) ->
+    luerl_new:internalize(St).

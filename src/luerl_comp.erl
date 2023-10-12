@@ -26,7 +26,8 @@
 
 -module(luerl_comp).
 
--export([file/1,file/2,string/1,string/2,forms/1,forms/2]).
+-export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
+-export([forms/1,forms/2]).
 
 -export([debug_print/3]).
 
@@ -75,28 +76,40 @@ string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
     St0 = #luacomp{opts=Opts,code=Str},
-    St1 = filenames(?NOFILE, St0),
+    File = prop(module, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
     do_compile(list_passes(), St1).
 
-%% forms(Forms) ->
+%% chunk(Chunk) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
-%% forms(Forms, Options) ->
+%% chunk(Chunk, Options) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
-forms(Forms) -> forms(Forms, [verbose,report]).
+chunk(Chunk) -> chunk(Chunk, [verbose,report]).
 
-forms(Forms, Opts) ->
-    St0 = #luacomp{opts=Opts,code=Forms},
-    St1 = filenames(?NOFILE, St0),
-    do_compile(forms_passes(), St1).
+chunk(Chunk, Opts) ->
+    St0 = #luacomp{opts=Opts,code=Chunk},
+    File = prop(module, Opts, ?NOFILE),
+    St1 = filenames(File, St0),
+    do_compile(chunk_passes(), St1).
 
-do_compile(Ps, St0) ->
+%% forms(Forms)
+%% forms(Forms, Options)
+%%  The deprecated fuuncttions for compiling a chunk.
+
+forms(C) -> chunk(C).
+forms(C, Opts) -> chunk(C, Opts).
+
+%% do_compile(Passes, CompilerState) ->
+%%     {ok,Code} | {error,Error,Warnings} | error.
+
+do_compile(Passes, St0) ->
     %% The compiler state already contains the filenames.
     Cinfo = compiler_info(St0),                 %The compiler info
     St1 = St0#luacomp{cinfo=Cinfo},
-    case do_passes(Ps, St1) of
+    case do_passes(Passes, St1) of
         {ok,St2} -> do_ok_return(St2);
-        {error, St2} -> do_error_return(St2)
+        {error,St2} -> do_error_return(St2)
     end.
 
 %% filenames(File, State) -> State.
@@ -128,7 +141,7 @@ prop(Key, [_|Plist], Def) ->  prop(Key, Plist, Def);
 prop(_Key, [], Def) -> Def.
 
 %% compiler_info(State) -> CompInfo.
-%%  Initialse the #cinfo record passed into all compiler passes.
+%%  Initialise the #cinfo record passed into all compiler passes.
 
 compiler_info(#luacomp{lfile=F,opts=Opts}) ->
     %% The file option may get a binary so we are helpful.
@@ -137,20 +150,20 @@ compiler_info(#luacomp{lfile=F,opts=Opts}) ->
 
 %% file_passes() -> [Pass].
 %% list_passes() -> [Pass].
-%% forms_passes() -> [Pass].
+%% chunk_passes() -> [Pass].
 %%  Build list of passes.
 
 file_passes() ->				%Reading from file
-    [{do,fun do_read_file/1},
+    [{do,fun do_scan_file/1},
      {do,fun do_parse/1}|
-     forms_passes()].
+     chunk_passes()].
 
 list_passes() ->				%Scanning string
-    [{do,fun do_scan/1},
+    [{do,fun do_scan_string/1},
      {do,fun do_parse/1}|
-     forms_passes()].
+     chunk_passes()].
 
-forms_passes() ->				%Doing the forms
+chunk_passes() ->				%Doing the chunk
     [{do,fun do_init_comp/1},
      {do,fun do_comp_normalise/1},
      {when_flag,to_norm,{done,fun(St) -> {ok,St} end}},
@@ -192,8 +205,8 @@ do_passes([{done,Fun}|_], St) ->
     Fun(St);
 do_passes([], St) -> {ok,St}.
 
-%% do_read_file(State) -> {ok,State} | {error,State}.
-%% do_scan(State) -> {ok,State} | {error,State}.
+%% do_scan_file(State) -> {ok,State} | {error,State}.
+%% do_scan_string(State) -> {ok,State} | {error,State}.
 %% do_parse(State) -> {ok,State} | {error,State}.
 %% do_init_comp(State) -> {ok,State} | {error,State}.
 %% do_comp_normalise(State) -> {ok,State} | {error,State}.
@@ -204,7 +217,7 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
+do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
     case file:open(Name, [read]) of
 	{ok,F} ->
@@ -220,14 +233,14 @@ do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		      {ok,Ts,_} ->
 			  debug_print(Opts, "scan: ~p\n", [Ts]),
 			  {ok,St#luacomp{code=Ts}};
-		      {error,E,L} -> {error,St#luacomp{errors=[{L,io,E}]}}
+		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
 		  end,
 	    file:close(F),
 	    Ret;
 	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#luacomp{code=Str,opts=Opts}=St) ->
+do_scan_string(#luacomp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
 	{ok,Ts,_} ->
 	    debug_print(Opts, "scan: ~p\n", [Ts]),

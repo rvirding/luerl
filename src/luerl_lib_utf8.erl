@@ -20,7 +20,7 @@
 
 -include("luerl.hrl").
 
--export([install/1]).
+-export([install/1,utf8_char/3,codes/3,codepoint/3,utf8_len/3,offset/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
@@ -28,12 +28,12 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"char">>,#erl_func{code=fun utf8_char/2}},
+    [{<<"char">>,#erl_mfa{m=?MODULE,f=utf8_char}},
      {<<"charpattern">>,<<"[\0-\x7F\xC2-\xF4][\x80-\xBF]*">>},
-     {<<"codes">>,#erl_func{code=fun codes/2}},
-     {<<"codepoint">>,#erl_func{code=fun codepoint/2}},
-     {<<"len">>,#erl_func{code=fun utf8_len/2}},
-     {<<"offset">>,#erl_func{code=fun offset/2}}
+     {<<"codes">>,#erl_mfa{m=?MODULE,f=codes}},
+     {<<"codepoint">>,#erl_mfa{m=?MODULE,f=codepoint}},
+     {<<"len">>,#erl_mfa{m=?MODULE,f=utf8_len}},
+     {<<"offset">>,#erl_mfa{m=?MODULE,f=offset}}
     ].
 
 %% char(...) -> String.
@@ -41,7 +41,7 @@ table() ->
 %%  corresponding UTF-8 byte sequence and returns a string with the
 %%  concatenation of all these sequences.
 
-utf8_char(As, St) ->
+utf8_char(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	Is when is_list(Is) ->
 	    Ss = << <<I/utf8>> || I <- Is >>,
@@ -55,7 +55,7 @@ utf8_char(As, St) ->
 %%  and for j is -1. If it finds any invalid byte sequence, returns a
 %%  false value plus the position of the first invalid byte.
 
-utf8_len(As, St) ->
+utf8_len(_, As, St) ->
     {Str,I,J} = string_args(As, len, St),
     StrLen = byte_size(Str),
     Ret = if I > J -> [0];			%Do the same as Lua
@@ -70,7 +70,7 @@ utf8_len(As, St) ->
 
 bin_len(Bin, Last, N) when byte_size(Bin) =< Last -> {ok,N};
 bin_len(Bin0, Last, N) ->
-    try 
+    try
 	<<_/utf8,Bin1/binary>> = Bin0,
 	bin_len(Bin1, Last, N+1)
     catch
@@ -83,7 +83,7 @@ bin_len(Bin0, Last, N) ->
 %%  for i is 1 and for j is i. It raises an error if it meets any
 %%  invalid byte sequence.
 
-codepoint(As, St) ->
+codepoint(_, As, St) ->
     {Str,I,J} = string_args(As, codepoint, St),
     StrLen = byte_size(Str),
     Ret = if I > J -> [];			%Do the same as Lua
@@ -99,7 +99,7 @@ codepoint(As, St) ->
 bin_codepoint(Bin, Last, Cps) when byte_size(Bin) =< Last ->
     {ok,lists:reverse(Cps)};
 bin_codepoint(Bin0, Last, Cps) ->
-    try 
+    try
 	<<C/utf8,Bin1/binary>> = Bin0,
 	bin_codepoint(Bin1, Last, [C|Cps])
     catch
@@ -108,7 +108,7 @@ bin_codepoint(Bin0, Last, Cps) ->
 
 %% codes(String) -> [Fun,String,P].
 
-codes(As, St) ->
+codes(_, As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
 	error -> badarg_error(codes, As, St);
 	[Str|_] -> {[#erl_func{code=fun codes_next/2},Str,0],St}
@@ -122,9 +122,9 @@ codes_next([Str,P|_], St) when is_binary(Str) ->
     {[P1,C],St}.
 
 %% offset(String, N, ...) -> Integer.
--spec offset([_], any()) -> no_return().
+-spec offset(_, [_], any()) -> no_return().
 
-offset(As, St) ->
+offset(_, As, St) ->
     _ = string_args(As, offset, St),
     %% We don't do anything yet.
     lua_error({'NYI',offset}, St).

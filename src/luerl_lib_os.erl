@@ -20,9 +20,9 @@
 
 -include("luerl.hrl").
 
--export([install/1]).
+-export([install/1, clock/3, date/3, difftime/3, execute/3, lua_exit/3, getenv/3, remove/3, rename/3, time/3, tmpname/3]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+-import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
 
 %% For `remove/2'.
 -include_lib("kernel/include/file.hrl").
@@ -35,32 +35,32 @@ install(St) ->
     luerl_heap:alloc_table(table(), St).
 
 table() ->
-    [{<<"clock">>,#erl_func{code=fun clock/2}},
-     {<<"date">>,#erl_func{code=fun date/2}},
-     {<<"difftime">>,#erl_func{code=fun difftime/2}},
-     {<<"execute">>,#erl_func{code=fun execute/2}},
-     {<<"exit">>,#erl_func{code=fun lua_exit/2}},
-     {<<"getenv">>,#erl_func{code=fun getenv/2}},
-     {<<"remove">>,#erl_func{code=fun remove/2}},
-     {<<"rename">>,#erl_func{code=fun rename/2}},
-     {<<"time">>,#erl_func{code=fun time/2}},
-     {<<"tmpname">>,#erl_func{code=fun tmpname/2}}].
+    [{<<"clock">>,#erl_mfa{m=?MODULE,f=clock}},
+     {<<"date">>,#erl_mfa{m=?MODULE,f=date}},
+     {<<"difftime">>,#erl_mfa{m=?MODULE,f=difftime}},
+     {<<"execute">>,#erl_mfa{m=?MODULE,f=execute}},
+     {<<"exit">>,#erl_mfa{m=?MODULE,f=lua_exit}},
+     {<<"getenv">>,#erl_mfa{m=?MODULE,f=getenv}},
+     {<<"remove">>,#erl_mfa{m=?MODULE,f=remove}},
+     {<<"rename">>,#erl_mfa{m=?MODULE,f=rename}},
+     {<<"time">>,#erl_mfa{m=?MODULE,f=time}},
+     {<<"tmpname">>,#erl_mfa{m=?MODULE,f=tmpname}}].
 
-getenv([<<>>|_], St) -> {[nil],St};
-getenv([A|_], St) when is_binary(A) ; is_number(A) ->
+getenv(_, [<<>>|_], St) -> {[nil],St};
+getenv(_, [A|_], St) when is_binary(A) ; is_number(A) ->
     case os:getenv(luerl_lib:arg_to_list(A)) of
-	Env when is_list(Env) ->
-	    {[list_to_binary(Env)],St};
-	false -> {[nil],St}
+        Env when is_list(Env) ->
+            {[list_to_binary(Env)],St};
+        false -> {[nil],St}
     end;
-getenv(As, St) -> badarg_error(getenv, As, St).
+getenv(_, As, St) -> badarg_error(getenv, As, St).
 
 %% execute([Command|_], State) -> {[Ret,Type,Stat],State}.
 %%  Execute a command and get the return code. We cannot yet properly
 %%  handle if our command terminated with a signal.
 
-execute([], St) -> {true,St};                   %We have a shell
-execute([A|_], St) ->
+execute(_, [], St) -> {true,St};                   %We have a shell
+execute(_, [A|_], St) ->
     case luerl_lib:arg_to_string(A) of
         S when is_binary(S) ->
             Opts = [{arg0,"sh"},{args,["-c", S]},
@@ -73,8 +73,7 @@ execute([A|_], St) ->
             {[Ret,<<"exit">>,N],St};
         error -> badarg_error(execute, [A], St)
     end;
-execute(As, St) -> badarg_error(execute, As, St).
-
+execute(_, As, St) -> badarg_error(execute, As, St).
 
 execute_handle(P) ->
     receive
@@ -98,11 +97,11 @@ execute_handle(P) ->
 %% NOT IMPLEMENTED:
 %%  If the optional second argument CloseState is true, it will close the Lua
 %%  state before exiting.
-lua_exit([], St) ->
-    lua_exit([true,false], St);
-lua_exit([C], St) ->
-    lua_exit([C,false], St);
-lua_exit([Co0|_], St) -> %% lua_exit([Co0,Cl0], St) ->
+lua_exit(_, [], St) ->
+    lua_exit(nil, [true,false], St);
+lua_exit(_, [C], St) ->
+    lua_exit(nil, [C,false], St);
+lua_exit(_, [Co0|_], St) -> %% lua_exit([Co0,Cl0], St) ->
     Co1 = case luerl_lib:arg_to_number(Co0) of
               X when is_integer(X) -> X;
               error ->
@@ -125,10 +124,10 @@ lua_exit([Co0|_], St) -> %% lua_exit([Co0,Cl0], St) ->
 
 %% tmpname([], State)
 %% Faithfully recreates `tmpnam'(3) in lack of a NIF.
-tmpname([_|_], St) ->
+tmpname(_, [_|_], St) ->
     %% Discard extra arguments.
-    tmpname([], St);
-tmpname([], St) ->
+    tmpname(nil, [], St);
+tmpname(_, [], St) ->
     Out = tmpname_try(randchar(6, []), 0),
     %% We make an empty file the programmer will have to close themselves.
     %% This is done for security reasons.
@@ -154,7 +153,7 @@ randchar(N, A) -> randchar(N-1, [rand:uniform(26)+96|A]).
 %%  Renames the file or directory `Source' to `Destination'. If this function
 %%  fails, it returns `nil', plus a string describing the error code and the
 %%  error code. Otherwise, it returns `true'.
-rename([S,D|_], St) ->
+rename(_, [S,D|_], St) ->
     case {luerl_lib:arg_to_string(S),
           luerl_lib:arg_to_string(D)} of
         {S1,D1} when is_binary(S1) ,
@@ -177,13 +176,14 @@ rename([S,D|_], St) ->
         {S1,D1} when is_binary(S1) ,
                      not is_binary(D1) ->
             badarg_error(rename, [D1], St)
-    end.
+    end;
+rename(_, As, St) -> badarg_error(rename, As, St).
 
 %% remove([Path|_], State)
 %%  Deletes the file (or empty directory) with the given `Path'. If this
 %%  function fails, it returns `nil' plus a string describing the error, and the
 %%  error code. Otherwise, it returns `true'.
-remove([A|_], St) ->
+remove(_, [A|_], St) ->
     case luerl_lib:arg_to_string(A) of
         A1 when is_binary(A1) ->
             %% Emulate the underlying call to `remove(3)'.
@@ -204,7 +204,9 @@ remove([A|_], St) ->
                     {remove_geterr(R, A), St}
             end;
         error -> badarg_error(remove, [A], St)
-    end.
+    end;
+remove(_, As, St) -> badarg_error(remove, As, St).
+
 
 %% Utility function to get a preformatted list to return from `remove/2'.
 remove_geterr(R, F) ->
@@ -213,25 +215,39 @@ remove_geterr(R, F) ->
       errstr := Er} = luerl_util:errname_info(R),
     [nil, list_to_binary(F1 ++ ": " ++ Er), En].
 
-%% Time functions.
+%% Time and date functions.
 
-clock(As, St) ->
-    Type = case As of				%Choose which we want
+clock(_, As, St) ->
+    Type = case As of                           %Choose which we want
                [<<"runtime">>|_] -> runtime;
                _ -> wall_clock
            end,
-    {Tot,_} = erlang:statistics(Type),		%Milliseconds
+    {Tot,_} = erlang:statistics(Type),          %Milliseconds
     {[Tot*1.0e-3],St}.
 
-date(_, St) ->
-    {{Ye,Mo,Da},{Ho,Mi,Sec}} = calendar:local_time(),
-    Str = io_lib:fwrite("~w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w",
-                        [Ye,Mo,Da,Ho,Mi,Sec]),
-    {[iolist_to_binary(Str)],St}.
+date(ConfArg, [], St) ->
+    date(ConfArg, [<<"%Y-%m-%d %H:%M:%S">>], St);
+date(ConfArg, [Fmt], St) when is_binary(Fmt) ->
+    date(ConfArg, [Fmt, current_timestamp()], St);
+date(_, [Fmt, TimeStamp], St) when is_binary(Fmt) and is_number(TimeStamp) ->
+    DateTime = timestamp_to_datetime(TimeStamp),
+    Formatted = luerl_lib_os_date:format(DateTime, Fmt),
+    {Enc, St1} = luerl:encode(Formatted, St),
+    {[Enc],St1};
+date(_, As, St) ->
+    badarg_error(date, As, St).
 
-difftime([A1,A2|_], St) ->
-    {[A2-A1],St}.
+difftime(_, [T2,T1|_], St) ->
+    {[T2 - T1],St};
+difftime(_, As, St) -> badarg_error(difftime, As, St).
 
-time(_, St) ->					%Time since 1 Jan 1970
+time(_, _, St) ->                                  %Time since 1 Jan 1970
+    {[current_timestamp()],St}.
+
+current_timestamp() ->
     {Mega,Sec,Micro} = os:timestamp(),
-    {[1.0e6*Mega+Sec+Micro*1.0e-6],St}.
+    1.0e6*Mega+Sec+Micro*1.0e-6.
+
+timestamp_to_datetime(Timestamp) ->
+    SecondsSinceEpoch = round(Timestamp),
+    calendar:system_time_to_local_time(SecondsSinceEpoch, second).

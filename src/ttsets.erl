@@ -51,10 +51,8 @@
 %% remaining case.
 
 -type ttset() :: empty |
-		 {empty,any(),empty} |
-		 {any(),any(),any()} |
-		 {empty,any(),empty,any(),empty} |
-		 {any(),any(),any(),any(),any()}.
+		 {ttset(),any(),ttset()} |
+		 {ttset(),any(),ttset(),any(),ttset()}.
 
 -export_type([ttset/0]).
 

@@ -22,9 +22,8 @@
 
 %% Basic user API to luerl.
 -export([init/0,gc/1,
-         set_trace_func/2,clear_trace_func/1,
-         set_trace_data/2,get_trace_data/1,
          load/2,load/3,loadfile/2,loadfile/3,
+         path_loadfile/2,path_loadfile/3,path_loadfile/4,
          load_module/3,load_module_dec/3,
          do/2,do_dec/2,do/3,do_dec/3,
          dofile/2,dofile/3,dofile_dec/2,dofile_dec/3,
@@ -36,8 +35,15 @@
          get_stacktrace/1
         ]).
 
+%% Tracing.
+-export([set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1]).
+
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
+
+%% Helping with storing VM state
+-export([externalize/1,internalize/1]).
 
 %% init() -> State.
 
@@ -94,6 +100,42 @@ loadfile(Name, Opts, St0) ->
             {ok,Func,St1};
         Error -> Error
     end.
+
+%% path_loadfile(FileName, State) -> {ok,Function,FullName,State}.
+%% path_loadfile(Path, FileName, State) -> {ok,Function,FullName,State}.
+%% path_loadfile(Path, FileName, Options, State) ->
+%%     {ok,Function,FullName,State}.
+%%  When no path is given we use the value of LUA_LOAD_PATH.
+%%  We manually step down the path to get the correct handling of
+%%  filenames by the compiler.
+
+path_loadfile(Name, St) ->
+    Path = case os:getenv("LUA_LOAD_PATH") of
+               false -> [];                     %You get what you asked for
+               Env ->
+                   %% Get path separator depending on os type.
+                   Sep = case os:type() of
+                             {win32,_} -> ";";  %Windows
+                             _ -> ":"           %Unix
+                         end,
+                   string:tokens(Env, Sep)      %Split into path list
+           end,
+    path_loadfile(Path, Name, [return], St).
+
+path_loadfile(Dirs, Name, St) ->
+    path_loadfile(Dirs, Name, [return], St).
+
+path_loadfile([Dir|Dirs], Name, Opts, St0) ->
+    Full = filename:join(Dir, Name),
+    case loadfile(Full, Opts, St0) of
+        {ok,Func,St1} ->
+            {ok,Func,Full,St1};
+        {error,[{_,_,enoent}],_} ->             %Couldn't find the file
+            path_loadfile(Dirs, Name, St0);
+        Error -> Error
+    end;
+path_loadfile([], _, _, _) ->
+    {error,[{none,file,enoent}],[]}.
 
 %% load_module(LuaTablePath, ModuleName, State) -> State.
 %%  Load module and add module table to the path.
@@ -274,7 +316,16 @@ do_stackframe(#call_frame{func=Funref,args=Args}, {Line,Trace}, St) ->
                    end,
             File = luerl_anno:get(file, Anno),
             {Line,[{Name,Args,[{file,File},{line,Line}]} | Trace]};
-        #erl_func{} -> {Line,Trace};            %Skip these for now
+        #erl_func{code=Fun} ->
+            {module,Module} = erlang:fun_info(Fun, module),
+            {name,Name} = erlang:fun_info(Fun, name),
+            FileName = get_filename(Module),
+            {Line,[{{Module,Name},Args,[{file,FileName}]} | Trace]};
+        #erl_mfa{m=M,f=F,a=A} ->
+            FileName = get_filename(M),
+            %% {Line,[{{M,F},{A,Args},[{file,FileName}]} | Trace]};
+            %% {Line,[{{M,F},[A | Args],[{file,FileName}]} | Trace]};
+            {Line,[{{M,F,A},Args,[{file,FileName}]} | Trace]};
         Other ->
             {Line,[{Other,Args,[{file,<<"-no-file-">>},{line,Line}]} | Trace]}
     end;
@@ -282,6 +333,16 @@ do_stackframe(#current_line{line=Line}, {_,Trace}, _St) ->
     {Line,Trace};
 do_stackframe(#loop_frame{}, Acc, _St) ->       %Ignore these
     Acc.
+
+get_filename(Mod) ->
+    Comp = erlang:get_module_info(Mod, compile),
+    case lists:keyfind(source, 1, Comp) of
+        {source,FileName} ->
+            BaseName = filename:basename(FileName),
+            list_to_binary(BaseName);
+        false ->                                %The compiler doesn't know
+            <<"-no-file-">>
+    end.
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
 -ifdef(HAS_MAPS).
@@ -330,6 +391,8 @@ encode(F, St) when is_function(F, 1) ->
                  encode_list(Res, State)
          end,
     {#erl_func{code=F1}, St};
+encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
+    {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
 encode(_, _) -> error(badarg).                  %Can't encode anything else
@@ -362,6 +425,7 @@ decode(#funref{}=Fun, State, _) ->
         end,
     F;                                          %Just a bare fun
 decode(#erl_func{code=Fun}, _, _) -> Fun;
+decode(#erl_mfa{m=M,f=F,a=A}, _, _) -> {M,F,A};
 decode(_, _, _) -> error(badarg).               %Shouldn't have anything else
 
 decode_table(#tref{i=N}=T, St, In0) ->
@@ -383,3 +447,14 @@ decode_table(#tref{i=N}=T, St, In0) ->
 decode_userdata(U, St) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
+
+
+%% Externalize and Internalize ensure that the VM state passed in
+%% can be stored externally or can be recreated from external storage.
+%% Currently very simple: only random state needs special treatment.
+
+externalize(S) ->
+    luerl_lib_math:externalize(S).
+
+internalize(S) ->
+    luerl_lib_math:internalize(S).

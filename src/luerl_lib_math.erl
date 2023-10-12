@@ -28,9 +28,14 @@
 
 -include("luerl.hrl").
 
--export([install/1,fmod/2,frexp/2]).
+-export([install/1,abs/3,acos/3,asin/3,atan2/3,atan/3,ceil/3,cos/3,cosh/3,deg/3,exp/3,floor/3,
+         fmod/3,frexp/3,ldexp/3,log/3,log10/3,max/3,min/3,modf/3,pow/3,rad/3,random/3,randomseed/3,
+         sin/3,sinh/3,sqrt/3,tan/3,tanh/3,tointeger/3,type/3]).
+
+-export([internalize/1,externalize/1]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+
 
 %% Use the correct random number module.
 
@@ -39,76 +44,82 @@
 -define(RAND_UNIFORM(L, S), rand:uniform_s(L, S)).
 -define(RAND_SEED(), rand:seed_s(exs1024)).
 -define(RAND_SEED(S1,S2,S3), rand:seed_s(exs1024, {S1,S2,S3})).
+-define(RAND_EXTERNALIZE(S), rand_externalize(S)).
+-define(RAND_INTERNALIZE(S), rand_internalize(S)).
 -else.
 -define(RAND_UNIFORM(S), random:uniform_s(S)).
 -define(RAND_UNIFORM(L, S), random:uniform_s(L, S)).
 -define(RAND_SEED(), random:seed0()).
--define(RAND_SEED(S1,S2,S3),			%Naughty, copied from source
-	{(abs(S1) rem (30269-1) + 1),		%PRIME1
-	 (abs(S2) rem (30307-1) + 1),		%PRIME2
-	 (abs(S3) rem (30323-1) + 1)}).		%PRIME3
+-define(RAND_SEED(S1,S2,S3),                    %Naughty, copied from source
+        {(abs(S1) rem (30269-1) + 1),           %PRIME1
+         (abs(S2) rem (30307-1) + 1),           %PRIME2
+         (abs(S3) rem (30323-1) + 1)}).         %PRIME3
+-define(RAND_EXTERNALIZE(S), S).                % random has just three integers for state so no special work needed.
+-define(RAND_INTERNALIZE(S), S).
 -endif.
 
 install(St0) ->
-    St1 = St0#luerl{rand=?RAND_SEED()},		%Default initial random seed
+    St1 = St0#luerl{rand=?RAND_SEED()},        	%Default initial random seed
     luerl_heap:alloc_table(table(), St1).
 
 table() ->
-    [{<<"abs">>,#erl_func{code=fun abs/2}},
-     {<<"acos">>,#erl_func{code=fun acos/2}},
-     {<<"asin">>,#erl_func{code=fun asin/2}},
-     {<<"atan">>,#erl_func{code=fun atan/2}},
-     {<<"atan2">>,#erl_func{code=fun atan2/2}},
-     {<<"ceil">>,#erl_func{code=fun ceil/2}},
-     {<<"cos">>,#erl_func{code=fun cos/2}},
-     {<<"cosh">>,#erl_func{code=fun cosh/2}},
-     {<<"deg">>,#erl_func{code=fun deg/2}},
-     {<<"exp">>,#erl_func{code=fun exp/2}},
-     {<<"floor">>,#erl_func{code=fun floor/2}},
-     {<<"fmod">>,#erl_func{code=fun fmod/2}},
-     {<<"frexp">>,#erl_func{code=fun frexp/2}},
-     {<<"huge">>,1.7976931348623157e308},	%From the specs
-     {<<"ldexp">>,#erl_func{code=fun ldexp/2}},
-     {<<"log">>,#erl_func{code=fun log/2}},
-     {<<"log10">>,#erl_func{code=fun log10/2}},	%For 5.1 backwards compatibility
-     {<<"max">>,#erl_func{code=fun max/2}},
-     {<<"min">>,#erl_func{code=fun min/2}},
-     {<<"modf">>,#erl_func{code=fun modf/2}},
+    [{<<"abs">>,#erl_mfa{m=?MODULE,f=abs}},
+     {<<"acos">>,#erl_mfa{m=?MODULE,f=acos}},
+     {<<"asin">>,#erl_mfa{m=?MODULE,f=asin}},
+     {<<"atan">>,#erl_mfa{m=?MODULE,f=atan}},
+     {<<"atan2">>,#erl_mfa{m=?MODULE,f=atan2}}, %For 5.2 backwards compatibility
+     {<<"ceil">>,#erl_mfa{m=?MODULE,f=ceil}},
+     {<<"cos">>,#erl_mfa{m=?MODULE,f=cos}},
+     {<<"cosh">>,#erl_mfa{m=?MODULE,f=cosh}},   %For 5.2 backwards compatibility
+     {<<"deg">>,#erl_mfa{m=?MODULE,f=deg}},
+     {<<"exp">>,#erl_mfa{m=?MODULE,f=exp}},
+     {<<"floor">>,#erl_mfa{m=?MODULE,f=floor}},
+     {<<"fmod">>,#erl_mfa{m=?MODULE,f=fmod}},
+     {<<"frexp">>,#erl_mfa{m=?MODULE,f=frexp}}, %For 5.2 backwards compatibility
+     {<<"huge">>,1.7976931348623157e308},       %From the specs
+     {<<"ldexp">>,#erl_mfa{m=?MODULE,f=ldexp}}, %For 5.2 backwards compatibility
+     {<<"log">>,#erl_mfa{m=?MODULE,f=log}},
+     {<<"log10">>,#erl_mfa{m=?MODULE,f=log10}}, %For 5.1 backwards compatibility
+     {<<"max">>,#erl_mfa{m=?MODULE,f=max}},
+     {<<"maxinteger">>,16#7FFFFFFFFFFFFFFF},    %From Lua 5.4.3
+     {<<"min">>,#erl_mfa{m=?MODULE,f=min}},
+     {<<"mininteger">>,-16#8000000000000000},   %From Lua 5.4.3
+     {<<"modf">>,#erl_mfa{m=?MODULE,f=modf}},
      {<<"pi">>,math:pi()},
-     {<<"pow">>,#erl_func{code=fun pow/2}},
-     {<<"rad">>,#erl_func{code=fun rad/2}},
-     {<<"random">>,#erl_func{code=fun random/2}},
-     {<<"randomseed">>,#erl_func{code=fun randomseed/2}},
-     {<<"sin">>,#erl_func{code=fun sin/2}},
-     {<<"sinh">>,#erl_func{code=fun sinh/2}},
-     {<<"sqrt">>,#erl_func{code=fun sqrt/2}},
-     {<<"tan">>,#erl_func{code=fun tan/2}},
-     {<<"tanh">>,#erl_func{code=fun tanh/2}},
-     {<<"tointeger">>,#erl_func{code=fun tointeger/2}},
-     {<<"type">>,#erl_func{code=fun type/2}}
+     {<<"pow">>,#erl_mfa{m=?MODULE,f=pow}},
+     {<<"rad">>,#erl_mfa{m=?MODULE,f=rad}},
+     {<<"random">>,#erl_mfa{m=?MODULE,f=random}},
+     {<<"randomseed">>,#erl_mfa{m=?MODULE,f=randomseed}},
+     {<<"sin">>,#erl_mfa{m=?MODULE,f=sin}},
+     {<<"sinh">>,#erl_mfa{m=?MODULE,f=sinh}},   %For 5.2 backwards compatibility
+     {<<"sqrt">>,#erl_mfa{m=?MODULE,f=sqrt}},
+     {<<"tan">>,#erl_mfa{m=?MODULE,f=tan}},
+     {<<"tanh">>,#erl_mfa{m=?MODULE,f=tanh}},   %For 5.2 backwards compatibility
+     {<<"tointeger">>,#erl_mfa{m=?MODULE,f=tointeger}},
+     {<<"type">>,#erl_mfa{m=?MODULE,f=type}}
     ].
 
 %% abs(Args, State) -> {[Ret],State}.
 
-abs(As, St) ->
+abs(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[abs(N)],St};
 	_ -> badarg_error(abs, As, St)
     end.
 
-acos(As, St) ->
+acos(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:acos(N)],St};
 	_ -> badarg_error(acos, As, St)
     end.
 
-asin(As, St) ->
+asin(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:asin(N)],St};
 	_ -> badarg_error(asin, As, St)
     end.
 
-atan(As, St) ->
+atan(_, As, St) ->
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1), is_number(N2) ->
 	    {[math:atan2(N1, N2)],St};
@@ -116,14 +127,14 @@ atan(As, St) ->
 	_ -> badarg_error(atan, As, St)
     end.
 
-atan2(As, St) ->
+atan2(_, As, St) ->                                %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1), is_number(N2) ->
 	    {[math:atan2(N1, N2)],St};
 	_ -> badarg_error(atan2, As, St)
     end.
 
-ceil(As, St) ->
+ceil(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[ceil(N)],St};
 	_ -> badarg_error(ceil, As, St)
@@ -137,31 +148,31 @@ ceil(N) when is_integer(N) -> N;
 ceil(N) when is_float(N) -> round(N + 0.5).
 -endif.
 
-cos(As, St) ->
+cos(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:cos(N)],St};
 	_ -> badarg_error(cos, As, St)
     end.
 
-cosh(As, St) ->
+cosh(_, As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:cosh(N)],St};
 	_ -> badarg_error(cosh, As, St)
     end.
 
-deg(As, St) ->
+deg(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[180.0*N/math:pi()],St};
 	_ -> badarg_error(deg, As, St)
     end.
 
-exp(As, St) ->
+exp(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:exp(N)],St};
 	_ -> badarg_error(exp, As, St)
     end.
 
-floor(As, St) ->
+floor(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[floor(N)],St};
 	_ -> badarg_error(floor, As, St)
@@ -175,7 +186,7 @@ floor(N) when is_integer(N) -> N;
 floor(N) when is_float(N) -> round(N - 0.5).
 -endif.
 
-fmod(As, St) ->
+fmod(_, As, St) ->
     case get_number_args(As) of
 	[X,Y|_] when is_number(X), is_number(Y) ->
 	    Div = trunc(X/Y),
@@ -184,22 +195,27 @@ fmod(As, St) ->
 	_ -> badarg_error(fmod, As, St)
     end.
 
-frexp(As, St) ->				%M,E such that X = M*2^E
+frexp(_, As, St) ->                                %For 5.2 backwards compatibility
+    %% M,E such that X = M * 2 ^ E.
     case get_number_args(As) of
 	[X|_] when is_number(X)  ->
 	    %% The sneaky bit!
-	    <<_:1,E0:11,M0:52>> = <<(X+0.0)/float>>,
+	    <<Sign:1,Exp0:11,Man0:52>> = <<(X+0.0)/float>>,
 	    Two52 = 1 bsl 52,
-	    M1 = (M0 bor Two52)/Two52,
-	    if M1 >= 1.0 -> M2 = M1/2, E1 = E0 - 1022; %Export M2, E1
-	       M1 < 0.5 -> M2 = M1*2.0, E1 = E0 - 1024;
-	       true -> M2 = M1, E1 = E0 - 1023
+	    Man1 = (Man0 bor Two52)/Two52,
+	    %% Bit naughty here, export Man2, Exp1
+	    if Man1 >= 1.0 -> Man2 = Man1/2, Exp1 = Exp0 - 1022;
+	       Man1 < 0.5 -> Man2 = Man1*2.0, Exp1 = Exp0 - 1024;
+	       true -> Man2 = Man1, Exp1 = Exp0 - 1023
 	    end,
-	    {[float(M2),E1],St};
+	    Ret = if Sign =:= 1 -> -Man2;
+		     true -> Man2
+		  end,
+	    {[float(Ret),Exp1],St};
 	_ -> badarg_error(frexp, As, St)
     end.
 
-ldexp(As, St) ->
+ldexp(_, As, St) ->                                %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[M,E|_] when is_float(M), is_integer(E) ->
 	    {[M*math:pow(2, E)],St};
@@ -208,7 +224,7 @@ ldexp(As, St) ->
 	_ -> badarg_error(ldexp, As, St)
     end.
 
-log(As, St) ->
+log(_, As, St) ->
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1), N2 == 10 ->
 	    {[math:log10(N1)],St};		%Seeing it is builtin
@@ -219,7 +235,7 @@ log(As, St) ->
 	_ -> badarg_error(log, As, St)
     end.
 
-log10(As, St) ->				%For 5.1 backwards compatibility
+log10(_, As, St) ->				%For 5.1 backwards compatibility
     case get_number_args(As) of
 	[N|_] when N == 0 -> {[-500.0],St};	%Bit hacky
 	[N|_] when is_number(N) ->
@@ -227,19 +243,19 @@ log10(As, St) ->				%For 5.1 backwards compatibility
 	_ -> badarg_error(log10, As, St)
     end.
 
-max(As, St) ->
+max(_, As, St) ->
     case luerl_lib:args_to_numbers(As) of
 	[_|_]=Ns -> {[lists:max(Ns)],St};	%At least one number
 	_ -> badarg_error(max, As, St)
     end.
 
-min(As, St) ->
+min(_, As, St) ->
     case luerl_lib:args_to_numbers(As) of
 	[_|_]=Ns -> {[lists:min(Ns)],St};	%At least one number
 	_ -> badarg_error(min, As, St)
     end.
 
-modf(As, St) ->
+modf(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_integer(N) -> {[N,0.0],St};
 	[N|_] when is_float(N) ->
@@ -248,20 +264,20 @@ modf(As, St) ->
 	_ -> badarg_error(modf, As, St)
     end.
 
-pow(As, St) ->
+pow(_, As, St) ->                                  %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N1,N2|_] when is_number(N1) and is_number(N2) ->
 	    {[math:pow(N1, N2)],St};
 	_ -> badarg_error(pow, As, St)
     end.
 
-rad(As, St) ->
+rad(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:pi()*N/180.0],St};
-	_ -> badarg_error(sinh, As, St)
+	_ -> badarg_error(rad, As, St)
     end.
 
-random(As, #luerl{rand=S0}=St) ->
+random(_, As, #luerl{rand=S0}=St) ->
     case luerl_lib:args_to_integers(As) of
 	[] ->					%0.0 - 1.0
 	    {R,S1} = ?RAND_UNIFORM(S0),
@@ -275,7 +291,7 @@ random(As, #luerl{rand=S0}=St) ->
 	_ -> badarg_error(random, As, St)
     end.
 
-randomseed(As, St) ->
+randomseed(_, As, St) ->
     case get_number_args(As) of
 	[S|_] when is_number(S) ->
 	    %% Split integer or float-64 into three integers.
@@ -284,37 +300,37 @@ randomseed(As, St) ->
 	_ -> badarg_error(randomseed, As, St)
     end.
 
-sin(As, St) ->
+sin(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:sin(N)],St};
 	_ -> badarg_error(sin, As, St)
     end.
 
-sinh(As, St) ->
+sinh(_, As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:sinh(N)],St};
 	_ -> badarg_error(sinh, As, St)
     end.
 
-sqrt(As, St) ->
+sqrt(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:sqrt(N)],St};
 	_ -> badarg_error(sqrt, As, St)
     end.
 
-tan(As, St) ->
+tan(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:tan(N)],St};
 	_ -> badarg_error(tan, As, St)
     end.
 
-tanh(As, St) ->
+tanh(_, As, St) ->                                 %For 5.2 backwards compatibility
     case get_number_args(As) of
 	[N|_] when is_number(N) -> {[math:tanh(N)],St};
 	_ -> badarg_error(tanh, As, St)
     end.
 
-tointeger(As, St) ->
+tointeger(_, As, St) ->
     case get_number_args(As) of
 	[N|_] when is_integer(N) -> {[N],St};
 	[N|_] when is_float(N) ->
@@ -326,7 +342,7 @@ tointeger(As, St) ->
 	[] -> badarg_error(tointeger, As, St)
     end.
 
-type(As, St) ->
+type(_, As, St) ->
     %% No conversion here.
     case As of
 	[N|_] when is_integer(N) -> {[<<"integer">>],St};
@@ -349,3 +365,17 @@ get_number_args(As) ->
 %% 	nil -> []
 %%     end;
 %% get_number_args([]) -> [].
+
+internalize(S) ->
+   ?RAND_INTERNALIZE(S).
+
+externalize(S) ->
+   ?RAND_EXTERNALIZE(S).
+
+-ifdef(NEW_RAND).
+rand_externalize(#luerl{rand=S0}=St) ->
+    St#luerl{rand=rand:export_seed_s(S0)}.
+
+rand_internalize(#luerl{rand=S0}=St) ->
+    St#luerl{rand=rand:seed_s(S0)}.
+-endif.

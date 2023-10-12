@@ -48,15 +48,14 @@ OTPRelease =
 Version = OTPRelease(),
 
 %% Collect the macro definitions we will add to the compiler options.
-
-%% Collect the macro definitions we will add to the compiler options.
 %% Named funs would be nicer but not always available.
 
 AppendCopts = fun (Version, [{Ver,Opt}|Opts], F) ->
                       Rest = F(Version, Opts, F),
                       if Version >= Ver ->
                               [{d,Opt,true}|Rest];
-                         true -> Rest
+                         true ->
+                              Rest
                       end;
                   (_Version, [], _F) -> []
               end,
@@ -70,8 +69,9 @@ Copts = Copts0 ++ AppendCopts(Version,
                                {"20",'NEW_BOOL_GUARD'},
                                {"20",'HAS_FLOOR'},
                                {"20",'HAS_CEIL'},
-                               {"21",'NEW_STACKTRACE'}],
-                             AppendCopts),
+                               {"21",'NEW_STACKTRACE'},
+                               {"23",'EEP48'}],
+                              AppendCopts),
 
 %% Ensure they are in erl_opts.
 
