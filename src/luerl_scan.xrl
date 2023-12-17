@@ -211,7 +211,8 @@ string_token(Cs0, Len, L) ->
     Cs1 = string:substr(Cs0, 2, Len - 2),       %Strip quotes
     try
         Bytes = string_chars(Cs1),
-        String = iolist_to_binary(Bytes),
+        String = unicode:characters_to_binary(Bytes, utf8, utf8),
+        %% String = iolist_to_binary(Bytes),
         {token,{'LITERALSTRING',L,String}}
     catch
         _:_ ->
@@ -232,13 +233,12 @@ string_chars(Cs) ->
 string_chars([$\\ | Cs], []) ->                 %Nothing here to worry about
     bq_chars(Cs);
 string_chars([$\\ | Cs], Acc) ->
-    [unicode:characters_to_binary(lists:reverse(Acc)) |
-     bq_chars(Cs)];
+    [lists:reverse(Acc) | bq_chars(Cs)];
 string_chars([$\n | _], _Acc) -> throw(string_error);
 string_chars([C | Cs], Acc) -> string_chars(Cs, [C|Acc]);
 string_chars([], []) -> [];
 string_chars([], Acc) ->
-    [unicode:characters_to_binary(lists:reverse(Acc))].
+    [lists:reverse(Acc)].
 
 %% bq_chars(Chars)
 %%  Handle the backquotes characters. These always fit directly into
