@@ -13,7 +13,7 @@ Being an extension language, Lua has no notion of a "main" program: it works as 
 
 Through the use of Erlang functions, Luerl can be augmented to cope with a wide range of different domains, creating a customized language sharing a syntactical framework.
 
-Luerl is implemented as a library, written in clean Erlang/OTP. For more information, read the [documentation](https://github.com/rvirding/luerl/wiki) and follow the [get started](https://github.com/rvirding/luerl/wiki/0.2-Getting-started) tutorial. You may also browse the [examples](https://github.com/rvirding/luerl/tree/develop/examples) and learn from the [luerl_demo](https://github.com/nonsensews/luerl_demo) source code.
+Luerl is implemented as a library, written in clean Erlang/OTP. For more information, read the [documentation](https://github.com/rvirding/luerl/wiki) and follow the [get started](https://github.com/rvirding/luerl/wiki/0.2-Getting-started) tutorial. You may also browse the [examples](https://github.com/rvirding/luerl/tree/develop/examples).
 
 Join the Community
 ------------------

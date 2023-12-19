@@ -154,17 +154,20 @@ compiler_info(#luacomp{lfile=F,opts=Opts}) ->
 %%  Build list of passes.
 
 file_passes() ->				%Reading from file
-    [{do,fun do_read_file/1},
-     {do,fun do_parse/1}|
+    [{do,fun do_scan_file/1},
+     {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
+     {do,fun do_parse/1} |
      chunk_passes()].
 
 list_passes() ->				%Scanning string
-    [{do,fun do_scan/1},
+    [{do,fun do_scan_string/1},
+     {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
      {do,fun do_parse/1}|
      chunk_passes()].
 
 chunk_passes() ->				%Doing the chunk
-    [{do,fun do_init_comp/1},
+    [{when_flag,to_parse,{done,fun(St) -> {ok,St} end}},
+     {do,fun do_init_comp/1},
      {do,fun do_comp_normalise/1},
      {when_flag,to_norm,{done,fun(St) -> {ok,St} end}},
      {do,fun do_comp_lint/1},
@@ -205,8 +208,8 @@ do_passes([{done,Fun}|_], St) ->
     Fun(St);
 do_passes([], St) -> {ok,St}.
 
-%% do_read_file(State) -> {ok,State} | {error,State}.
-%% do_scan(State) -> {ok,State} | {error,State}.
+%% do_scan_file(State) -> {ok,State} | {error,State}.
+%% do_scan_string(State) -> {ok,State} | {error,State}.
 %% do_parse(State) -> {ok,State} | {error,State}.
 %% do_init_comp(State) -> {ok,State} | {error,State}.
 %% do_comp_normalise(State) -> {ok,State} | {error,State}.
@@ -217,9 +220,9 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
+do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
-    case file:open(Name, [read]) of
+    case file:open(Name, [read,{encoding,unicode}]) of
 	{ok,F} ->
 	    %% Check if first line a script or Windows BOM, if so skip it.
 	    case io:get_line(F, '') of
@@ -229,18 +232,18 @@ do_read_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		_ -> file:position(F, bof)	%Get it all
 	    end,
 	    %% Now read the file.
-	    Ret = case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
+	    Ret = case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
 		      {ok,Ts,_} ->
 			  debug_print(Opts, "scan: ~p\n", [Ts]),
 			  {ok,St#luacomp{code=Ts}};
-		      {error,E,L} -> {error,St#luacomp{errors=[{L,io,E}]}}
+		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
 		  end,
 	    file:close(F),
 	    Ret;
 	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
 
-do_scan(#luacomp{code=Str,opts=Opts}=St) ->
+do_scan_string(#luacomp{code=Str,opts=Opts}=St) ->
     case luerl_scan:string(Str) of
 	{ok,Ts,_} ->
 	    debug_print(Opts, "scan: ~p\n", [Ts]),
