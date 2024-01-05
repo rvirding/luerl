@@ -1,4 +1,4 @@
-# Copyright (c) 2016 Robert Virding
+# Copyright (c) 2016-2023 Robert Virding
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ ERLC ?= erlc
 
 all: compile
 
-.PHONY: all compile clean echo examples debug
+.PHONY: all compile clean echo examples debug docs
 
 compile: comp_opts.mk $(addprefix $(EBINDIR)/, $(EBINS))
 
@@ -91,6 +91,92 @@ debug:
 
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
+
+#####################
+### DOCUMENTATION ###
+#####################
+
+# Targets for generating docs and man pages
+DOCDIR = doc
+DOCSRC = $(DOCDIR)/src
+MANDIR = $(DOCDIR)/man
+PDFDIR = $(DOCDIR)/pdf
+EPUBDIR = $(DOCDIR)/epub
+MANINSTDIR ?= $(PREFIX)/share/man
+
+MAN1_SRCS = $(notdir $(wildcard $(DOCSRC)/*1.md))
+MAN1S = $(MAN1_SRCS:.1.md=.1)
+TXT1S = $(MAN1_SRCS:.1.md=.txt)
+PDF1S = $(MAN1_SRCS:.1.md=.pdf)
+MAN3_SRCS = $(notdir $(wildcard $(DOCSRC)/*3.md))
+MAN3S = $(MAN3_SRCS:.3.md=.3)
+PDF3S = $(MAN3_SRCS:.3.md=.pdf)
+TXT3S = $(MAN3_SRCS:.3.md=.txt)
+MAN7_SRCS = $(notdir $(wildcard $(DOCSRC)/*7.md))
+MAN7S = $(MAN7_SRCS:.7.md=.7)
+TXT7S = $(MAN7_SRCS:.7.md=.txt)
+PDF7S = $(MAN7_SRCS:.7.md=.pdf)
+
+# For pandoc for generating PDFs as it omly accepts a few options.
+# xelatex is a reasonable default or wkhtmltopdf.
+PANDOCPDF ?= xelatex
+
+# Just generate the docs that are tracked in git
+docs: docs-txt
+
+docs-man: \
+	$(addprefix $(MANDIR)/, $(MAN1S)) \
+	$(addprefix $(MANDIR)/, $(MAN3S)) \
+	$(addprefix $(MANDIR)/, $(MAN7S))
+
+
+$(MANDIR)/%.1: $(DOCSRC)/%.1.md
+	pandoc -f markdown -s -t man -o $@ $<
+
+$(MANDIR)/%.3: $(DOCSRC)/%.3.md
+	pandoc -f markdown -s -t man -o $@ $<
+
+$(MANDIR)/%.7: $(DOCSRC)/%.7.md
+	pandoc -f markdown -s -t man -o $@ $<
+
+clean-docs:
+	rm -f $(DOCDIR)/*.txt $(MANDIR)/*.[0-9] $(PDFDIR)/*.pdf $(EPUBDIR)/*.epub
+
+docs-txt: docs-man \
+	$(addprefix $(DOCDIR)/, $(TXT1S)) \
+	$(addprefix $(DOCDIR)/, $(TXT3S)) \
+	$(addprefix $(DOCDIR)/, $(TXT7S))
+	@if [ -f $(DOCDIR)/luerl_guide.txt ]; then \
+		cp $(DOCDIR)/luerl_guide.txt $(DOCDIR)/user_guide.txt ; \
+	fi
+
+$(DOCDIR)/%.txt: export GROFF_NO_SGR=1
+
+$(DOCDIR)/%.txt: $(MANDIR)/%.1
+	groff -t -e -mandoc -Tutf8 $< | col -bx > $@
+
+$(DOCDIR)/%.txt: $(MANDIR)/%.3
+	groff -t -e -mandoc -Tutf8 $< | col -bx > $@
+
+$(DOCDIR)/%.txt: $(MANDIR)/%.7
+	groff -t -e -mandoc -Tutf8 $< | col -bx > $@
+
+$(PDFDIR):
+	@$(INSTALL_DIR) $(PDFDIR)
+
+docs-pdf: $(PDFDIR) \
+	$(addprefix $(PDFDIR)/, $(PDF1S)) \
+	$(addprefix $(PDFDIR)/, $(PDF3S)) \
+	$(addprefix $(PDFDIR)/, $(PDF7S))
+
+$(PDFDIR)/%.pdf: $(DOCSRC)/%.1.md
+	pandoc -f markdown --pdf-engine=$(PANDOCPDF) -o $@ $<
+
+$(PDFDIR)/%.pdf: $(DOCSRC)/%.3.md
+	pandoc -f markdown --pdf-engine=$(PANDOCPDF) -o $@ $<
+
+$(PDFDIR)/%.pdf: $(DOCSRC)/%.7.md
+	pandoc -f markdown --pdf-engine=$(PANDOCPDF) -o $@ $<
 
 ################
 ### RELEASES ###

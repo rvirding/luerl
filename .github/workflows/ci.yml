@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  pull_request:
+    types:
+      - edited
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Erlang/OTP ${{matrix.otp}}
+    strategy:
+      matrix:
+        otp: ['24.3', '25.3']
+        rebar3: ['3.20']
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
+      - run: rebar3 do eunit, ct --cover, cover

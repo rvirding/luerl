@@ -1,6 +1,6 @@
 {application,luerl,
              [{description,"Luerl - an implementation of Lua on Erlang"},
-              {vsn,"1.1"},
+              {vsn,"1.1.1"},
               {modules,['Elixir.Luerl.New','Elixir.Luerl',luerl,luerl_anno,
                         luerl_app,luerl_comp,luerl_comp_cg,luerl_comp_env,
                         luerl_comp_lint,luerl_comp_locf,luerl_comp_normalise,
@@ -17,5 +17,8 @@
               {env,[]},
               {mod,{luerl_app,[]}},
               {maintainers,["Robert Virding"]},
-              {licenses,["Apache"]},
-              {links,[{"Github","https://github.com/rvirding/luerl"}]}]}.
+              {licenses,["Apache 2.0"]},
+              {links,[{"Github","https://github.com/rvirding/luerl"}]},
+              {files,["README.md","LICENSE","VERSION","src","doc","ebin",
+                      "examples","include","test","rebar.*","*akefile",
+                      "*.escript"]}]}.
