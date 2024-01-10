@@ -17,7 +17,7 @@
               {env,[]},
               {mod,{luerl_app,[]}},
               {maintainers,["Robert Virding"]},
-              {licenses,["Apache 2.0"]},
+              {licenses,["Apache-2.0"]},
               {links,[{"Github","https://github.com/rvirding/luerl"}]},
               {files,["README.md","LICENSE","VERSION","src","doc","ebin",
                       "examples","include","test","rebar.*","*akefile",
