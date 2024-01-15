@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -75,10 +75,27 @@ Rules.
 	string_token(TokenChars, TokenLen, TokenLine).
 \'(\\.|\\\n|[^'\\])*\' :
 	string_token(TokenChars, TokenLen, TokenLine).
+%% Handle multi line strings, [[ ]], [=[ ]=], [==[ ]==]
+%% This gets a bit tedious as we have to each case separately.
 \[\[([^]]|\][^]])*\]\] :
 	%% Strip quotes.
 	Cs = string:substr(TokenChars, 3, TokenLen - 4),
+	long_bracket(TokenLine, Cs).
+\[=\[([^]]|\](=[^]]|[^=]))*\]=\] :
+	%% Strip quotes.
+	Cs = string:substr(TokenChars, 4, TokenLen - 6),
+	long_bracket(TokenLine, Cs).
+\[==\[([^]]|\](==[^]]|=[^=]|[^=]))*\]==\] :
+	%% Strip quotes.
+	Cs = string:substr(TokenChars, 5, TokenLen - 8),
  	long_bracket(TokenLine, Cs).
+\[===\[([^]]|\](===[^]]|==[^=]|=[^=]|[^=]))*\]===\] :
+	%% Strip quotes.
+	Cs = string:substr(TokenChars, 6, TokenLen - 10),
+	long_bracket(TokenLine, Cs).
+
+%% \[==\[([^]]|\]==[^]]|\]=[^=]|\][^=])*\]==\] :
+
 
 %% Other known tokens.
 \+  : {token,{'+',TokenLine}}.
