@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1065,14 +1065,14 @@ op('/', A1, A2, St) ->
 %% converting integers to floats and potentially lose precision.
 op('//', A1, A2, St) ->
     numeric_op('//', A1, A2, St, <<"__idiv">>,
-	       fun (N1,N2) when is_integer(N1), is_integer(N2) ->
-		       Idiv = N1 div N2,
-		       Irem = N1 rem N2,
-		       if Irem =:= 0 -> Idiv;
-			  Idiv < 0 -> Idiv - 1;
-			  true -> Idiv
-		       end;
-		   (N1,N2) -> 0.0 + floor(N1/N2) end);
+               fun (N1,N2) when is_integer(N1), is_integer(N2) ->
+                       Idiv = N1 div N2,
+                       Irem = N1 rem N2,
+                       if Irem =:= 0 -> Idiv;
+                          Idiv < 0 -> Idiv - 1;
+                          true -> Idiv
+                       end;
+                   (N1,N2) -> 0.0 + floor(N1/N2) end);
 op('%', A1, A2, St) ->
     numeric_op('%', A1, A2, St, <<"__mod">>,
                fun (N1,N2) when is_integer(N1), is_integer(N2) ->
@@ -1094,7 +1094,7 @@ op('%', A1, A2, St) ->
                    (N1,N2) -> N1 - floor(N1/N2)*N2 end);
 op('^', A1, A2, St) ->
     numeric_op('^', A1, A2, St, <<"__pow">>,
-	       fun (N1,N2) -> math:pow(N1, N2) end);
+               fun (N1,N2) -> math:pow(N1, N2) end);
 %% Bitwise operators.
 %% The '>>' is an arithmetic shift as a logical shift implies a word
 %% size which we don't have.
@@ -1153,53 +1153,81 @@ floor(N) when is_float(N) -> round(N - 0.5).
 length_op(_Op, A, St) when is_binary(A) -> {value,byte_size(A),St};
 length_op(_Op, A, St) ->
     case luerl_heap:get_metamethod(A, <<"__len">>, St) of
-	nil ->
-	    if ?IS_TREF(A) ->
-		    {value,luerl_lib_table:raw_length(A, St),St};
-	       true ->
-		    {error,{badarg,'#',[A]}, St}
-	    end;
-	Meth -> {meta,Meth,[A],St}
+        nil ->
+            if ?IS_TREF(A) ->
+                    {value,luerl_lib_table:raw_length(A, St),St};
+               true ->
+                    {error,{badarg,'#',[A]}, St}
+            end;
+        Meth -> {meta,Meth,[A],St}
     end.
 
 numeric_op(Op, A, St, E, Raw) ->
     case luerl_lib:arg_to_number(A) of
-	error -> op_meta(Op, A, E, St);
-	N -> {value,Raw(N),St}
+        error ->
+            numeric_op_meta(Op, A, E, St);
+        N ->
+            do_numeric_op(Op, [N], St, Raw)
     end.
 
 numeric_op(Op, A1, A2, St, E, Raw) ->
     case luerl_lib:args_to_numbers(A1, A2) of
-	[N1,N2] ->
-	    {value,Raw(N1, N2),St};
-	error ->
-	    op_meta(Op, A1, A2, E, St)
+        [_N1,_N2] = Ns ->
+            do_numeric_op(Op, Ns, St, Raw);
+        error ->
+            numeric_op_meta(Op, A1, A2, E, St)
     end.
 
 integer_op(Op, A, St, E, Raw) ->
     case luerl_lib:arg_to_integer(A) of
-	error -> op_meta(Op, A, E, St);
-	N -> {value,Raw(N),St}
+        error ->
+            numeric_op_meta(Op, A, E, St);
+        N ->
+            do_numeric_op(Op, [N], St, Raw)
     end.
 
 integer_op(Op, A1, A2, St, E, Raw) ->
     case luerl_lib:args_to_integers(A1, A2) of
-	[N1,N2] -> {value,Raw(N1, N2),St};
-	error ->
-	    op_meta(Op, A1, A2, E, St)
+        [_N1,_N2] = Ns ->
+            do_numeric_op(Op, Ns, St, Raw);
+        error ->
+            numeric_op_meta(Op, A1, A2, E, St)
+    end.
+
+%% do_numeric_op(Op, Numbers, State, Raw) ->
+%%     {value,Value,State) | {error,Error,State}.
+
+do_numeric_op(Op, Ns, St, Raw) ->
+    try
+        {value,apply(Raw, Ns),St}
+    catch
+        _:_:_ ->
+            {error,{badarith,Op,Ns},St}
+    end.
+
+numeric_op_meta(Op, A, E, St) ->
+    case luerl_heap:get_metamethod(A, E, St) of
+        nil -> {error,{badarith,Op,[A]}, St};
+        Meth -> {meta,Meth,[A],St}
+    end.
+
+numeric_op_meta(Op, A1, A2, E, St) ->
+    case luerl_heap:get_metamethod(A1, A2, E, St) of
+        nil -> {error,{badarith,Op,[A1,A2]},St};
+        Meth -> {meta,Meth,[A1,A2],St}
     end.
 
 eq_op(_Op, A1, A2, St) when A1 == A2 -> {value,true,St};
 eq_op(_Op, A1, A2, St)
   when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
     case get_eqmetamethod(A1, A2, St) of
-	nil -> {value,false,St};
-	Meth ->
-	    Func = fun (Args, St0) ->
-			   {Ret,St1} = functioncall(Meth, Args, St0),
-			   {[boolean_value(Ret)],St1}
-		   end,
-	    {meta,#erl_func{code=Func},[A1,A2],St}
+        nil -> {value,false,St};
+        Meth ->
+            Func = fun (Args, St0) ->
+                           {Ret,St1} = functioncall(Meth, Args, St0),
+                           {[boolean_value(Ret)],St1}
+                   end,
+            {meta,#erl_func{code=Func},[A1,A2],St}
     end;
 eq_op(_, _, _, St) -> {value,false,St}.
 
@@ -1207,25 +1235,25 @@ neq_op(_Op, A1, A2, St) when A1 == A2 -> {value,false,St};
 neq_op(_Op, A1, A2, St)
   when ?IS_TREF(A1), ?IS_TREF(A2) ; ?IS_USDREF(A1), ?IS_USDREF(A2) ->
     case get_eqmetamethod(A1, A2, St) of
-	nil -> {value,true,St};
-	Meth ->
-	    Func = fun (Args, St0) ->
-			   {Ret,St1} = functioncall(Meth, Args, St0),
-			   {[not boolean_value(Ret)],St1}
-		   end,
-	    {meta,#erl_func{code=Func},[A1,A2],St}
+        nil -> {value,true,St};
+        Meth ->
+            Func = fun (Args, St0) ->
+                           {Ret,St1} = functioncall(Meth, Args, St0),
+                           {[not boolean_value(Ret)],St1}
+                   end,
+            {meta,#erl_func{code=Func},[A1,A2],St}
     end;
 neq_op(_, _, _, St) -> {value,true,St}.
 
 get_eqmetamethod(A1, A2, St) ->
     %% Must have "same" metamethod here. How do we test?
     case luerl_heap:get_metamethod(A1, <<"__eq">>, St) of
-	nil -> nil;
-	Meth ->
-	    case luerl_heap:get_metamethod(A2, <<"__eq">>, St) of
-		Meth -> Meth;			%Must be the same method
-		_ -> nil
-	    end
+        nil -> nil;
+        Meth ->
+            case luerl_heap:get_metamethod(A2, <<"__eq">>, St) of
+                Meth -> Meth;                   %Must be the same method
+                _ -> nil
+            end
     end.
 
 lt_op(_Op, A1, A2, St) when is_number(A1), is_number(A2) -> {value,A1 < A2,St};
@@ -1238,35 +1266,35 @@ le_op(_Op, A1, A2, St) when is_binary(A1), is_binary(A2) -> {value,A1 =< A2,St};
 le_op(Op, A1, A2, St) ->
     %% Must check for first __le then __lt metamethods.
     case luerl_heap:get_metamethod(A1, A2, <<"__le">>, St) of
-	nil ->
-	    %% Try for not (Op2 < Op1) instead.
-	    case luerl_heap:get_metamethod(A1, A2, <<"__lt">>, St) of
-		nil ->
-		    {error,{badarg,Op,[A1,A2]}, St};
-		Meth ->
-		    {meta,Meth,[A2,A1],St}
-	    end;
-	Meth ->
-	    {meta,Meth,[A1,A2],St}
+        nil ->
+            %% Try for not (Op2 < Op1) instead.
+            case luerl_heap:get_metamethod(A1, A2, <<"__lt">>, St) of
+                nil ->
+                    {error,{badarg,Op,[A1,A2]}, St};
+                Meth ->
+                    {meta,Meth,[A2,A1],St}
+            end;
+        Meth ->
+            {meta,Meth,[A1,A2],St}
     end.
 
 concat_op(A1, A2, St) ->
     case luerl_lib:conv_list([A1,A2], [lua_string,lua_string]) of
-	[S1,S2] -> {value,<<S1/binary,S2/binary>>,St};
-	error ->
-	    op_meta('..', A1, A2, <<"__concat">>, St)
+        [S1,S2] -> {value,<<S1/binary,S2/binary>>,St};
+        error ->
+            op_meta('..', A1, A2, <<"__concat">>, St)
     end.
 
-op_meta(Op, A, E, St) ->
-    case luerl_heap:get_metamethod(A, E, St) of
-	nil -> {error,{badarg,Op,[A]}, St};
-	Meth -> {meta,Meth,[A],St}
-    end.
+%% op_meta(Op, A, E, St) ->
+%%     case luerl_heap:get_metamethod(A, E, St) of
+%%         nil -> {error,{badarg,Op,[A]}, St};
+%%         Meth -> {meta,Meth,[A],St}
+%%     end.
 
 op_meta(Op, A1, A2, E, St) ->
     case luerl_heap:get_metamethod(A1, A2, E, St) of
-	nil -> {error,{badarg,Op,[A1,A2]},St};
-	Meth -> {meta,Meth,[A1,A2],St}
+        nil -> {error,{badarg,Op,[A1,A2]},St};
+        Meth -> {meta,Meth,[A1,A2],St}
     end.
 
 %% boolean_value(Rets) -> boolean().
