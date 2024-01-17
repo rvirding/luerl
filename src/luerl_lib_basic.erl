@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -21,9 +21,12 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,assert/3,basic_error/3,collectgarbage/3,dofile/3,eprint/3,getmetatable/3,ipairs/3,
-         ipairs_next/3,load/3,loadfile/3,loadstring/3,next/3,pairs/3,pcall/3,print/3,rawequal/3,
-         rawget/3,rawlen/3,rawset/3,select/3, setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
+-export([install/1,assert/3,basic_error/3,collectgarbage/3,dofile/3,
+         eprint/3,getmetatable/3,ipairs/3,ipairs_next/3,
+         load/3,loadfile/3,loadstring/3,
+         next/3,pairs/3,pcall/3,print/3,
+         rawequal/3,rawget/3,rawlen/3,rawset/3,
+         select/3,setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([print/2,tostring/1,tostring/2,type/1]).
@@ -61,7 +64,7 @@ table() ->
      {<<"tonumber">>,#erl_mfa{m=?MODULE,f=tonumber}},
      {<<"tostring">>,#erl_mfa{m=?MODULE,f=tostring}},
      {<<"type">>,#erl_mfa{m=?MODULE,f=type}},
-     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}	%For Lua 5.1 compatibility
+     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}    %For Lua 5.1 compatibility
     ].
 
 assert(_, As, St) ->
@@ -238,7 +241,6 @@ rawset(_, As, St) -> badarg_error(rawset, As, St).
 
 select(_, [<<$#>>|As], St) -> {[float(length(As))],St};
 select(_, [A|As], St) ->
-    %%io:fwrite("sel:~p\n", [[A|As]]),
     Len = length(As),
     case luerl_lib:arg_to_integer(A) of
 	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
@@ -357,7 +359,8 @@ do_setmetatable(#tref{}=Tref, Meta, St0) ->
 dofile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
 	[File] ->
-	    Ret = luerl_comp:file(File),	%Compile the file
+            %% Compile the file so it returns errors.
+	    Ret = luerl_comp:file(File, [verbose,return]),
 	    dofile_ret(Ret, As, St);
 	_ -> badarg_error(dofile, As, St)
     end.
@@ -365,33 +368,37 @@ dofile(_, As, St) ->
 dofile_ret({ok,Chunk}, _, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     luerl_emul:call(Func, [], St1);
-dofile_ret({error,_,_}, As, St) ->
-    badarg_error(dofile, As, St).
+dofile_ret({error,[{_,Mod,E}|_],_}, _As, St) ->
+    Msg = iolist_to_binary(Mod:format_error(E)),
+    lua_error(Msg, St).
 
 %% Load string and files.
 
 load(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_string,lua_any]) of
-	[S|_] ->
-	    Ret = luerl_comp:string(S),		%Compile the string
-	    load_ret(Ret, St);
-	error -> badarg_error(load, As, St)
+        [S|_] ->
+            %% Compile the string so it returns errors.
+            Ret = luerl_comp:string(S, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(load, As, St)
     end.
 
 loadfile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_any]) of
-	[F|_] ->
-	    Ret = luerl_comp:file(F),		%Compile the file
-	    load_ret(Ret, St);
-	error -> badarg_error(loadfile, As, St)
+        [F|_] ->
+            %% Compile the file so it returns errors.
+            Ret = luerl_comp:file(F, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(loadfile, As, St)
     end.
 
 loadstring(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
-	[S] ->
-	    Ret = luerl_comp:string(S),		%Compile the string
-	    load_ret(Ret, St);
-	error -> badarg_error(loadstring, As, St)
+        [S] ->
+            %% Compile the string so it returns errors.
+            Ret = luerl_comp:string(S, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(loadstring, As, St)
     end.
 
 load_ret({ok,Chunk}, St0) ->
@@ -410,6 +417,7 @@ pcall(_, [F|As], St0) ->
 	error:{lua_error,{error_call, E},St2} ->
 	    {[false,E],St2};
 	error:{lua_error,E,St2} ->
+	    %% io:format("pc ~w\n", [E]),
 	    %% Basic formatting for now.
 	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
 	    {[false,Msg],St2}
