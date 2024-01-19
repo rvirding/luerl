@@ -1,8 +1,11 @@
-Luerl - an implementation of Lua in Erlang
-==========================================
+# Luerl
 
-The migration from Lua 5.2 to 5.3 is very much Work-In-Progress. Please test it but there are as yet no guratantees.
---------------------------------------------------------------------------------------------------------------------
+*An implementation of Lua in Erlang*
+
+**Alert**: The migration from Lua 5.2 to 5.3 is very much Work-In-Progress. Please test it but there are as yet no guratantees.
+
+## About
+
 Luerl is an implementation of standard Lua 5.3 written in Erlang/OTP.
 
 Lua is a powerful, efficient, lightweight, embeddable scripting language common in games, IoT devices, AI bots, machine learning and scientific computing research.
@@ -15,8 +18,7 @@ Through the use of Erlang functions, Luerl can be augmented to cope with a wide 
 
 Luerl is implemented as a library, written in clean Erlang/OTP. For more information, read the [documentation](https://github.com/rvirding/luerl/wiki) and follow the [get started](https://github.com/rvirding/luerl/wiki/0.2-Getting-started) tutorial. You may also browse the [examples](https://github.com/rvirding/luerl/tree/develop/examples).
 
-Join the Community
-------------------
+## Join the Community
 
 [Luerl on Slack](https://luerl.slack.com), join by requesting an invite [here](https://erlef.org/slack-invite/luerl)
 
