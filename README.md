@@ -2,6 +2,13 @@
 
 *An implementation of Lua in Erlang*
 
+[![Build Status][gh-actions-badge]][gh-actions]
+[![Luerl Versions][luerl-badge]][luerl]
+[![Erlang Versions][erlang-badge]][versions]
+[![Tag][github-tag-badge]][github-tag]
+
+[![Project Logo][logo]][logo-large]
+
 **Alert**: The migration from Lua 5.2 to 5.3 is very much Work-In-Progress. Please test it but there are as yet no guratantees.
 
 ## About
@@ -25,3 +32,16 @@ Luerl is implemented as a library, written in clean Erlang/OTP. For more informa
 [Luerl Forum - Erlang Forums](https://erlangforums.com/luerl)
 
 Luerl embraces both [#Erlang](https://twitter.com/hashtag/erlang?src=hash) and [#LuaLang](https://twitter.com/hashtag/lualang?src=hash) communities and ecosystems.
+
+[//]: ---Named-Links---
+
+[logo]: priv/images/logo.png
+[logo-large]: priv/images/logo-large.png
+[gh-actions-badge]: https://github.com/rvirding/luerl/workflows/Test/badge.svg
+[gh-actions]: https://github.com/rvirding/luerl/actions
+[luerl]: https://github.com/rvirding/luerl
+[luerl-badge]: https://img.shields.io/badge/luerl-1.1-blue.svg
+[erlang-badge]: https://img.shields.io/badge/erlang-24%20to%2026-blue.svg
+[versions]: https://github.com/rvirding/luerl/blob/master/.github/workflows/ci.yml
+[github-tag]: https://github.com/rvirding/luerl/tags
+[github-tag-badge]: https://img.shields.io/github/tag/rvirding/luerl.svg
