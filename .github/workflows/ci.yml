@@ -1,12 +1,15 @@
 name: Test
 
 on:
+  workflow_dispatch:
   pull_request:
     types:
       - edited
       - opened
       - reopened
       - synchronize
+  schedule:
+  - cron: "0 0 * * 0"
 
 jobs:
   test:
@@ -14,10 +17,10 @@ jobs:
     name: Erlang/OTP ${{matrix.otp}}
     strategy:
       matrix:
-        otp: ['24.3', '25.3']
-        rebar3: ['3.20']
+        otp: ['24', '25', '26']
+        rebar3: ['3.22']
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{matrix.otp}}
