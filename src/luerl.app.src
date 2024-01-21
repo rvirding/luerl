@@ -29,5 +29,5 @@
   {files, ["README.md", "LICENSE", "VERSION", "src", "doc", "ebin",
            "examples", "include", "test", "rebar.*", "*akefile",
            "*.escript"]}
-  {exclude_files, ["priv/images/*"}
+  {exclude_files, ["priv/images/*"]}
  ]}.
