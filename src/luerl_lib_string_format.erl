@@ -24,7 +24,7 @@
 
 format(F, As, St0) ->
     {Str,St1} = format_loop(luerl_lib:arg_to_list(F), As, St0),
-    {[iolist_to_binary(Str)],St1}.
+    {[unicode:characters_to_binary(Str)],St1}.
 
 format_loop(Fmt, As, St) -> format_loop(Fmt, As, St, []).
 

@@ -201,16 +201,13 @@ next_key(K, Dict, St) ->
 print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
 			      {[Str],S1} = tostring([A], S0),
-			      io:format("~ts ", [print_string(Str)]),
+			      io:format("~ts ", [Str]),
 			      S1
 		      end, St0, Args),
     io:nl(),
     {[],St1}.
-print(Args, St0) -> print(nil, Args, St0).
 
-print_string(<<C/utf8,S/binary>>) -> [C|print_string(S)];
-print_string(<<_,S/binary>>) -> [$?|print_string(S)];
-print_string(<<>>) -> [].
+print(Args, St0) -> print(nil, Args, St0).
 
 %% rawequal([Arg,Arg|_], State) -> {[Bool],State}.
 %% rawlen([Object|_], State) -> {[Length],State}.
@@ -369,8 +366,8 @@ dofile_ret({ok,Chunk}, _, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     luerl_emul:call(Func, [], St1);
 dofile_ret({error,[{_,Mod,E}|_],_}, _As, St) ->
-    Msg = iolist_to_binary(Mod:format_error(E)),
-    lua_error(Msg, St).
+    Msg = unicode:characters_to_binary(Mod:format_error(E)),
+    lua_error({error_message,Msg}, St).
 
 %% Load string and files.
 
@@ -405,7 +402,7 @@ load_ret({ok,Chunk}, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     {[Func],St1};
 load_ret({error,[{_,Mod,E}|_],_}, St) ->
-    Msg = iolist_to_binary(Mod:format_error(E)),
+    Msg = unicode:characters_to_binary(Mod:format_error(E)),
     {[nil,Msg],St}.
 
 pcall(_, [F|As], St0) ->
@@ -419,7 +416,7 @@ pcall(_, [F|As], St0) ->
 	error:{lua_error,E,St2} ->
 	    %% io:format("pc ~w\n", [E]),
 	    %% Basic formatting for now.
-	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
+	    Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
 	    {[false,Msg],St2}
     end.
 

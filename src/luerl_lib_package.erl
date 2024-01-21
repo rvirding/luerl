@@ -124,7 +124,7 @@ search_path_loop(Name, [T|Ts], Tried) ->
 	_ -> search_path_loop(Name, Ts, Tried ++ [$',File,$',$\s])
     end;
 search_path_loop(_, [], Tried) ->		%Couldn't find it
-    {error,iolist_to_binary(Tried)}.
+    {error,unicode:characters_to_binary(Tried)}.
 
 -spec require(_, [_], _) -> {_,_} | no_return().	%To keep dialyzer quiet
 
@@ -215,5 +215,5 @@ lua_searcher_ret({ok,Chunk}, File, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     {[Func,File],St1};
 lua_searcher_ret({error,[{_,Mod,E}|_],_}, _, St) ->
-    Msg = iolist_to_binary(Mod:format_error(E)),
+    Msg = unicode:characers_to_binary(Mod:format_error(E)),
     {[Msg],St}.
