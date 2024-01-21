@@ -28,6 +28,6 @@
   {links, [{"Github", "https://github.com/rvirding/luerl"}]},
   {files, ["README.md", "LICENSE", "VERSION", "src", "doc", "ebin",
            "examples", "include", "test", "rebar.*", "*akefile",
-           "*.escript"]}
-  {exclude_files, ["priv/images/*"}
+           "*.escript"]},
+  {exclude_files, ["priv/images/*"]}
  ]}.
