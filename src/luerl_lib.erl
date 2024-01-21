@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -24,7 +24,8 @@
 
 -include("luerl.hrl").
 
--export([lua_error/2,badarg_error/3,format_error/1]).
+-export([lua_error/2,badarg_error/3,badarith_error/3,format_error/1,
+         format_value/1]).
 
 -export([boolean_value/1,first_value/1]).
 
@@ -49,50 +50,103 @@ lua_error(E, St) -> error({lua_error,E,St}).
 
 badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
 
-%% format_error(LuaError) -> ErrorString.
-%%  Some of these use same text as Lua error string, so be careful if
-%%  modifying them.
+badarith_error(What, Args, St) -> lua_error({badarith,What,Args}, St).
 
-format_error({badarg,Where,As}) ->
-    io_lib:format("badarg in ~w: ~w", [Where,As]);
+%% format_error(LuaError) -> ErrorString.
+%%  The ErrorString is a UTF-8 encoded binary. The UTF-8 encoded
+%%  codepoints can come from Lua/Luerl strings.  Some of these use
+%%  same text as Lua error string, so be careful if modifying them.
+
+format_error({badarg,Where,Args}) ->
+    %% Note Args is a list which must be kept as its own list!
+    format_error("bad argument ~ts to ~ts", [Args,Where]);
+format_error({badarith,Op,Args}) ->
+    %% Note Args is a list which must be kept as its own list!
+    format_error("bad arithmetic ~ts on ~ts", [Op,Args]);
 format_error({illegal_index,Where,Index}) ->
-    io_lib:format("invalid index in ~w: ~w", [Where,Index]);
+    format_error("invalid index in ~ts: ~ts", [Where,Index]);
 format_error({illegal_value,Where,Val}) ->
-    io_lib:format("invalid value in ~w: ~w", [Where,Val]);
+    format_error("invalid value in ~ts: ~ts", [Where,Val]);
 format_error({illegal_value,Val}) ->
-    io_lib:format("invalid value: ~w", [Val]);
+    format_error("invalid value: ~ts", [Val]);
 format_error({illegal_comp,Where}) ->
-    io_lib:format("illegal comparison in ~w", [Where]);
-format_error({invalid_order,Where}) ->		%Keep text!
-    io_lib:format("invalid order function in ~w", [Where]);
+    Msg = io_lib:format("illegal comparison in ~ts", [Where]),
+    unicode:characters_to_binary(Msg);
+%% format_error({invalid_order,Where}) ->          %Keep text!
+%%     io_lib:format("invalid order function in ~w", [Where]);
 format_error({undefined_function,Name}) ->
-    io_lib:format("undefined function ~w", [Name]);
+    format_error("undefined function ~ts", [Name]);
 format_error({undefined_method,Object,Name}) ->
-    io_lib:format("undefined method in ~w: ~w", [Object,Name]);
+    format_error("undefined method ~ts in ~ts", [Name,Object]);
 format_error(illegal_return_value) ->
     <<"illegal format of return value">>;
 %% Pattern errors.
-format_error(invalid_pattern) ->		%Keep text!
-    io_lib:format("malformed pattern", []);
-format_error(invalid_capture) ->		%Keep text!
-    io_lib:format("malformed pattern", []);
-format_error({invalid_char_class,C}) ->		%Keep text!
-    io_lib:format("malformed pattern (class ~c)", [C]);
-format_error(invalid_char_set) ->		%Keep text!
-    io_lib:format("malformed pattern (missing ']')", []);
+format_error(invalid_pattern) ->                %Keep text!
+    <<"malformed pattern">>;
+format_error(invalid_capture) ->                %Keep text!
+    <<"malformed pattern">>;
+format_error({invalid_char_class,C}) ->         %Keep text!
+    Msg = io_lib:format("malformed pattern (class ~c)", [C]),
+    unicode:characters_to_binary(Msg);
+format_error(invalid_char_set) ->               %Keep text!
+    <<"malformed pattern (missing ']')">>;
 %% Illegal or undefined ops.
 format_error({illegal_op,Op}) ->
-    io_lib:format("illegal op: ~w", [Op]);
+    format_error("illegal op: ~ts", [Op]);
 format_error({no_module,Mod}) ->
-    io_lib:format("module '~s' not found", [Mod]);
+    %% We know the module name is an atom.
+    Msg = io_lib:format("module '~s' not found", [Mod]),
+    unicode:characters_to_binary(Msg);
 %% Assertions
 format_error({assert_error,Obj}) ->
-    Msg = if is_binary(Obj) ->
-		  Obj;
-	     true ->
-		  [<<"error object is a ">>, luerl_lib_basic:type(Obj)]
-	  end,
-    io_lib:format(<<"~s!">>, [Msg]).
+    if is_binary(Obj) ->
+            <<Obj,$!>>;
+       true ->
+            Type = luerl_lib_basic:type(Obj),
+            <<"error object is a ",Type/binary,$!>>
+    end;
+%% We have an error message here already.
+format_error({error_message,Msg}) ->
+    Msg;
+%% Everything we don't recognise or know about.
+format_error(Error) ->
+    unicode:characters_to_binary(io_lib:format(<<"~w!">>, [Error])).
+
+%% format_error(FormatString, Values) -> ErrorString.
+%%  Useful when all the values in the list need to be formatted
+%%  separately and will be output separately.
+
+format_error(Format, Vals) ->
+    Ps = lists:map(fun format_value/1, Vals),
+    unicode:characters_to_binary(io_lib:format(Format, Ps)).
+
+%% format_value(LuerlData) -> Iolist.
+%%  Take an Luerl data and return a "printable" representation suitable
+%%  to use when printing error messages.
+
+format_value(nil) -> <<"nil">>;
+format_value(N) when is_integer(N) -> integer_to_list(N);
+format_value(N) when is_float(N) -> float_to_list(N);
+format_value(B) when is_boolean(B) -> atom_to_binary(B);
+format_value(B) when is_binary(B) ->
+    %% A luerl string which we print with quotes around it.
+    %% Note that the string can contain unicode codepoints.
+    [$\',B,$\'];
+format_value(#tref{}) -> <<"table">>;
+format_value(#usdref{}) -> <<"userdata">>;
+format_value(#funref{}) -> <<"function">>;
+format_value(#erl_func{code=Fun}) ->
+    {name,Name} = erlang:fun_info(Fun, name),
+    atom_to_binary(Name);
+format_value(#erl_mfa{f=Func}) -> atom_to_binary(Func);
+format_value(List) when is_list(List) ->
+    Pl = lists:map(fun format_value/1, List),
+    lists:join($\,, Pl);
+%% Treat atoms as binary strings here, probably just a name.
+format_value(A) when is_atom(A) ->
+    "'" ++ atom_to_list(A) ++ "'";
+%% Everything else just straight through.
+format_value(_Other) -> <<"unknown stuff">>.
 
 %% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
