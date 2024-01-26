@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -226,7 +226,7 @@ clock(_, As, St) ->
     {[Tot*1.0e-3],St}.
 
 date(ConfArg, [], St) ->
-    date(ConfArg, [<<"%Y-%m-%d %H:%M:%S">>], St);
+    date(ConfArg, [<<"%c">>], St);
 date(ConfArg, [Fmt], St) when is_binary(Fmt) ->
     date(ConfArg, [Fmt, current_timestamp()], St);
 date(_, [Fmt, TimeStamp], St) when is_binary(Fmt) and is_number(TimeStamp) ->
