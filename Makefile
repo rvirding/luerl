@@ -89,6 +89,22 @@ examples: all
 debug:
 	ERLCFLAGS="+debug_info" make all
 
+###############
+### TESTING ###
+###############
+
+# XXX for some reason, the first pass of eunit doesn't run the tests?!
+eunit:
+	@rebar3 as test do compile,eunit,eunit
+
+common-test:
+	@rebar3 as test do compile,ct
+
+ct: common-test
+
+tests:
+	@rebar3 as test do compile,eunit,eunit,ct
+
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
 
