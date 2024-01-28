@@ -147,15 +147,15 @@ run() ->
     {ok,Chunk13,_} = luerl:load(<<"a = '(30a)' .. a .. ' (this is Greek)'; return a">>, State07),
     {ok,Result07} = luerl:eval(Chunk13, St8),
     {Result07,State08} = luerl:do(Chunk13, St8),
-    io:format("(34) And again I said: ~s~n", [Result07]),
+    io:format("(34) And again I said: ~ts~n", [Result07]),
 
     % separately parse, then execute a file, get a result. The file defines confirm(p)
     {ok,Chunk14,St9} = luerl:loadfile("./hello2-9.lua", State08),
     {ok,Result14} = luerl:eval(Chunk14, St9),
     {Result14,State14} = luerl:do(Chunk14, St9),
-    io:format("(35) And twice: ~s~n", [Result14]),
+    io:format("(35) And twice: ~ts~n", [Result14]),
     {Result14A,_} = luerl:call_function([confirm], [<<"Is it?">>], State14),
-    io:format("(36) Well: ~s~n", [Result14A]),
+    io:format("(36) Well: ~ts~n", [Result14A]),
 
     % execute a file, get the decoded result of a table
     {ok,Result15} = luerl:evalfile("./hello2-10.lua", State14),
