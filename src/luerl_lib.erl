@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2023 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -108,6 +108,13 @@ format_error({assert_error,Obj}) ->
 %% We have an error message here already.
 format_error({error_message,Msg}) ->
     Msg;
+%% Error is called.
+format_error({error_call,Args}) ->
+    Type = case Args of
+	       [A|_] -> luerl_lib_basic:type(A);
+	       [] -> <<"nil">>
+	   end,
+    <<"error object is a ",Type/binary," value">>;
 %% Everything we don't recognise or know about.
 format_error(Error) ->
     unicode:characters_to_binary(io_lib:format(<<"~w!">>, [Error])).
@@ -144,7 +151,7 @@ format_value(List) when is_list(List) ->
     lists:join($\,, Pl);
 %% Treat atoms as binary strings here, probably just a name.
 format_value(A) when is_atom(A) ->
-    "'" ++ atom_to_list(A) ++ "'";
+    [$\',atom_to_list(A),$\'];
 %% Everything else just straight through.
 format_value(_Other) -> <<"unknown stuff">>.
 

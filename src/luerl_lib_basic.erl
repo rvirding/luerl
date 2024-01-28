@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2023 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,assert/3,basic_error/3,collectgarbage/3,dofile/3,
+-export([install/1,assert/3,error_call/3,collectgarbage/3,dofile/3,
          eprint/3,getmetatable/3,ipairs/3,ipairs_next/3,
          load/3,loadfile/3,loadstring/3,
          next/3,pairs/3,pcall/3,print/3,
@@ -45,7 +45,7 @@ table() ->
      {<<"collectgarbage">>,#erl_mfa{m=?MODULE,f=collectgarbage}},
      {<<"dofile">>,#erl_mfa{m=?MODULE,f=dofile}},
      {<<"eprint">>,#erl_mfa{m=?MODULE,f=eprint}},
-     {<<"error">>,#erl_mfa{m=?MODULE,f=basic_error}},
+     {<<"error">>,#erl_mfa{m=?MODULE,f=error_call}},
      {<<"getmetatable">>,#erl_mfa{m=?MODULE,f=getmetatable}},
      {<<"ipairs">>,#erl_mfa{m=?MODULE,f=ipairs}},
      {<<"load">>,#erl_mfa{m=?MODULE,f=load}},
@@ -94,17 +94,20 @@ eprint(_, Args, St) ->
     io:nl(),
     {[],St}.
 
--spec basic_error(_, _, _) -> no_return().
+-spec error_call(_, _, _) -> no_return().
 
-basic_error(_, [{tref, _}=T|_], St0) ->
+%% error_call(Args, State) -> no_return().
+%%  Generate an error with an error string.
+
+error_call(_, [{tref, _}=T|_]=As, St0) ->
     case luerl_heap:get_metamethod(T, <<"__tostring">>, St0) of
-        nil -> lua_error({error_call, T}, St0);
+        nil -> lua_error({error_call, As}, St0);
         Meta ->
-            {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
-            lua_error({error_call, Ret}, St1)
+            {Rets, St1} = luerl_emul:functioncall(Meta, [T], St0),
+            lua_error({error_call, Rets}, St1)
     end;
-basic_error(_, [M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
-basic_error(_, As, St) -> badarg_error(error, As, St).
+error_call(_, As, St) ->                       %Never returns!
+    lua_error({error_call, As}, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
 %%  Return a function which on successive calls returns successive
@@ -407,17 +410,20 @@ load_ret({error,[{_,Mod,E}|_],_}, St) ->
 
 pcall(_, [F|As], St0) ->
     try
-	{Rs,St1} = luerl_emul:functioncall(F, As, St0),
-	{[true|Rs],St1}
+        {Rs,St1} = luerl_emul:functioncall(F, As, St0),
+        {[true|Rs],St1}
     catch
-	%% Only catch Lua errors here, signal system errors.
-	error:{lua_error,{error_call, E},St2} ->
-	    {[false,E],St2};
-	error:{lua_error,E,St2} ->
-	    %% io:format("pc ~w\n", [E]),
-	    %% Basic formatting for now.
-	    Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
-	    {[false,Msg],St2}
+        %% Only catch Lua errors here, signal system errors.
+        error:{lua_error,{error_call, Eas},St2} ->
+            Msg = case Eas of
+                      [E|_] -> tostring(E);
+                      [] -> <<"nil">>
+                  end,
+            {[false,Msg],St2};
+        error:{lua_error,E,St2} ->
+            %% Basic formatting for now.
+            Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
+            {[false,Msg],St2}
     end.
 
 %% Lua 5.1 compatibility functions.
