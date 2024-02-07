@@ -6,19 +6,28 @@
 -export([all/0]).
 -export([os_date/1]).
 
+-if(?OTP_RELEASE >= 25).
+-define(START_NODE(Name, Env), (fun(Name, Env) -> 
+    case ?CT_PEER(#{name => Name, env => Env}) of
+        {ok, _PeerPid, Node} ->
+            {ok, Node};
+        Err = {error, _Reason, _NodeName} ->
+            Err
+    end
+end)(Name, Env)).
+-else.
+-define(START_NODE(Name, Env), (fun(Name, Env) -> 
+    ct_slave:start(Name, [{env, Env}, {monitor_master, true}])
+end)(Name, Env)).
+-endif.
+
 all() ->
   lists:flatten([windows_tests(), linux_tests()]).
 
 os_date(_Config) ->
-    {ok, _, LusakaNode} = ?CT_PEER(#{
-        name => africa_lusaka,
-        env => [{"TZ", "Africa/Lusaka"}]
-    }),
+    {ok, LusakaNode} = ?START_NODE(africa_lusaka, [{"TZ", "Africa/Lusaka"}]),
     ok = set_path(LusakaNode),
-    {ok, _, LondonNode} = ?CT_PEER(#{
-        name => europe_london,
-        env => [{"TZ", "Europe/London"}]
-    }),
+    {ok, LondonNode} = ?START_NODE(europe_london, [{"TZ", "Europe/London"}]),
     ok = set_path(LondonNode),
     LusakaLocalTime = rpc:call(LusakaNode, calendar, local_time, []),
     LondonLocalTime = rpc:call(LondonNode, calendar, local_time, []),
