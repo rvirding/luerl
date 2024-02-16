@@ -219,7 +219,7 @@ repeat_stmt(#repeat_stmt{body=B}, St0) ->
 %%  test-block. This means more nested calls but simpler emulator
 %%  code.
 
-if_stmt(#if_stmt{tests=Ts,else=E}, St) ->
+if_stmt(#if_stmt{tests=Ts,else_block=E}, St) ->
     if_tests(Ts, E, St).
 
 if_tests([{E,B}], #block{body=[]}, St0) ->
