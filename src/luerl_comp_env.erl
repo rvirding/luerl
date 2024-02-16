@@ -252,10 +252,10 @@ repeat_stmt(#repeat_stmt{body=B0}=R, St0) ->
 
 %% if_stmt(If, State) -> {If,State}.
 
-if_stmt(#if_stmt{tests=Ts0,else=E0}=I, St0) ->
+if_stmt(#if_stmt{tests=Ts0,else_block=E0}=I, St0) ->
     {Ts1,St1} = if_tests(Ts0, St0),
     {E1,St2} = do_block(E0, St1),
-    {I#if_stmt{tests=Ts1,else=E1},St2}.
+    {I#if_stmt{tests=Ts1,else_block=E1},St2}.
 
 if_tests([{E0,B0}|Ts0], St0) ->
     {E1,St1} = exp(E0, St0),

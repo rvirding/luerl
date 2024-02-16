@@ -74,7 +74,7 @@
 		    gens,			%Generators
 		    body=[]}).			%Loop body
 
--record(if_stmt, {l,tests=[],else}).
+-record(if_stmt, {l,tests=[],else_block}).
 
 -record(local_assign_stmt, {l,vars,exps}).
 
