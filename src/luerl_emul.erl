@@ -1201,7 +1201,7 @@ do_numeric_op(Op, Ns, St, Raw) ->
     try
         {value,apply(Raw, Ns),St}
     catch
-        _:_:_ ->
+        ?CATCH(_, _, _)
             {error,{badarith,Op,Ns},St}
     end.
 
