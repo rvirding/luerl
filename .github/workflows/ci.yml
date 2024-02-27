@@ -17,7 +17,7 @@ jobs:
     name: Erlang/OTP ${{matrix.otp}}
     strategy:
       matrix:
-        otp: ['21', '22', '23', '24', '25', '26']
+        otp: ['24', '25', '26']
         rebar3: ['3.22']
     steps:
       - uses: actions/checkout@v4
