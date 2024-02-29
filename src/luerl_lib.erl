@@ -134,7 +134,7 @@ format_error(Format, Vals) ->
 format_value(nil) -> <<"nil">>;
 format_value(N) when is_integer(N) -> integer_to_list(N);
 format_value(N) when is_float(N) -> float_to_list(N);
-format_value(B) when is_boolean(B) -> atom_to_binary(B);
+format_value(B) when is_boolean(B) -> atom_to_binary(B, utf8);
 format_value(B) when is_binary(B) ->
     %% A luerl string which we print with quotes around it.
     %% Note that the string can contain unicode codepoints.
@@ -144,14 +144,14 @@ format_value(#usdref{}) -> <<"userdata">>;
 format_value(#funref{}) -> <<"function">>;
 format_value(#erl_func{code=Fun}) ->
     {name,Name} = erlang:fun_info(Fun, name),
-    atom_to_binary(Name);
-format_value(#erl_mfa{f=Func}) -> atom_to_binary(Func);
+    atom_to_binary(Name, utf8);
+format_value(#erl_mfa{f=Func}) -> atom_to_binary(Func, utf8);
 format_value(List) when is_list(List) ->
     Pl = lists:map(fun format_value/1, List),
     lists:join($\,, Pl);
 %% Treat atoms as binary strings here, probably just a name.
 format_value(A) when is_atom(A) ->
-    [$\',atom_to_list(A),$\'];
+    [$\',atom_to_binary(A, utf8),$\'];
 %% Everything else just straight through.
 format_value(_Other) -> <<"unknown stuff">>.
 
