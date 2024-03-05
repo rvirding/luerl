@@ -110,14 +110,23 @@ format_error({error_message,Msg}) ->
     Msg;
 %% Error is called.
 format_error({error_call,Args}) ->
-    Type = case Args of
-	       [A|_] -> luerl_lib_basic:type(A);
-	       [] -> <<"nil">>
-	   end,
-    <<"error object is a ",Type/binary," value">>;
+    format_error_call(Args);
 %% Everything we don't recognise or know about.
 format_error(Error) ->
     unicode:characters_to_binary(io_lib:format(<<"~w!">>, [Error])).
+
+%% format_error_call(Args) -> ErrorString.
+%%  Just get it more or less equivalent to what Lua does.
+
+format_error_call([A|_]) when is_binary(A) -> A;
+format_error_call([A|_]) when is_number(A) ->
+    iolist_to_binary(format_value(A));
+format_error_call(Args) ->
+    Type = case Args of
+               [A|_] -> luerl_lib_basic:type(A);
+               [] -> <<"nil">>
+           end,
+    <<"error object is a ",Type/binary," value">>.
 
 %% format_error(FormatString, Values) -> ErrorString.
 %%  Useful when all the values in the list need to be formatted
@@ -132,9 +141,9 @@ format_error(Format, Vals) ->
 %%  to use when printing error messages.
 
 format_value(nil) -> <<"nil">>;
-format_value(N) when is_integer(N) -> integer_to_list(N);
-format_value(N) when is_float(N) -> float_to_list(N);
-format_value(B) when is_boolean(B) -> atom_to_binary(B, utf8);
+format_value(true) -> <<"true">>;
+format_value(false) -> <<"false">>;
+format_value(N) when is_number(N) -> io_lib:write(N);
 format_value(B) when is_binary(B) ->
     %% A luerl string which we print with quotes around it.
     %% Note that the string can contain unicode codepoints.
