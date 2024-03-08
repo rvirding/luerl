@@ -15,7 +15,7 @@
 
 {application, luerl,
  [{description, "Luerl - an implementation of Lua on Erlang"},
-  {vsn, "1.1.1"},
+  {vsn, "1.2"},
   {modules, []},
   {registered, []},
   {applications, [kernel, stdlib]},
@@ -24,9 +24,11 @@
   {maintainers, ["Robert Virding"]},
 
   %% Project metadata
-  {licenses, ["Apache 2.0"]},
+  {licenses, ["Apache-2.0"]},
   {links, [{"Github", "https://github.com/rvirding/luerl"}]},
-  {files, ["README.md", "LICENSE", "VERSION", "src", "doc", "ebin",
-           "examples", "include", "test", "rebar.*", "*akefile",
-           "*.escript"]}
+  %% This is used for hex packages.
+  {files, ["README.md", "LICENSE", "VERSION", "src", "doc", "ebin/luerl.app",
+           "include", "rebar.*", "*akefile",
+           "*.escript"]},
+  {exclude_files, ["priv/images/*"]}
  ]}.

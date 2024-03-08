@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2020 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -21,9 +21,12 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,assert/3,basic_error/3,collectgarbage/3,dofile/3,eprint/3,getmetatable/3,ipairs/3,
-         ipairs_next/3,load/3,loadfile/3,loadstring/3,next/3,pairs/3,pcall/3,print/3,rawequal/3,
-         rawget/3,rawlen/3,rawset/3,select/3, setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
+-export([install/1,assert/3,error_call/3,collectgarbage/3,dofile/3,
+         eprint/3,getmetatable/3,ipairs/3,ipairs_next/3,
+         load/3,loadfile/3,loadstring/3,
+         next/3,pairs/3,pcall/3,print/3,
+         rawequal/3,rawget/3,rawlen/3,rawset/3,
+         select/3,setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([print/2,tostring/1,tostring/2,type/1]).
@@ -42,7 +45,7 @@ table() ->
      {<<"collectgarbage">>,#erl_mfa{m=?MODULE,f=collectgarbage}},
      {<<"dofile">>,#erl_mfa{m=?MODULE,f=dofile}},
      {<<"eprint">>,#erl_mfa{m=?MODULE,f=eprint}},
-     {<<"error">>,#erl_mfa{m=?MODULE,f=basic_error}},
+     {<<"error">>,#erl_mfa{m=?MODULE,f=error_call}},
      {<<"getmetatable">>,#erl_mfa{m=?MODULE,f=getmetatable}},
      {<<"ipairs">>,#erl_mfa{m=?MODULE,f=ipairs}},
      {<<"load">>,#erl_mfa{m=?MODULE,f=load}},
@@ -61,7 +64,7 @@ table() ->
      {<<"tonumber">>,#erl_mfa{m=?MODULE,f=tonumber}},
      {<<"tostring">>,#erl_mfa{m=?MODULE,f=tostring}},
      {<<"type">>,#erl_mfa{m=?MODULE,f=type}},
-     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}	%For Lua 5.1 compatibility
+     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}    %For Lua 5.1 compatibility
     ].
 
 assert(_, As, St) ->
@@ -91,17 +94,20 @@ eprint(_, Args, St) ->
     io:nl(),
     {[],St}.
 
--spec basic_error(_, _, _) -> no_return().
+-spec error_call(_, _, _) -> no_return().
 
-basic_error(_, [{tref, _}=T|_], St0) ->
+%% error_call(Args, State) -> no_return().
+%%  Generate an error with an error string.
+
+error_call(_, [{tref, _}=T|_]=As, St0) ->
     case luerl_heap:get_metamethod(T, <<"__tostring">>, St0) of
-        nil -> lua_error({error_call, T}, St0);
+        nil -> lua_error({error_call, As}, St0);
         Meta ->
-            {[Ret|_], St1} = luerl_emul:functioncall(Meta, [T], St0),
-            lua_error({error_call, Ret}, St1)
+            {Rets, St1} = luerl_emul:functioncall(Meta, [T], St0),
+            lua_error({error_call, Rets}, St1)
     end;
-basic_error(_, [M|_], St) -> lua_error({error_call, M}, St);	%Never returns!
-basic_error(_, As, St) -> badarg_error(error, As, St).
+error_call(_, As, St) ->                       %Never returns!
+    lua_error({error_call, As}, St).
 
 %% ipairs(Args, State) -> {[Func,Table,FirstKey],State}.
 %%  Return a function which on successive calls returns successive
@@ -198,16 +204,13 @@ next_key(K, Dict, St) ->
 print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
 			      {[Str],S1} = tostring([A], S0),
-			      io:format("~ts ", [print_string(Str)]),
+			      io:format("~ts ", [Str]),
 			      S1
 		      end, St0, Args),
     io:nl(),
     {[],St1}.
-print(Args, St0) -> print(nil, Args, St0).
 
-print_string(<<C/utf8,S/binary>>) -> [C|print_string(S)];
-print_string(<<_,S/binary>>) -> [$?|print_string(S)];
-print_string(<<>>) -> [].
+print(Args, St0) -> print(nil, Args, St0).
 
 %% rawequal([Arg,Arg|_], State) -> {[Bool],State}.
 %% rawlen([Object|_], State) -> {[Length],State}.
@@ -238,7 +241,6 @@ rawset(_, As, St) -> badarg_error(rawset, As, St).
 
 select(_, [<<$#>>|As], St) -> {[float(length(As))],St};
 select(_, [A|As], St) ->
-    %%io:fwrite("sel:~p\n", [[A|As]]),
     Len = length(As),
     case luerl_lib:arg_to_integer(A) of
 	N when is_integer(N), N > 0 -> {select_front(N, As, Len),St};
@@ -357,7 +359,8 @@ do_setmetatable(#tref{}=Tref, Meta, St0) ->
 dofile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
 	[File] ->
-	    Ret = luerl_comp:file(File),	%Compile the file
+            %% Compile the file so it returns errors.
+	    Ret = luerl_comp:file(File, [verbose,return]),
 	    dofile_ret(Ret, As, St);
 	_ -> badarg_error(dofile, As, St)
     end.
@@ -365,54 +368,62 @@ dofile(_, As, St) ->
 dofile_ret({ok,Chunk}, _, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     luerl_emul:call(Func, [], St1);
-dofile_ret({error,_,_}, As, St) ->
-    badarg_error(dofile, As, St).
+dofile_ret({error,[{_,Mod,E}|_],_}, _As, St) ->
+    Msg = unicode:characters_to_binary(Mod:format_error(E)),
+    lua_error({error_message,Msg}, St).
 
 %% Load string and files.
 
 load(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_string,lua_any]) of
-	[S|_] ->
-	    Ret = luerl_comp:string(S),		%Compile the string
-	    load_ret(Ret, St);
-	error -> badarg_error(load, As, St)
+        [S|_] ->
+            %% Compile the string so it returns errors.
+            Ret = luerl_comp:string(S, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(load, As, St)
     end.
 
 loadfile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string,lua_string,lua_any]) of
-	[F|_] ->
-	    Ret = luerl_comp:file(F),		%Compile the file
-	    load_ret(Ret, St);
-	error -> badarg_error(loadfile, As, St)
+        [F|_] ->
+            %% Compile the file so it returns errors.
+            Ret = luerl_comp:file(F, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(loadfile, As, St)
     end.
 
 loadstring(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
-	[S] ->
-	    Ret = luerl_comp:string(S),		%Compile the string
-	    load_ret(Ret, St);
-	error -> badarg_error(loadstring, As, St)
+        [S] ->
+            %% Compile the string so it returns errors.
+            Ret = luerl_comp:string(S, [verbose,return]),
+            load_ret(Ret, St);
+        error -> badarg_error(loadstring, As, St)
     end.
 
 load_ret({ok,Chunk}, St0) ->
     {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
     {[Func],St1};
 load_ret({error,[{_,Mod,E}|_],_}, St) ->
-    Msg = iolist_to_binary(Mod:format_error(E)),
+    Msg = unicode:characters_to_binary(Mod:format_error(E)),
     {[nil,Msg],St}.
 
 pcall(_, [F|As], St0) ->
     try
-	{Rs,St1} = luerl_emul:functioncall(F, As, St0),
-	{[true|Rs],St1}
+        {Rs,St1} = luerl_emul:functioncall(F, As, St0),
+        {[true|Rs],St1}
     catch
-	%% Only catch Lua errors here, signal system errors.
-	error:{lua_error,{error_call, E},St2} ->
-	    {[false,E],St2};
-	error:{lua_error,E,St2} ->
-	    %% Basic formatting for now.
-	    Msg = iolist_to_binary(luerl_lib:format_error(E)),
-	    {[false,Msg],St2}
+        %% Only catch Lua errors here, signal system errors.
+        error:{lua_error,{error_call, Eas},St2} ->
+            Msg = case Eas of
+                      [E|_] -> tostring(E);
+                      [] -> <<"nil">>
+                  end,
+            {[false,Msg],St2};
+        error:{lua_error,E,St2} ->
+            %% Basic formatting for now.
+            Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
+            {[false,Msg],St2}
     end.
 
 %% Lua 5.1 compatibility functions.

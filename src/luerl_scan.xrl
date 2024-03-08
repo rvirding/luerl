@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -75,10 +75,18 @@ Rules.
 	string_token(TokenChars, TokenLen, TokenLine).
 \'(\\.|\\\n|[^'\\])*\' :
 	string_token(TokenChars, TokenLen, TokenLine).
+%% Handle multi line strings, [[ ]], [=[ ]=], [==[ ]==]
+%% This gets a bit tedious as we have to each case separately.
 \[\[([^]]|\][^]])*\]\] :
-	%% Strip quotes.
-	Cs = string:substr(TokenChars, 3, TokenLen - 4),
- 	long_bracket(TokenLine, Cs).
+	long_string_token(TokenChars, TokenLen, 2, TokenLine).
+\[=\[([^]]|\](=[^]]|[^=]))*\]=\] :
+	long_string_token(TokenChars, TokenLen, 3, TokenLine).
+\[==\[([^]]|\](==[^]]|=[^=]|[^=]))*\]==\] :
+	long_string_token(TokenChars, TokenLen, 4, TokenLine).
+\[===\[([^]]|\](===[^]]|==[^=]|=[^=]|[^=]))*\]===\] :
+	long_string_token(TokenChars, TokenLen, 5, TokenLine).
+
+%% \[==\[([^]]|\]==[^]]|\]=[^=]|\][^=])*\]==\] :
 
 %% Other known tokens.
 \+  : {token,{'+',TokenLine}}.
@@ -203,7 +211,7 @@ hex_fraction([C|Cs], Pow, SoFar) when C >= $A, C =< $F ->
 hex_fraction([], _Pow, SoFar) -> SoFar.
 
 %% string_token(InputChars, Length, Line) ->
-%%      {token,{'LITERALSTRING',Line,Cs}} | {error,E}.
+%%     {token,{'LITERALSTRING',Line,Cs}} | {error,Error}.
 %%  Convert an input string into the corresponding string characters.
 %%  We know that the input string is correct.
 
@@ -239,6 +247,24 @@ string_chars([C | Cs], Acc) -> string_chars(Cs, [C|Acc]);
 string_chars([], []) -> [];
 string_chars([], Acc) ->
     [lists:reverse(Acc)].
+
+%% long_string_token(InputChars, Length, BracketLength, Line) ->
+%%     {token,{'LITERALSTRING',Line,Cs}} | {error,Error}.
+
+long_string_token(Cs0, Len, BrLen, Line) ->
+    %% Strip the brackets and remove first char if a newline.
+    %% Note we export Cs1 here, :-)
+    case string:substr(Cs0, BrLen+1, Len - 2*BrLen) of
+	[$\n | Cs1] -> Cs1;
+	Cs1 -> Cs1
+    end,
+    try
+	String = unicode:characters_to_binary(Cs1, utf8, utf8),
+	{token,{'LITERALSTRING',Line,String}}
+    catch
+	_:_ ->
+	    {error,"illegal string"}
+    end.
 
 %% bq_chars(Chars)
 %%  Handle the backquotes characters. These always fit directly into
@@ -297,13 +323,6 @@ escape_char($e) -> $\e;				%\e = ESC
 escape_char($s) -> $\s;				%\s = SPC
 escape_char($d) -> $\d;				%\d = DEL
 escape_char(C) -> C.
-
-long_bracket(Line, [$\n|Cs]) ->
-    S = list_to_binary(Cs),
-    {token,{'LITERALSTRING',Line,S}};
-long_bracket(Line, Cs) ->
-    S = list_to_binary(Cs),
-    {token,{'LITERALSTRING',Line,S}}.
 
 %% is_keyword(Name) -> boolean().
 %%  Test if the name is a keyword.

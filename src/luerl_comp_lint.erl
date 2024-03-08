@@ -132,7 +132,7 @@ while_stmt(#while_stmt{exp=Exp,body=Ss}, St0) ->
 repeat_stmt(#repeat_stmt{body=Ss}, St) ->
     block(Ss, St).
 
-if_stmt(#if_stmt{tests=Ts,else=Else}, St0) ->
+if_stmt(#if_stmt{tests=Ts,else_block=Else}, St0) ->
     Fun = fun ({E,B}, S0) ->
                   S1 = exp(E, S0),
                   block(B, S1)

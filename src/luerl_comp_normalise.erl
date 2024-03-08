@@ -163,7 +163,7 @@ if_stmt(Line, Tests, Else, St0) ->
     {Cts,St1} = if_tests(Line, Tests, St0),
     {Ce,St2} = block(Line, Else, St1),
     Anno = line_file_anno(Line, St2),
-    {#if_stmt{l=Anno,tests=Cts,else=Ce},St2}.
+    {#if_stmt{l=Anno,tests=Cts,else_block=Ce},St2}.
 
 if_tests(L, Ts, St) ->
     Test = fun ({T,B}, S0) ->

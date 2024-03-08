@@ -27,6 +27,8 @@ OTPRelease =
                     %% If OTP <= R16, take the digits.
                     [N1|Rest];
                 Rel ->
+                    %% If OTP >= 17.x, erlang:system_info(otp_release) returns
+                    %% just the major version number.
                     File = filename:join([code:root_dir(),"releases",Rel,"OTP_VERSION"]),
                     case file:read_file(File) of
                         {error, _} -> Rel;
@@ -83,10 +85,12 @@ Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
                 Conf0 ++ [{erl_opts,Copts}]
         end,
 
-TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
+%% TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
 
-Aliases = [{alias, [
-    {test, [eunit, {ct, "--cover"}, cover]}
-]}],
+%% Aliases = [{alias, [
+%%     {test, [eunit, {ct, "--cover"}, cover]}
+%% ]}],
 
-Conf1 ++ TestConfig ++ Aliases.
+%% Conf1 ++ TestConfig ++ Aliases.
+
+Conf1.

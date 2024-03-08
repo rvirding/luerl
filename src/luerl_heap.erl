@@ -1,4 +1,4 @@
-%% Copyright (c) 2020 Robert Virding
+%% Copyright (c) 2020-2023 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -464,6 +464,7 @@ set_funcdef(#funref{i=N}, Func, #luerl{fncs=Fst0}=St) ->
     Fst1 = set_tstruct(N, Func, Fst0),
     St#luerl{fncs=Fst1}.
 
+%% get_metamethod(Object, Event, State) -> Method | nil
 %% get_metamethod(Object1, Object2, Event, State) -> Method | nil
 %%
 %% Get the metamethod for object(s).

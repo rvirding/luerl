@@ -1,3 +1,5 @@
+.rebar3
+_*
 *.beam
 *.o
 *.plt
@@ -6,7 +8,6 @@
 *~
 .DS_Store
 .rebar/*
-.rebar3
 .eunit
 .erlang.cookie
 _build
@@ -19,4 +20,5 @@ log
 logs
 .idea
 *.iml
+rebar3.crashdump
 erl_crash.dump
