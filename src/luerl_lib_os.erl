@@ -241,8 +241,21 @@ difftime(_, [T2,T1|_], St) ->
     {[T2 - T1],St};
 difftime(_, As, St) -> badarg_error(difftime, As, St).
 
+time(_, As=[#tref{}=Tref], St) ->
+    L = luerl_new:decode(Tref, St),
+    compute_time(proplists:to_map(L), As, St);
 time(_, _, St) ->                                  %Time since 1 Jan 1970
     {[current_timestamp()],St}.
+
+compute_time(Map=#{<<"year">> := Y, <<"month">> := Mth, <<"day">> := D}, _, St) ->
+    H = maps:get(<<"hour">>, Map, 12),
+    Min = maps:get(<<"min">>, Map, 0),
+    S = maps:get(<<"sec">>, Map, 0),
+    %% 62167219200 = calendar:datetime_to_gregorian_seconds({1970, 1, 1}, {0, 0, 0})
+    Result = calendar:datetime_to_gregorian_seconds({{Y, Mth, D}, {H, Min, S}}) - 62167219200,
+    {[Result],St};
+compute_time(_, As, St) ->
+    badarg_error(time, As, St).
 
 current_timestamp() ->
     {Mega,Sec,Micro} = os:timestamp(),
