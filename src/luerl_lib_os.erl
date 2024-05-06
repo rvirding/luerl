@@ -251,8 +251,8 @@ compute_time(Map=#{<<"year">> := Y, <<"month">> := Mth, <<"day">> := D}, _, St) 
     H = maps:get(<<"hour">>, Map, 12),
     Min = maps:get(<<"min">>, Map, 0),
     S = maps:get(<<"sec">>, Map, 0),
-    %% 62167219200 = calendar:datetime_to_gregorian_seconds({1970, 1, 1}, {0, 0, 0})
-    Result = calendar:datetime_to_gregorian_seconds({{Y, Mth, D}, {H, Min, S}}) - 62167219200,
+    LocalEpoch = calendar:universal_time_to_local_time({{1970,1,1},{0,0,0}}),
+    Result = calendar:datetime_to_gregorian_seconds({{Y, Mth, D}, {H, Min, S}}) - calendar:datetime_to_gregorian_seconds(LocalEpoch),
     {[Result],St};
 compute_time(_, As, St) ->
     badarg_error(time, As, St).
