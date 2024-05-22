@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -26,8 +26,9 @@
 Expect 2.					%Suppress shift/reduce warning
 
 Nonterminals
-chunk block stats stat semi retstat label_stat
-while_stat repeat_stat if_stat if_elseif if_else for_stat local_decl
+chunk block stats stat semi retstat label_stat break_stat
+goto_stat block_stat while_stat repeat_stat if_stat if_elseif if_else
+for_stat local_decl
 funcname dottedname varlist var namelist
 explist exp prefixexp args
 functioncall
@@ -86,17 +87,23 @@ stat -> varlist '=' explist : {assign,line('$2'),'$1','$3'} .
 %%stat -> functioncall : '$1' .
 stat -> prefixexp : check_functioncall('$1') .
 stat -> label_stat : '$1' .
-stat -> 'break' : {break,line('$1')} .
-stat -> 'goto' NAME : {goto,line('$1'),'$2'} .
-stat -> 'do' block 'end' : {block,line('$1'),'$2'} .
+stat -> break_stat : '$1' .
+stat -> goto_stat : '$1' .
+stat -> block_stat : '$1' .
 stat -> while_stat : '$1' .
 stat -> repeat_stat : '$1' .
 stat -> if_stat : '$1' .
 stat -> for_stat : '$1' .
-stat -> function funcname funcbody : functiondef(line('$1'),'$2','$3') .
-stat -> local local_decl : {local,line('$1'),'$2'} .
+stat -> 'function' funcname funcbody : functiondef(line('$1'),'$2','$3') .
+stat -> 'local' local_decl : {local,line('$1'),'$2'} .
 
 label_stat -> '::' NAME '::' : {label,line('$1'),'$2'} .
+
+break_stat -> 'break' : {break,line('$1')} .
+
+goto_stat -> 'goto' NAME : {goto,line('$1'),'$2'} .
+
+block_stat -> 'do' block 'end' : {block,line('$1'),'$2'} .
 
 while_stat -> 'while' exp 'do' block 'end' : {while,line('$1'),'$2','$4'} .
 
@@ -165,9 +172,9 @@ prefixexp -> functioncall : '$1' .
 prefixexp -> '(' exp ')' : {single,line('$1'),'$2'} .
 
 functioncall -> prefixexp args :
-		    dot_append(line('$1'), '$1', {functioncall,line('$1'), '$2'}) .
+		    {functioncall, line('$1'), '$1', '$2'}.
 functioncall -> prefixexp ':' NAME args :
-		    dot_append(line('$2'), '$1', {methodcall,line('$2'),'$3','$4'}) .
+		    {methodcall, line('$2'), '$1', '$3', '$4'}.
 
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
@@ -281,9 +288,7 @@ dot_append(Line, H, Last) -> {'.',Line,H,Last}.
 %% check_functioncall(PrefixExp) -> PrefixExp.
 %%  Check that the PrefixExp is a proper function call/method.
 
-check_functioncall({functioncall,_,_}=C) -> C;
-check_functioncall({methodcall,_,_,_}=M) -> M;
-check_functioncall({'.',L,H,T}) ->
-    {'.',L,H,check_functioncall(T)};
+check_functioncall({functioncall,_Line,_Function,_Args}=C) -> C;
+check_functioncall({methodcall,_Line,_Class,_Method,_Args}=M) -> M;
 check_functioncall(Other) ->
     return_error(line(Other),"illegal call").

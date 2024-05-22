@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -62,7 +62,7 @@
 
 -record(while_stmt, {l,exp,body=[]}).
 
--record(repeat_stmt, {l,body=[]}).
+-record(repeat_stmt, {l,body=[],exp}).
 
 -record(nfor_stmt, {l,
 		    var,			%Loop variable
@@ -111,21 +111,21 @@
 
 -record(dot, {l,exp,rest}).
 
--record(single, {l,exp}).
+-record(single, {l,exp}).                       %Single value
 
 -record(var, {l,name}).
 
--record(fcall, {l,args=[]}).			%Function call
+-record(fcall, {l,func,args=[]}).               %Function call
 
--record(mcall, {l,meth,args=[]}).		%Method call
+-record(mcall, {l,class,meth,args=[]}).         %Method call
 
 -record(key, {l,key}).
 
--record(tabcon, {l,fields=[]}).			%Table constructor
+-record(tabcon, {l,fields=[]}).                 %Table constructor
 
--record(efield, {l,val}).
+-record(efield, {l,val}).                       %Expression field
 
--record(kfield, {l,key,val}).
+-record(kfield, {l,key,val}).                   %Key value field
 
 %% Variable types.
 %%  The line number here, 'l', can be a line number or annotation list.

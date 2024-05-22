@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -80,7 +80,6 @@ add_current_line(Line, #c_cg{vfile=Vfile}=St) ->
 %% stmt(Stmt, LocalVars, State) -> {Istmt,State}.
 
 stmt(#assign_stmt{}=A, _, St) -> assign_stmt(A, St);
-stmt(#call_stmt{}=C, _, St) -> call_stmt(C, St);
 stmt(#return_stmt{}=R, _, St) -> return_stmt(R, St);
 stmt(#break_stmt{}, _, St) -> {[?BREAK],St};
 stmt(#block_stmt{}=B, _, St) -> block_stmt(B, St);
@@ -93,8 +92,8 @@ stmt(#local_assign_stmt{}=L, _, St) ->
     local_assign_stmt(L, St);
 stmt(#local_fdef_stmt{}=L, _, St) ->
     local_fdef_stmt(L, St);
-stmt(#expr_stmt{}=E, _, St) ->
-    expr_stmt(E, St).
+stmt(#call_stmt{}=C, _, St) ->
+    call_stmt(C, St).
 
 %% assign_stmt(Assign, State) -> {AssignIs,State}.
 %%  We must evaluate all expressions, even the unneeded ones.
@@ -210,9 +209,10 @@ while_stmt(#while_stmt{exp=E,body=B}, St0) ->
 
 %% repeat_stmt(Repeat, State) -> {RepeatIs,State}.
 
-repeat_stmt(#repeat_stmt{body=B}, St0) ->
+repeat_stmt(#repeat_stmt{body=B,exp=E}, St0) ->
     {Ib,St1} = do_block(B, St0),
-    {[?REPEAT(Ib)],St1}.
+    {Ie,St2} = exp(E, single, St1),
+    {[?REPEAT(Ib ++ Ie)],St2}.
 
 %% if_stmt(If, State) -> {IfIs,State}.
 %%  We generate code which "steps down" the sequence of
@@ -335,14 +335,6 @@ local_fdef_stmt(#local_fdef_stmt{var=V,func=F}, St0) ->
     {If,St1} = functiondef(F, St0),
     {If ++ set_var(V),St1}.
 
-%% expr_stmt(Expr, State) -> {ExprIs,State}.
-%%  The expression pseudo statement. This will return a single value
-%%  which we leave on the stack.
-
-expr_stmt(#expr_stmt{exp=Exp}, St0) ->
-    {Ie,St1} = exp(Exp, single, St0),
-    {Ie,St1}.
-
 %% explist(Exprs, Values, State) -> {Instrs,State}.
 %% exp(Expr, Values, State) -> {Instrs,State}.
 %%  Values determines if we are to only return the first value of a
@@ -407,10 +399,14 @@ prefixexp(#dot{exp=Exp,rest=Rest}, S, St0) ->
 prefixexp(Exp, S, St) -> prefixexp_first(Exp, S, St).
 
 prefixexp_first(#single{exp=E}, S, St0) ->
-    {Ie,St1} = exp(E, single, St0),		%Will make it single
+    {Ie,St1} = exp(E, single, St0),             %Will make it single
     {multiple_values(S, Ie),St1};
-prefixexp_first(Var, S, St) ->
-    {multiple_values(S, get_var(Var)),St}.
+prefixexp_first(Var, S, St) when is_record(Var, lvar) ;
+                                 is_record(Var, evar) ;
+                                 is_record(Var, gvar) ->
+    {multiple_values(S, get_var(Var)),St};
+prefixexp_first(Exp, S, St) ->
+    prefixexp_element(Exp, S, St).
 
 prefixexp_rest(#dot{exp=Exp,rest=Rest}, S, St0) ->
     {Ie,St1} = prefixexp_element(Exp, single, St0),
@@ -423,28 +419,16 @@ prefixexp_element(#key{key=#lit{val=K}}, S, St) ->
 prefixexp_element(#key{key=E}, S, St0) ->
     {Ie,St1} = exp(E, single, St0),
     {Ie ++ multiple_values(S, [?GET_KEY]),St1};
-%% prefixexp_element(#fcall{args=[]}, S, St) ->
-%%     Ifs = [?FCALL(0)],
-%%     {single_value(S, Ifs),St};			%Function call returns list
-%% prefixexp_element(#fcall{args=As}, S, St0) ->
-%%     {Ias,St1} = explist(As, multiple, St0),
-%%     Ifs = Ias ++ [?FCALL(length(As))],
-%%     {single_value(S, Ifs),St1};			%Function call returns list
-prefixexp_element(#fcall{args=As}, S, St0) ->
-    {Ias,St1} = explist(As, multiple, St0),
-    Ifs = Ias ++ [?POP_ARGS(length(As)),?FCALL],
-    {single_value(S, Ifs),St1};			%Function call returns list
-%% prefixexp_element(#mcall{meth=#lit{val=K},args=[]}, S, St) ->
-%%     Ims = [?MCALL(K, 0)],
-%%     {single_value(S, Ims),St};			%Method call returns list
-%% prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
-%%     {Ias,St1} = explist(As, multiple, St0),
-%%     Ims = Ias ++ [?MCALL(K, length(As))],
-%%     {single_value(S, Ims),St1}.			%Method call returns list
-prefixexp_element(#mcall{meth=#lit{val=K},args=As}, S, St0) ->
-    {Ias,St1} = explist(As, multiple, St0),
-    Ims = Ias ++ [?POP_ARGS(length(As)),?MCALL(K)],
-    {single_value(S, Ims),St1}.			%Method call returns list
+prefixexp_element(#fcall{func=F,args=As}, S, St0) ->
+    {If,St1} = exp(F, single, St0),
+    {Ias,St2} = explist(As, multiple, St1),
+    Ifs = If ++ Ias ++ [?POP_ARGS(length(As)),?FCALL],
+    {single_value(S, Ifs),St2};                 %Function call returns list
+prefixexp_element(#mcall{class=C,meth=#lit{val=K},args=As}, S, St0) ->
+    {Ic,St1} = exp(C, single, St0),
+    {Ias,St2} = explist(As, multiple, St1),
+    Ims = Ic ++ Ias ++ [?POP_ARGS(length(As)),?MCALL(K)],
+    {single_value(S, Ims),St2}.                 %Method call returns list
 
 %% functiondef(Func, State) -> {Func,State}.
 %%  This will return a single value which we leave on the stack. Set

@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -62,7 +62,6 @@ update_vars(#vars{local=Lo,free=Fr,used=Us,fused=Fu}, New, Used, Fused) ->
 %% stmt(Stmt, LocalVars, State) -> {Stmt,NewVars,UsedVars,FusedVars,State}.
 
 stmt(#assign_stmt{}=A, Loc, St) -> assign_stmt(A, Loc, St);
-stmt(#call_stmt{}=C, Loc, St) -> call_stmt(C, Loc, St);
 stmt(#return_stmt{}=R, Loc, St) -> return_stmt(R, Loc, St);
 stmt(#break_stmt{}=B, _, St) -> {B,[],[],[],St};
 stmt(#block_stmt{}=B, Loc, St) -> block_stmt(B, Loc, St);
@@ -75,9 +74,8 @@ stmt(#local_assign_stmt{}=L, Loc, St) ->
     local_assign_stmt(L, Loc, St);
 stmt(#local_fdef_stmt{}=L, Loc, St) ->
     local_fdef_stmt(L, Loc, St);
-stmt(#expr_stmt{}=E, Loc, St) ->		%Expressions "statement"
-    expr_stmt(E, Loc, St).
-
+stmt(#call_stmt{}=C, Loc, St) ->
+    call_stmt(C, Loc, St).
 
 %% assign_stmt(Assign, LocalVars, State) ->
 %%     {Assign,NewVars,UsedVars,FusedVars,State}.
@@ -178,9 +176,12 @@ while_stmt(#while_stmt{exp=E0,body=B0}=W, Loc, St0) ->
 %%  expression is done in the context of the repeat block and is
 %%  already inside the block.
 
-repeat_stmt(#repeat_stmt{body=B0}=R, _, St0) ->
-    {B1,Used,Fused,St1} = do_block(B0, St0),
-    {R#repeat_stmt{body=B1},[],Used,Fused,St1}.
+repeat_stmt(#repeat_stmt{body=B0,exp=E0}=R, Loc, St0) ->
+    {B1,Bused,Bfused,St1} = do_block(B0, St0),
+    {E1,Eused,Efused,St2} = exp(E0, Loc, St1),
+    Used = union(Bused, Eused),
+    Fused = union(Bfused, Efused),
+    {R#repeat_stmt{body=B1,exp=E1},[],Used,Fused,St2}.
 
 %% if_stmt(If, LocalVars, State) -> {If,NewVars,FreeVars,State}.
 %%  The block info includes anything from the test expressions even
@@ -242,14 +243,6 @@ local_fdef_stmt(#local_fdef_stmt{var=#var{name=N},func=F0}=L, _, St0) ->
     New = [N],
     {L#local_fdef_stmt{func=F1},New,Used,Fused,St1}.
 
-%% exp_stmt(Expr, LocalVars, State) ->
-%%     {Expr,NewVars,UsedVars,FusedVars,State}.
-%%  This will return a single value.
-
-expr_stmt(#expr_stmt{exp=Exp0}=E, Loc, St0) ->
-    {Exp1,Used,Fused,St1} = exp(Exp0, Loc, St0),
-    {E#expr_stmt{exp=Exp1},[],Used,Fused,St1}.
-
 %% explist(Exprs, LocalVars, State) -> {Exprs,UsedVars,FusedVars,State}.
 %% exp(Expr, LocalVars, State) -> {Expr,UsedVars,FusedVars,State}.
 %% prefixexp(Expr, LocalVars, State) -> {Expr,UsedVars,FusedVars,State}.
@@ -286,7 +279,9 @@ prefixexp_first(#single{exp=E0}=S, Loc, St0) ->
     {E1,Used,Fused,St1} = exp(E0, Loc, St0),
     {S#single{exp=E1},Used,Fused,St1};
 prefixexp_first(#var{name=N}=V, _, St) ->
-    {V,[N],[],St}.
+    {V,[N],[],St};
+prefixexp_first(Exp, Loc, St) ->
+    prefixexp_element(Exp, Loc, St).
 
 prefixexp_rest(#dot{exp=Exp0,rest=Rest0}=D, Loc, St0) ->
     {Exp1,Eused,Efused,St1} = prefixexp_element(Exp0, Loc, St0),
@@ -299,12 +294,18 @@ prefixexp_rest(Exp, Loc, St) -> prefixexp_element(Exp, Loc, St).
 prefixexp_element(#key{key=E0}=K, Loc, St0) ->
     {E1,Used,Fused,St1} = exp(E0, Loc, St0),
     {K#key{key=E1},Used,Fused,St1};
-prefixexp_element(#fcall{args=As0}=F, Loc, St0) ->
-    {As1,Used,Fused,St1} = explist(As0, Loc, St0),
-    {F#fcall{args=As1},Used,Fused,St1};
-prefixexp_element(#mcall{meth=#lit{val=N},args=As0}=M, Loc, St0) ->
-    {As1,Used,Fused,St1} = explist(As0, Loc, St0),
-    {M#mcall{args=As1},add_element(N, Used),Fused,St1}.
+prefixexp_element(#fcall{func=F0,args=As0}=FuncC, Loc, St0) ->
+    {F1,Fused,Ffused,St1} = exp(F0, Loc, St0),
+    {As1,Aused,Afused,St2} = explist(As0, Loc, St1),
+    CallUsed = union(Fused, Aused),
+    CallFused = union(Ffused, Afused),
+    {FuncC#fcall{func=F1,args=As1},CallUsed,CallFused,St2};
+prefixexp_element(#mcall{class=C0,meth=#lit{val=N},args=As0}=MethC, Loc, St0) ->
+    {C1,Cused,Cfused,St1} = exp(C0, Loc, St0),
+    {As1,Aused,Afused,St2} = explist(As0, Loc, St1),
+    MethUsed = union(Cused, Aused),
+    MethFused = union(Cfused, Afused),
+    {MethC#mcall{class=C1,args=As1},add_element(N, MethUsed),MethFused,St2}.
 
 %% functiondef(Func, LocalVars, State) -> {Func,UsedVars,FusedVars,State}.
 %%  All the variables "used" in the function which are not local

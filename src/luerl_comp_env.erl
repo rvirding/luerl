@@ -1,4 +1,4 @@
-%% Copyright (c) 2013 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -148,7 +148,6 @@ stmts([], St) -> {[],St}.
 %% stmt(Stmt, State) -> {Stmt,State}.
 
 stmt(#assign_stmt{}=A, _, St) -> assign_stmt(A, St);
-stmt(#call_stmt{}=C, _, St) -> call_stmt(C, St);
 stmt(#return_stmt{}=R, _, St) -> return_stmt(R, St);
 stmt(#break_stmt{}=B, _, St) -> {B,St};
 stmt(#block_stmt{}=B, _, St) -> block_stmt(B, St);
@@ -161,8 +160,8 @@ stmt(#local_assign_stmt{}=L, _, St) ->
     local_assign_stmt(L, St);
 stmt(#local_fdef_stmt{}=L, _, St) ->
     local_fdef_stmt(L, St);
-stmt(#expr_stmt{}=E, _, St) ->
-    expr_stmt(E, St).
+stmt(#call_stmt{}=C, _, St) ->
+    call_stmt(C, St).
 
 %% assign_stmt(Assign, State) -> {Assign,State}.
 
@@ -246,9 +245,10 @@ while_stmt(#while_stmt{exp=E0,body=B0}=W, St0) ->
 
 %% repeat_stmt(Repeat, State) -> {Repeat,State}.
 
-repeat_stmt(#repeat_stmt{body=B0}=R, St0) ->
+repeat_stmt(#repeat_stmt{body=B0,exp=E0}=R, St0) ->
     {B1,St1} = do_block(B0, St0),
-    {R#repeat_stmt{body=B1},St1}.
+    {E1,St2} = exp(E0, St1),
+    {R#repeat_stmt{body=B1,exp=E1},St2}.
 
 %% if_stmt(If, State) -> {If,State}.
 
@@ -319,13 +319,6 @@ local_fdef_stmt(#local_fdef_stmt{var=V,func=F0}=L, St0) ->
     %% io:fwrite("lf: ~p\n", [St2]),
     {L#local_fdef_stmt{var=V1,func=F1},St2}.
 
-%% expr_stmt(Expr, State) -> {Call,State}.
-%%  The expression pseudo statement. This will return a single value.
-
-expr_stmt(#expr_stmt{exp=Exp0}=E, St0) ->
-    {Exp1,St1} = exp(Exp0, St0),
-    {E#expr_stmt{exp=Exp1},St1}.
-
 %% explist(Exprs, State) -> {Exprs,State}.
 %% exp(Expr, State) -> {Expr,State}.
 %% prefixexp(Expr, State) -> {Expr,State}.
@@ -358,7 +351,9 @@ prefixexp_first(#single{exp=E0}=S, St0) ->
     {S#single{exp=E1},St1};
 prefixexp_first(#var{}=V0, St) ->
     V1 = get_var(V0, St),
-    {V1,St}.
+    {V1,St};
+prefixexp_first(Exp, St) ->
+    prefixexp_element(Exp, St).
 
 prefixexp_rest(#dot{exp=Exp0,rest=Rest0}=D, St0) ->
     {Exp1,St1} = prefixexp_element(Exp0, St0),
@@ -369,12 +364,14 @@ prefixexp_rest(Exp, St) -> prefixexp_element(Exp, St).
 prefixexp_element(#key{key=E0}=K, St0) ->
     {E1,St1} = exp(E0, St0),
     {K#key{key=E1},St1};
-prefixexp_element(#fcall{args=As0}=F, St0) ->
-    {As1,St1} = explist(As0, St0),
-    {F#fcall{args=As1},St1};
-prefixexp_element(#mcall{args=As0}=M, St0) ->
-    {As1,St1} = explist(As0, St0),
-    {M#mcall{args=As1},St1}.
+prefixexp_element(#fcall{func=F0,args=As0}=FuncC, St0) ->
+    {F1,St1} = exp(F0, St0),
+    {As1,St2} = explist(As0, St1),
+    {FuncC#fcall{func=F1,args=As1},St2};
+prefixexp_element(#mcall{class=C0,args=As0}=MethC, St0) ->
+    {C1,St1} = exp(C0, St0),
+    {As1,St2} = explist(As0, St1),
+    {MethC#mcall{class=C1,args=As1},St2}.
 
 %% functiondef(Func, State) -> {Func,State}.
 

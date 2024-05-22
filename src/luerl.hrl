@@ -25,13 +25,13 @@
                 envs,                           %Environment table
                 usds,                           %Userdata table
                 fncs,                           %Function table
-		g,				%Global table
-		%%
-		stk=[],				%Current stack
-		cs=[],				%Current call stack
-		%%
-		meta=[],			%Data type metatables
-		rand,				%Random state
+                g,                              %Global table
+                %%
+                stk=[],                         %Current stack
+                cs=[],                          %Current call stack
+                %%
+                meta=[],                        %Data type metatables
+                rand,                           %Random state
                 tag,                            %Unique tag
                 trace_func=none,                %Trace function
                 trace_data                      %Trace data

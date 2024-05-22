@@ -1,4 +1,4 @@
-%% Copyright (c) 2019 Robert Virding
+%% Copyright (c) 2019-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -70,9 +70,12 @@ stmt({functiondef,Line,Fname,Ps,B}, St) ->
     fdef_stmt(Line, Fname, Ps, B, St);
 stmt({local,Line,Local}, St) ->
     local_stmt(Line, Local, St);
-stmt(Exp, St) ->				%This is really just a call
-    Line = element(2, Exp),
-    call_stmt(Line, Exp, St).
+stmt(Call, St) ->
+    call_stmt(Call, St).
+
+%% stmt(Exp, St) ->				%This is really just a call
+%%     Line = element(2, Exp),
+%%     call_stmt(Line, Exp, St).
 
 %% assign_stmt(Line, Vars, Exps, State) -> {Assign,State}.
 
@@ -113,12 +116,16 @@ var_last({key_field,L,Exp}, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {#key{l=L,key=Ce},St1}.
 
-%% call_stmt(Line, Exp, State) -> {Call,State}.
+%% call_stmt(Call, State) -> {Call,State}.
 
-call_stmt(Line, Exp, St0) ->
-    {Ce,St1} = exp(Exp, St0),
+call_stmt({functioncall,Line,_,_}=Call, St0) ->
+    {Cc,St1} = prefixexp(Call, St0),
     Anno = line_file_anno(Line, St1),
-    {#call_stmt{l=Anno,call=Ce},St1}.
+    {#call_stmt{l=Anno,call=Cc},St1};
+call_stmt({methodcall,Line,_,_,_}=Call, St0) ->
+    {Cc,St1} = prefixexp(Call, St0),
+    Anno = line_file_anno(Line, St1),
+    {#call_stmt{l=Anno,call=Cc},St1}.
 
 %% return_stmt(Line, Exps, State) -> {Return,State}.
 
@@ -151,11 +158,10 @@ while_stmt(Line, Exp, B, St0) ->
 %%  expression.
 
 repeat_stmt(Line, B, Exp, St0) ->
-    {Cb0,St1} = block(Line, B, St0),
-    {Ce,St2} = expr_stmt(Line, {single,Line,Exp}, St1),
-    Cb1 = Cb0#block{body=Cb0#block.body ++ [Ce]},
+    {Cb,St1} = block(Line, B, St0),
+    {Ce,St2} = exp(Exp, St1),
     Anno = line_file_anno(Line, St2),
-    {#repeat_stmt{l=Anno,body=Cb1},St2}.
+    {#repeat_stmt{l=Anno,body=Cb,exp=Ce},St2}.
 
 %% if_stmt(Line, Test, Else, State) -> {If,State}.
 
@@ -283,14 +289,6 @@ local_stmt(Line, {assign,_,Ns,Es}, St0) ->
     Anno = line_file_anno(Line, St2),
     {#local_assign_stmt{l=Anno,vars=Cns,exps=Ces},St2}.
 
-%% expr_stmt(Line, Exp, State) -> {Call,State}.
-%%  The expression pseudo statement. This will return a single value.
-
-expr_stmt(Line, Exp, St0) ->
-    {Ce,St1} = exp(Exp, St0),
-    Anno = line_file_anno(Line, St1),
-    {#expr_stmt{l=Anno,exp=Ce},St1}.
-
 %% explist(Exprs, State) -> {Ins,State}.
 %% exp(Expression, State) -> {Ins,State}.
 
@@ -336,7 +334,9 @@ prefixexp_first({'NAME',L,N}, St) ->
     {var_name(L, N),St};
 prefixexp_first({single,L,E}, St0) ->
     {Ce,St1} = exp(E, St0),
-    {#single{l=L,exp=Ce},St1}.
+    {#single{l=L,exp=Ce},St1};
+prefixexp_first(Exp, St) ->
+    prefixexp_element(Exp, St).
 
 prefixexp_rest({'.',L,Exp,Rest}, St0) ->
     {Ce,St1} = prefixexp_element(Exp, St0),
@@ -351,14 +351,16 @@ prefixexp_element({'NAME',L,N}, St) ->
 prefixexp_element({key_field,L,Exp}, St0) ->
     {Ce,St1} = exp(Exp, St0),
     {#key{l=L,key=Ce},St1};
-prefixexp_element({functioncall,L,Args}, St0) ->
-    {Cas,St1} = explist(Args, St0),
-    Anno = line_file_anno(L, St1),
-    {#fcall{l=Anno,args=Cas},St1};
-prefixexp_element({methodcall,Lm,{'NAME',Ln,N},Args}, St0) ->
-    {Args1,St1} = explist(Args, St0),
-    Anno = line_file_anno(Lm, St1),
-    {#mcall{l=Anno,meth=lit_name(Ln, N),args=Args1},St1}.
+prefixexp_element({functioncall,L,Func,Args}, St0) ->
+    {Cf,St1} = exp(Func, St0),
+    {Cas,St2} = explist(Args, St1),
+    Anno = line_file_anno(L, St2),
+    {#fcall{l=Anno,func=Cf,args=Cas},St1};
+prefixexp_element({methodcall,Lm,Class,{'NAME',Ln,N},Args}, St0) ->
+    {Cc,St1} = exp(Class, St0),
+    {Cas,St2} = explist(Args, St1),
+    Anno = line_file_anno(Lm, St2),
+    {#mcall{l=Anno,class=Cc,meth=lit_name(Ln, N),args=Cas},St2}.
 
 dot(L, Exp, Rest) -> #dot{l=L,exp=Exp,rest=Rest}.
 
