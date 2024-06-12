@@ -105,6 +105,10 @@ ct: common-test
 tests:
 	@rebar3 as test do compile,eunit,eunit,ct
 
+.PHONY: test
+test:
+	rebar3 do eunit, ct --cover, cover
+
 # this protects the intermediate .erl files from make's auto deletion
 #.SECONDARY: $(XRL_INTERM) $(YRL_INTERM)
 
