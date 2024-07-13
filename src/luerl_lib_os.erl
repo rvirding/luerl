@@ -241,8 +241,26 @@ difftime(_, [T2,T1|_], St) ->
     {[T2 - T1],St};
 difftime(_, As, St) -> badarg_error(difftime, As, St).
 
+time(_, As=[#tref{}=Tref], St) ->
+    L = luerl_new:decode(Tref, St),
+    compute_time(proplists:to_map(L), As, St);
 time(_, _, St) ->                                  %Time since 1 Jan 1970
     {[current_timestamp()],St}.
+
+compute_time(Map=#{<<"year">> := Y, <<"month">> := Mth, <<"day">> := D}, _, St) ->
+    H = maps:get(<<"hour">>, Map, 12),
+    Min = maps:get(<<"min">>, Map, 0),
+    S = maps:get(<<"sec">>, Map, 0),
+    LocalEpoch = calendar:universal_time_to_local_time({{1970,1,1},{0,0,0}}),
+    Result = calendar:datetime_to_gregorian_seconds({{Y, Mth, D}, {H, Min, S}}) - calendar:datetime_to_gregorian_seconds(LocalEpoch),
+    {[Result],St};
+compute_time(Map, _As, St) ->
+    MissingArg = lists:foldl(fun(K,Acc=undefined) -> case maps:is_key(K, Map) of
+                                                         false -> K;
+                                                         true -> Acc
+                                                     end;
+                                (_,Acc) -> Acc end, undefined, [<<"day">>, <<"month">>, <<"year">>]),
+    badarg_error(time, MissingArg, St).
 
 current_timestamp() ->
     {Mega,Sec,Micro} = os:timestamp(),
