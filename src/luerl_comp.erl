@@ -313,17 +313,17 @@ debug_print(Opts, Format, Args) ->
 list_warnings(F, Ws) ->
     foreach(fun ({Line,Mod,Warn}) ->
                     Cs = Mod:format_error(Warn),
-                    io:format("~s:~w: Warning: ~s\n", [F,Line,Cs]);
+                    logger:warning("~s:~w: Warning: ~s\n", [F,Line,Cs]);
                 ({Mod,Warn}) ->
                     Cs = Mod:format_error(Warn),
-                    io:format("~s: Warning: ~s\n", [F,Cs])
+                    logger:warning("~s: Warning: ~s\n", [F,Cs])
             end, Ws).
 
 list_errors(F, Es) ->
     foreach(fun ({Line,Mod,Error}) ->
                     Cs = Mod:format_error(Error),
-                    io:format("~s:~w: ~s\n", [F,Line,Cs]);
+                    logger:error("~s:~w: ~s\n", [F,Line,Cs]);
                 ({Mod,Error}) ->
                     Cs = Mod:format_error(Error),
-                    io:format("~s: ~s\n", [F,Cs])
+                    logger:error("~s: ~s\n", [F,Cs])
             end, Es).

@@ -88,8 +88,8 @@ collectgarbage(_, _, St) ->			%Ignore everything else
 eprint(_, Args, St) ->
     lists:foreach(fun (#tref{}=Tref) ->
 			  Tab = luerl_heap:get_table(Tref, St),
-			  io:format("~w ", [Tab]);
-		      (A) -> io:format("~w ", [A])
+			  logger:error("~w ", [Tab]);
+		      (A) -> logger:error("~w ", [A])
 		  end, Args),
     io:nl(),
     {[],St}.
@@ -204,7 +204,7 @@ next_key(K, Dict, St) ->
 print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
 			      {[Str],S1} = tostring([A], S0),
-			      io:format("~ts ", [Str]),
+			      logger:info("~ts ", [Str]),
 			      S1
 		      end, St0, Args),
     io:nl(),
