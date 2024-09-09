@@ -100,7 +100,7 @@ format_error({no_module,Mod}) ->
 %% Assertions
 format_error({assert_error,Obj}) ->
     if is_binary(Obj) ->
-            <<Obj,$!>>;
+            <<Obj/binary,$!>>;
        true ->
             Type = luerl_lib_basic:type(Obj),
             <<"error object is a ",Type/binary,$!>>
