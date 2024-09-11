@@ -25,13 +25,13 @@
                 envs,                           %Environment table
                 usds,                           %Userdata table
                 fncs,                           %Function table
-		g,				%Global table
-		%%
-		stk=[],				%Current stack
-		cs=[],				%Current call stack
-		%%
-		meta=[],			%Data type metatables
-		rand,				%Random state
+                g,                              %Global table
+                %%
+                stk=[],                         %Current stack
+                cs=[],                          %Current call stack
+                %%
+                meta=[],                        %Data type metatables
+                rand,                           %Random state
                 tag,                            %Unique tag
                 trace_func=none,                %Trace function
                 trace_data                      %Trace data
@@ -46,10 +46,10 @@
 %% Metatables for atomic datatypes.
 
 -record(meta, {nil=nil,
-	       boolean=nil,
-	       number=nil,
-	       string=nil
-	      }).
+               boolean=nil,
+               number=nil,
+               string=nil
+              }).
 
 %% Frames for the call stack.
 %% Call return frame
@@ -188,8 +188,8 @@
 -define(SET_TABLE(N, T, Pd), put(N, T)).
 -define(UPD_TABLE(N, Upd, Pd), put(N, (Upd)(get(N)))).
 -define(DEL_TABLE(N, Pd), erase(N)).
--define(FILTER_TABLES(Pred, Pd), Pd).		%This needs work
--define(FOLD_TABLES(Fun, Acc, Pd), Pd).		%This needs work
+-define(FILTER_TABLES(Pred, Pd), Pd).           %This needs work
+-define(FOLD_TABLES(Fun, Acc, Pd), Pd).         %This needs work
 -endif.
 
 -ifdef(TS_USE_ETS).
@@ -198,13 +198,13 @@
 -define(GET_TABLE(N, E), ets:lookup_element(E, N, 2)).
 -define(SET_TABLE(N, T, E), begin ets:insert(E, {N,T}), E end).
 -define(UPD_TABLE(N, Upd, E),
-	begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
-	      E end).
+        begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
+              E end).
 -define(DEL_TABLE(N, E), begin ets:delete(E, N), E end).
--define(FILTER_TABLES(Pred, E), E).		%This needs work
+-define(FILTER_TABLES(Pred, E), E).             %This needs work
 -define(FOLD_TABLES(Fun, Acc, E),
-	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
-		  Acc, E)).
+        ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
+                  Acc, E)).
 -endif.
 
 %% Define CATCH to handle deprecated get_stacktrace/0
