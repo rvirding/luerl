@@ -21,6 +21,8 @@ Note that Lua **Chunks** (see definition below) can travel between different Sta
 **KeyPath** means an Erlang list of **atoms** representing nested names, e.g. [table,pack] for table.pack.   
 **Keys** means Lua table keys, the keys of a key-value structure.
 
+**CompileOptions** means a list of compiler options. Currently supported options are 'return', which returns the errors and warnings, and 'report' which will log the errors and warnings.
+
 
 **LuaCallReturn = {ok, Result, State} | {lua_error, Error, State}**  
 This is the return value from evaluating a Lua call.
