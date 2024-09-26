@@ -395,7 +395,11 @@ encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
     {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
+% Table refs should not be re-encoded
+encode(#tref{}=T, St) ->
+    {T, St};
 encode(_, _) -> error(badarg).                  %Can't encode anything else
+
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
