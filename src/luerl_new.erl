@@ -400,7 +400,6 @@ encode(#tref{}=T, St) ->
     {T, St};
 encode(_, _) -> error(badarg).                  %Can't encode anything else
 
-
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
 %%  In decode we track of which tables we have seen to detect
