@@ -85,7 +85,7 @@ os_date_integrated(_) ->
   Chunk = <<"return os.date('noformat'), os.date(), os.date('%c', 1683371767)">>,
   {[NoFormat, _, FromTimeStamp], _State1} = luerl:do(Chunk, State),
   ?assertEqual(<<"noformat">>, NoFormat),
-  ?assertEqual(<<"Sat May  6 13:16:07 2023">>, FromTimeStamp).
+  ?assertEqual(<<"Sat May  6 07:16:07 2023">>, FromTimeStamp).
 
 os_date_integrated_table(_) ->
   State = luerl:init(),
