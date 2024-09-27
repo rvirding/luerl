@@ -397,7 +397,10 @@ encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
 % Table refs should not be re-encoded
 encode(#tref{}=T, St) ->
-    {T, St};
+    case luerl_heap:chk_table(T, St) of
+        ok -> {T, St};
+        error -> error(badarg)
+    end;
 encode(_, _) -> error(badarg).                  %Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
