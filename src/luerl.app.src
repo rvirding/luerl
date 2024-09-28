@@ -25,9 +25,4 @@
   %% Project metadata
   {licenses, ["Apache-2.0"]},
   {links, [{"Github", "https://github.com/rvirding/luerl"}]},
-  %% This is used for hex packages.
-  {files, ["README.md", "LICENSE", "VERSION", "src", "doc", "ebin/luerl.app",
-           "include", "rebar.*", "*akefile",
-           "*.escript"]},
-  {exclude_files, ["priv/images/*"]}
  ]}.
