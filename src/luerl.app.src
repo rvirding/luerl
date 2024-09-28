@@ -25,4 +25,5 @@
   %% Project metadata
   {licenses, ["Apache-2.0"]},
   {links, [{"Github", "https://github.com/rvirding/luerl"}]},
+  {doc, "doc"}
  ]}.
