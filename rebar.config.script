@@ -1,6 +1,6 @@
 %% -*- mode: erlang; indent-tabs-mode: nil -*-
 
-Conf0 = CONFIG,                                 %The original config
+Conf0 = CONFIG,                                 % The original config
 
 %% Do a deep set stepping down a list of keys replacing/adding last
 %% with value. Named funs would be nicer but not always available.
@@ -78,12 +78,35 @@ Copts = Copts0 ++ AppendCopts(Version,
 %% Ensure they are in erl_opts.
 
 Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
-            {erl_opts,Opts} ->                  %Existing erl_opts
+            {erl_opts,Opts} ->                  % Existing erl_opts
                 NewOpts = {erl_opts,Opts ++ Copts},
                 lists:keyreplace(erl_opts, 1, Conf0, NewOpts);
-            false ->                            %No erl_opts
+            false ->                             % No erl_opts
                 Conf0 ++ [{erl_opts,Copts}]
         end,
+
+%% Prevent build directories being used in output files
+
+XrlYrlOpts = if Version > "24" ->
+                 [
+                    {xrl_opts, [{deterministic, true}]},
+                    {yrl_opts, [{deterministic, true}]}
+                 ];
+             true ->
+                 []
+         end,
+
+%% Append the new options to the configuration.
+
+Conf2 = lists:foldl(fun({Key, Val}, Acc) ->
+                        case lists:keyfind(Key, 1, Acc) of
+                            {Key, OldVal} ->
+                                NewVal = {Key, OldVal ++ Val},
+                                lists:keyreplace(Key, 1, Acc, NewVal);
+                            false ->
+                                Acc ++ [{Key, Val}]
+                        end
+                    end, Conf1, XrlYrlOpts),
 
 %% TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
 
@@ -91,6 +114,6 @@ Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
 %%     {test, [eunit, {ct, "--cover"}, cover]}
 %% ]}],
 
-%% Conf1 ++ TestConfig ++ Aliases.
+%% Conf2 ++ TestConfig ++ Aliases.
 
-Conf1.
+Conf2.
