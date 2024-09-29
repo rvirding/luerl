@@ -13,7 +13,7 @@
 %% limitations under the License.
 
 %% File    : luerl_util.erl
-%% Purpose : Utility functions for Luer.
+%% Purpose : Utility functions for Luerl.
 
 -module(luerl_util).
 

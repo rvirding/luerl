@@ -15,6 +15,7 @@ src/luerl_scan.erl
 src/luerl_parse.erl
 comp_opts.mk
 doc/epub/*
+doc
 ebin/*.beam
 log
 logs

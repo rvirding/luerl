@@ -1,28 +1,3 @@
-%% Copyright (c) 2013-2019 Robert Virding
-%%
-%% Licensed under the Apache License, Version 2.0 (the "License");
-%% you may not use this file except in compliance with the License.
-%% You may obtain a copy of the License at
-%%
-%%     http://www.apache.org/licenses/LICENSE-2.0
-%%
-%% Unless required by applicable law or agreed to in writing, software
-%% distributed under the License is distributed on an "AS IS" BASIS,
-%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-%% See the License for the specific language governing permissions and
-%% limitations under the License.
-
-%% File    : luerl_parse.yrl
-%% Author  : Robert Virding
-%% Purpose : Parser for LUA 5.2.
-
-%% The Grammar rules here are taken directly from the LUA 5.2
-%% manual. Unfortunately it is not an LALR(1) grammar but I have
-%% included a fix by Florian Weimer <fw@deneb.enyo.de> which makes it
-%% so, but it needs some after processing. Actually his fix was
-%% unnecessarily complex and all that was needed was to change one
-%% rule for statements.
-
 Expect 2.					%Suppress shift/reduce warning
 
 Nonterminals
@@ -233,6 +208,36 @@ unop -> uminus : '$1' .
 uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.
+
+-moduledoc(false).
+
+%% Copyright (c) 2013-2019 Robert Virding
+%%
+%% @private
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+
+%% File    : luerl_parse.yrl
+%% Author  : Robert Virding
+%% Purpose : Parser for LUA 5.2.
+
+%% The Grammar rules here are taken directly from the LUA 5.2
+%% manual. Unfortunately it is not an LALR(1) grammar but I have
+%% included a fix by Florian Weimer <fw@deneb.enyo.de> which makes it
+%% so, but it needs some after processing. Actually his fix was
+%% unnecessarily complex and all that was needed was to change one
+%% rule for statements.
+
 
 -export([chunk/1]).
 
