@@ -1,4 +1,4 @@
-%% Copyright (c) 2020-2023 Robert Virding
+%% Copyright (c) 2020-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -30,12 +30,12 @@
 %% External interface.
 -export([gc/1,
          alloc_table/1,alloc_table/2,free_table/2,
-         get_table/2,set_table/3,upd_table/3,
+         get_table/2,set_table/3,upd_table/3,chk_table/2,
          get_global_key/2,set_global_key/3,
          get_table_key/3,set_table_key/4,
          raw_get_table_key/3,raw_set_table_key/4,
-         alloc_userdata/2,alloc_userdata/3,
-         get_userdata/2,set_userdata/3,upd_userdata/3,
+         alloc_userdata/2,alloc_userdata/3,free_userdata/2,
+         get_userdata/2,set_userdata/3,upd_userdata/3,chk_userdata/2,
          set_userdata_data/3,get_userdata_data/2,
          alloc_funcdef/2,get_funcdef/2,set_funcdef/3,
          alloc_environment/2,get_env_var/3,set_env_var/4,
@@ -69,6 +69,7 @@ init_tables(St) ->
 %% set_tstruct(Index, Val, #tstruct{}) -> #tstruct{}.
 %% upd_tstruct(Index, UpdFun, #tstruct{}) -> #tstruct{}.
 %% del_tstruct(Index, #tstruct{}) -> #tstruct{}.
+%% chk_tstruct(Index, #tstruct{}) -> ok | error.
 %%
 %%  Functions for accessing tstructs.
 
@@ -97,6 +98,12 @@ del_tstruct(N, #tstruct{data=D0,free=Ns}=Tstr) ->
 -compile({inline,[get_tstruct/2]}).             %Such a simple function
 get_tstruct(N, Tstr) ->
     ?GET_TABLE(N, Tstr#tstruct.data).
+
+chk_tstruct(N, Tstr) ->
+    case ?CHK_TABLE(N, Tstr#tstruct.data) of
+        true -> ok;
+        false -> error
+    end.
 
 %% alloc_table(State) -> {Tref,State}
 %%
@@ -163,6 +170,13 @@ set_table(#tref{i=N}, Tab, #luerl{tabs=Tst0}=St) ->
 upd_table(#tref{i=N}, Upd, #luerl{tabs=Tst0}=St) ->
     Tst1 = upd_tstruct(N, Upd, Tst0),
     St#luerl{tabs=Tst1}.
+
+%% chk_table(Tref, State) -> ok | error.
+%%
+%% Check the table referenced by Tref actually exists.
+
+chk_table(#tref{i=N}, #luerl{tabs=Tst}) ->
+    chk_tstruct(N, Tst).
 
 %% set_global_key(Key, Value, State) ->
 %%     {value,Value,State} | {meta,Method,Args,State} | {error,Error,State}
@@ -397,6 +411,14 @@ alloc_userdata(Data, Meta, #luerl{usds=Ust0}=St) ->
     {N,Ust1} = alloc_tstruct(Ud, Ust0),
     {#usdref{i=N},St#luerl{usds=Ust1}}.
 
+%% free_userdata(Usdref, State) -> State
+%%
+%% Delete a table freeing its space.
+
+free_userdata(#usdref{i=N}, #luerl{usds=Ust0}=St) ->
+    Ust1 = del_tstruct(N, Ust0),
+    St#luerl{usds=Ust1}.
+
 %% get_userdata(Usdref, State) -> {UserData,State}
 %%
 %% Get the userdata refered to by Usdref,
@@ -421,6 +443,13 @@ set_userdata(#usdref{i=N}, #userdata{}=Udata, #luerl{usds=Ust0}=St) ->
 upd_userdata(#usdref{i=N}, Upd, #luerl{usds=Ust0}=St) ->
     Ust1 = upd_tstruct(N, Upd, Ust0),
     St#luerl{usds=Ust1}.
+
+%% chk_userdata(Usdref, State) -> ok | error.
+%%
+%% Check the userdata referenced by Tref actually exists.
+
+chk_userdata(#usdref{i=N}, #luerl{usds=Ust}) ->
+    chk_tstruct(N, Ust).
 
 %% get_userdata_data(Usdref, State) -> {Data,State}
 %%

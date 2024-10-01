@@ -15,7 +15,7 @@
 
 {application, luerl,
  [{description, "Luerl - an implementation of Lua on Erlang"},
-  {vsn, "1.2.2"},
+  {vsn, "1.2.3"},
   {modules, []},
   {registered, []},
   {applications, [kernel, stdlib]},
