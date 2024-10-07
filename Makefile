@@ -68,6 +68,7 @@ clean:
 	@ rm -f *.beam
 	@ rm -f erl_crash.dump
 	@ rm comp_opts.mk
+	@ rm -f $(SRCDIR)/luerl_parse.erl  $(SRCDIR)/luerl_scan.erl
 	$(MAKE) -C examples clean
 
 clean-all: clean

@@ -75,16 +75,6 @@ Copts = Copts0 ++ AppendCopts(Version,
                                {"23",'EEP48'}],
                               AppendCopts),
 
-%% Ensure they are in erl_opts.
-
-Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
-            {erl_opts,Opts} ->                  % Existing erl_opts
-                NewOpts = {erl_opts,Opts ++ Copts},
-                lists:keyreplace(erl_opts, 1, Conf0, NewOpts);
-            false ->                             % No erl_opts
-                Conf0 ++ [{erl_opts,Copts}]
-        end,
-
 %% Prevent build directories being used in output files
 
 XrlYrlOpts = if Version > "24" ->
@@ -96,17 +86,35 @@ XrlYrlOpts = if Version > "24" ->
                  []
          end,
 
-%% Append the new options to the configuration.
+AppendOpts = fun ([{Key,Val}|Opts], Conf, F) ->
+                     case lists:keyfind(Key, 1, Conf) of
+                         {Key,OldVal} ->
+                             NewVal = {Key, OldVal ++ Val},
+                             F(Opts, lists:keyreplace(Key, 1, Conf, NewVal), F);
+                         false ->
+                             F(Opts, Conf, F) ++ [{Key,Val}]
+                     end;
+                 ([], Conf, _F) ->
+                     Conf
+             end,
 
-Conf2 = lists:foldl(fun({Key, Val}, Acc) ->
-                        case lists:keyfind(Key, 1, Acc) of
-                            {Key, OldVal} ->
-                                NewVal = {Key, OldVal ++ Val},
-                                lists:keyreplace(Key, 1, Acc, NewVal);
-                            false ->
-                                Acc ++ [{Key, Val}]
-                        end
-                    end, Conf1, XrlYrlOpts),
+%% AppendOpts =
+%%     fun (Opts, Conf) ->
+%%             F = fun({Key, Val}, Acc) ->
+%%                         case lists:keyfind(Key, 1, Acc) of
+%%                             {Key, OldVal} ->
+%%                                 NewVal = {Key, OldVal ++ Val},
+%%                                 lists:keyreplace(Key, 1, Acc, NewVal);
+%%                             false ->
+%%                                 Acc ++ [{Key, Val}]
+%%                         end
+%%                 end,
+%%             lists:foldl(F, Conf, Opts)
+%%     end,
+
+%% Append/update the compiler and xrl/xyl options to the configuration.
+
+Conf2 = AppendOpts([{erl_opts,Copts}] ++ XrlYrlOpts, Conf0, AppendOpts),
 
 %% TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
 
@@ -115,5 +123,7 @@ Conf2 = lists:foldl(fun({Key, Val}, Acc) ->
 %% ]}],
 
 %% Conf2 ++ TestConfig ++ Aliases.
+
+io:format(user, "c0 ~p\nc2 ~p\n", [Conf0,Conf2]),
 
 Conf2.
