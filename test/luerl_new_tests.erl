@@ -2,6 +2,32 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+
+external_modify_global_test() ->
+    % put(luerl_itrace, true),
+    State = luerl_new:init(),
+
+    ExternalFun = fun([Fun], S) ->
+        {FunRef, NewState1} = luerl_new:encode(Fun, S),
+
+        {ok, Res, NewState2} = luerl_new:call(FunRef, [], NewState1),
+        {Res, NewState2}
+    end,
+
+    {ok, [], State1} = luerl_new:set_table_keys_dec([<<"external_call">>], ExternalFun, State),
+
+    % Define a Lua function that modifies a global variable 'globalVar'
+    LuaChunk = <<"globalVar = 'before'\n"
+                "function modify_global(args)\n"
+                "  globalVar = 'after'\n"
+                "end\n"
+                "external_call(modify_global)\n"  % Pass the function reference
+                "return globalVar\n">>,
+
+    {ok, Res, _State2} = luerl_new:do_dec(LuaChunk, State1),
+
+    ?assertEqual([<<"after">>], Res).
+
 encode_test() ->
     State = luerl_new:init(),
     ?assertMatch({nil, _State}, luerl_new:encode(nil, State)),
