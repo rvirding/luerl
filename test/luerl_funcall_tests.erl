@@ -69,9 +69,9 @@ define_fun_in_lua_test() ->
     {_, State1} = luerl:do(Chunk, State),
     {[Fun], _State2} = luerl:call_function([mkadder], [1], State1),
     {[Fun2], _State3} = luerl:call_function([mkadder], [2], State1),
-    ?assertEqual([5], Fun([4])),
-    ?assertEqual([5.0], Fun([4.0])),
-    ?assertEqual([6], Fun2([4])).
+    ?assertEqual([5], Fun([4], State1)),
+    ?assertEqual([5.0], Fun([4.0], State1)),
+    ?assertEqual([6], Fun2([4], State1)).
 
 define_fun2_in_lua_test() ->
     State = luerl:init(),
@@ -88,12 +88,12 @@ define_fun2_in_lua_test() ->
     {[Fun], _State2} = luerl:call_function([mklist], [5], State1),
     {[Fun2], _State3} = luerl:call_function([mklist], [10], State1),
     ?assertEqual([[{1,4}, {2,4}, {3,4}, {4,4}, {5,4}]],
-		 Fun([4])),
+		 Fun([4], State1)),
     ?assertEqual([[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]],
-		 Fun([4.0])),
+		 Fun([4.0], State1)),
     ?assertEqual([[{1,4}, {2,4}, {3,4}, {4,4}, {5,4},
 		   {6,4}, {7,4}, {8,4}, {9,4}, {10,4}]],
-		 Fun2([4])).
+		 Fun2([4], State1)).
 
 newindex_metamethod_test() ->
     State = luerl:init(),

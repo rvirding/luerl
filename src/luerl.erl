@@ -403,11 +403,11 @@ decode(#tref{}=T, St, In) ->
     decode_table(T, St, In);
 decode(#usdref{}=U, St, _) ->
     decode_userdata(U, St);
-decode(#funref{}=Fun, State, _) ->
-    F = fun(Args) ->
+decode(#funref{}=Fun, _, _) ->
+    F = fun(Args, State) ->
 		{Args1, State1} = encode_list(Args, State),
 		{Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
-		decode_list(Ret, State2)
+		{decode_list(Ret, State2), State2}
 	end,
     F;						%Just a bare fun
 decode(#erl_func{code=Fun}, _, _) -> Fun;

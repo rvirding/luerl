@@ -2,7 +2,6 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-
 external_modify_global_test() ->
     % put(luerl_itrace, true),
     State = luerl_new:init(),
