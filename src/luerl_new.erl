@@ -355,7 +355,8 @@ get_filename(Mod) ->
 %% encode(Term, State) -> {LuerlTerm,State}.
 
 encode_list(Ts, St) ->
-    lists:mapfoldl(fun encode/2, St, Ts).
+
+ lists:mapfoldl(fun encode/2, St, Ts).
 
 encode(nil, St) -> {nil,St};
 encode(false, St) -> {false,St};
@@ -380,6 +381,7 @@ encode(L, St0) when is_list(L) ->
 encode(F, St) when is_function(F, 2) ->
     F1 = fun(Args, State) ->
                  Args1 = decode_list(Args, State),
+                 % TODO make this a case
                  {Res, State1} = F(Args1, State),
                  encode_list(Res, State1)
          end,
@@ -387,6 +389,7 @@ encode(F, St) when is_function(F, 2) ->
 encode(F, St) when is_function(F, 1) ->
     F1 = fun(Args, State) ->
                  Args1 = decode_list(Args, State),
+                 % TODO make this a case
                  Res = F(Args1),
                  encode_list(Res, State)
          end,
