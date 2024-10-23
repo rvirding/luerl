@@ -24,3 +24,11 @@ encode_table_test() ->
 
 invalid_table_test() ->
     ?assertException(error, badarg, luerl_new:encode({tref, 42}, luerl_new:init())).
+
+invalid_erlfunc_return_test() ->
+    State = luerl_new:init(),
+    Func = fun(_Args, State) ->
+                   {invalid, State}
+                       end,
+    {ok, [], State1} = luerl_new:set_table_keys_dec([foo], Func, State),
+    ?assertException(error, blah, luerl_new:do("return foo()", State1)).
