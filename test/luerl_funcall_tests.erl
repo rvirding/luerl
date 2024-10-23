@@ -91,7 +91,8 @@ define_fun2_in_lua_test() ->
                  Fun([4], State3)),
     ?assertMatch({[[{1,4.0}, {2,4.0}, {3,4.0}, {4,4.0}, {5,4.0}]], _State},
                  Fun([4.0], State3)),
-    ?assertMatch({[[{1,4}, {2,4}, {3,4}, {4,4}, {5,4}, {6,4}, {7,4}, {8,4}, {9,4}, {10,4}]], _State},
+    ?assertMatch({[[{1,4}, {2,4}, {3,4}, {4,4}, {5,4},
+                    {6,4}, {7,4}, {8,4}, {9,4}, {10,4}]], _State},
                  Fun2([4], State3)).
 
 newindex_metamethod_test() ->
