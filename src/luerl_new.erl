@@ -401,7 +401,7 @@ encode(#tref{}=T, St) ->
         ok -> {T, St};
         error -> error(badarg)
     end;
-encode(_, _) -> error(badarg).                  %Can't encode anything else
+encode(Val, _) -> error({badarg, Val}).                  %Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.

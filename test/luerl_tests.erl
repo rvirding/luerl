@@ -22,3 +22,6 @@ encode_table_test() ->
 
 invalid_table_test() ->
     ?assertException(error, badarg, luerl:encode({tref, 42}, luerl:init())).
+
+invalid_value_test() ->
+    ?assertException(error, {badarg, {invalid, value}}, luerl:encode({invalid, value}, luerl_new:init())).
