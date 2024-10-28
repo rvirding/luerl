@@ -431,17 +431,17 @@ decode_userdata(U, St, _In) ->
     {userdata,Data}.
 
 decode_luafunc(Fun, _St, _In) ->
-    io:format("dec ~p\n", [Fun]),
+    %% io:format("dec ~p\n", [Fun]),
     fun(Args, State) ->
             luerl_emul:functioncall(Fun, Args, State)
     end.
 
-decode_erlfunc(#erl_func{code=Fun}=Ef, _St, _In) ->
-    io:format("dec ~p\n", [Ef]),
+decode_erlfunc(#erl_func{code=Fun}=_Ef, _St, _In) ->
+    %% io:format("dec ~p\n", [Ef]),
     Fun.                                        %Just the bare fun
 
-decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=Mfa, _St, _In) ->
-    io:format("mfa ~p\n", [Mfa]),
+decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=_Mfa, _St, _In) ->
+    %% io:format("mfa ~p\n", [Mfa]),
     {Mod,Func,Arg}.
 
 %% Externalize and Internalize ensure that the VM state passed in

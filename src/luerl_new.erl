@@ -379,14 +379,14 @@ encode(L, St0) when is_list(L) ->
     {T,St2};                                    %No more to do for now
 encode(F, St) when is_function(F, 2) ->
     F1 = fun(Args, State) -> F(Args, State) end,
-    io:format("enc ~p\n", [#erl_func{code=F1}]),
+    %% io:format("enc ~p\n", [#erl_func{code=F1}]),
     {#erl_func{code=F1}, St};
 encode(F, St) when is_function(F, 1) ->
     F1 = fun(Args, State) -> Res = F(Args), {Res,State} end,
-    io:format("enc ~p\n", [#erl_func{code=F1}]),
+    %% io:format("enc ~p\n", [#erl_func{code=F1}]),
     {#erl_func{code=F1}, St};
 encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
-    io:format("enc ~p\n", [#erl_mfa{m=M,f=F,a=A}]),
+    %% io:format("enc ~p\n", [#erl_mfa{m=M,f=F,a=A}]),
     {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
@@ -447,17 +447,17 @@ decode_userdata(U, St, _In) ->
     {userdata,Data}.
 
 decode_luafunc(Fun, _St, _In) ->
-    io:format("dec ~p\n", [Fun]),
+    %% io:format("dec ~p\n", [Fun]),
     fun(Args, State) ->
             luerl_emul:functioncall(Fun, Args, State)
     end.
 
-decode_erlfunc(#erl_func{code=Fun}=Ef, _St, _In) ->
-    io:format("dec ~p\n", [Ef]),
+decode_erlfunc(#erl_func{code=Fun}=_Ef, _St, _In) ->
+    %% io:format("dec ~p\n", [Ef]),
     Fun.                                        %Just the bare fun
 
-decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=Mfa, _St, _In) ->
-    io:format("mfa ~p\n", [Mfa]),
+decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=_Mfa, _St, _In) ->
+    %% io:format("mfa ~p\n", [Mfa]),
     {Mod,Func,Arg}.
 
 %% Externalize and Internalize ensure that the VM state passed in

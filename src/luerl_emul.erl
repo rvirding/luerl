@@ -791,7 +791,7 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
     case Func(Args, St0#luerl{stk=Stk,cs=Cs0}) of
         %% {Ret,#luerl{}=St1} when is_list(Ret) ->
-        {Ret,St1} ->
+        {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
         _Other ->
@@ -807,7 +807,7 @@ call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
 
 call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
     case apply(M, F, [A, Args, St0#luerl{stk=Stk,cs=Cs0}]) of
-        {Ret,St1} ->
+        {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
         _Other ->
