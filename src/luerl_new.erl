@@ -378,30 +378,25 @@ encode(L, St0) when is_list(L) ->
     {T,St2} = luerl_heap:alloc_table(Es, St1),
     {T,St2};                                    %No more to do for now
 encode(F, St) when is_function(F, 2) ->
-    F1 = fun(Args, State) ->
-                 Args1 = decode_list(Args, State),
-                 {Res, State1} = F(Args1, State),
-                 encode_list(Res, State1)
-         end,
+    F1 = fun(Args, State) -> F(Args, State) end,
+    io:format("enc ~p\n", [#erl_func{code=F1}]),
     {#erl_func{code=F1}, St};
 encode(F, St) when is_function(F, 1) ->
-    F1 = fun(Args, State) ->
-                 Args1 = decode_list(Args, State),
-                 Res = F(Args1),
-                 encode_list(Res, State)
-         end,
+    F1 = fun(Args, State) -> Res = F(Args), {Res,State} end,
+    io:format("enc ~p\n", [#erl_func{code=F1}]),
     {#erl_func{code=F1}, St};
 encode({M,F,A}, St) when is_atom(M) and is_atom(F) ->
+    io:format("enc ~p\n", [#erl_mfa{m=M,f=F,a=A}]),
     {#erl_mfa{m=M,f=F,a=A}, St};
 encode({userdata,Data}, St) ->
     luerl_heap:alloc_userdata(Data, St);
-% Table refs should not be re-encoded
-encode(#tref{}=T, St) ->
-    case luerl_heap:chk_table(T, St) of
-        ok -> {T, St};
-        error -> error(badarg)
-    end;
-encode(_, _) -> error(badarg).                  %Can't encode anything else
+%% % Table refs should not be re-encoded
+%% encode(#tref{}=T, St) ->
+%%     case luerl_heap:chk_table(T, St) of
+%%         ok -> {T, St};
+%%         error -> error(badarg)
+%%     end;
+encode(Term, _) -> error({badarg,Term}).        %Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
@@ -421,18 +416,15 @@ decode(B, _, _) when is_binary(B) -> B;
 decode(N, _, _) when is_number(N) -> N;         %Integers and floats
 decode(#tref{}=T, St, In) ->
     decode_table(T, St, In);
-decode(#usdref{}=U, St, _) ->
-    decode_userdata(U, St);
-decode(#funref{}=Fun, State, _) ->
-    F = fun(Args) ->
-                {Args1, State1} = encode_list(Args, State),
-                {Ret, State2} = luerl_emul:functioncall(Fun, Args1, State1),
-                decode_list(Ret, State2)
-        end,
-    F;                                          %Just a bare fun
-decode(#erl_func{code=Fun}, _, _) -> Fun;
-decode(#erl_mfa{m=M,f=F,a=A}, _, _) -> {M,F,A};
-decode(_, _, _) -> error(badarg).               %Shouldn't have anything else
+decode(#usdref{}=U, St, In) ->
+    decode_userdata(U, St, In);
+decode(#funref{}=Fun, St, In) ->
+    decode_luafunc(Fun, St, In);
+decode(#erl_func{}=Fun, St, In) ->
+    decode_erlfunc(Fun, St, In);
+decode(#erl_mfa{}=Mfa, St, In) ->
+    decode_erlmfa(Mfa, St, In);
+decode(Lua, _, _) -> error({badarg,Lua}).       %Shouldn't have anything else
 
 decode_table(#tref{i=N}=T, St, In0) ->
     case lists:member(N, In0) of
@@ -450,10 +442,23 @@ decode_table(#tref{i=N}=T, St, In0) ->
             end
     end.
 
-decode_userdata(U, St) ->
+decode_userdata(U, St, _In) ->
     {#userdata{d=Data},_} = luerl_heap:get_userdata(U, St),
     {userdata,Data}.
 
+decode_luafunc(Fun, _St, _In) ->
+    io:format("dec ~p\n", [Fun]),
+    fun(Args, State) ->
+            luerl_emul:functioncall(Fun, Args, State)
+    end.
+
+decode_erlfunc(#erl_func{code=Fun}=Ef, _St, _In) ->
+    io:format("dec ~p\n", [Ef]),
+    Fun.                                        %Just the bare fun
+
+decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=Mfa, _St, _In) ->
+    io:format("mfa ~p\n", [Mfa]),
+    {Mod,Func,Arg}.
 
 %% Externalize and Internalize ensure that the VM state passed in
 %% can be stored externally or can be recreated from external storage.

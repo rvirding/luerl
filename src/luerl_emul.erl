@@ -304,15 +304,15 @@ load_chunk_i(I, Funrs, St) -> {I,Funrs,St}.
 
 call(Func, St) -> call(Func, [], St).
 
-call(#funref{}=Funref, Args, St0) ->		%Lua function
+call(#funref{}=Funref, Args, St0) ->            %Lua function
     {Ret,St1} = functioncall(Funref, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call(#erl_func{}=Func, Args, St0) ->		%Erlang function
+call(#erl_func{}=Func, Args, St0) ->            %Erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call(#erl_mfa{}=Func, Args, St0) ->   %Erlang function as MFA triplet
+call(#erl_mfa{}=Func, Args, St0) ->             %Erlang function as MFA triplet
     {Ret,St1} = functioncall(Func, Args, St0),
     {Ret,St1}.
 
