@@ -510,6 +510,10 @@ externalize(S) ->
 internalize(S) ->
     luerl_lib_math:internalize(S).
 
+%% put_private(Key, Value, State) ->
+%%   State.
+%% get_private(Key, State) ->
+%%   Value.
 put_private(Key, Value, S) ->
     Private = maps:put(Key, Value, S#luerl.private),
     S#luerl{private=Private}.
