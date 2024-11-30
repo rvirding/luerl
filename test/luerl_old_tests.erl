@@ -32,7 +32,7 @@ encode_error_test() ->
     ?assertException(error, {badarg, _}, luerl_old:encode({a,1}, State)).
 
 encode_table_test() ->
-    {Table, State} = luerl_old:encode(#{a => 1}, luerl_new:init()),
+    {Table, State} = luerl_old:encode(#{a => 1}, luerl_old:init()),
     State1 = luerl_old:set_table1([<<"foo">>], Table, State),
     ?assertMatch({Table, _State2},
                  luerl_old:get_table1([<<"foo">>], State1)),
