@@ -161,6 +161,13 @@ Interface functions - New Version
    luerl:decode_list([LuerlTerm], State) -> [Term]
        Decode a list of Luerl terms into a list of Erlang representations.
 
+   luerl:put_private(Key, Value, State) -> State.
+       Put a private value into Luerl that is not exposed to the runtime.
+
+   luerl:get_private(Key, State) -> Term.
+       Get a private value from Luerl.
+
+
 AUTHORS
        Jean Chassoul, Robert Virding.
 
