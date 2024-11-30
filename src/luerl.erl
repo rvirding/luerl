@@ -46,6 +46,9 @@
 %% Helping with storing VM state
 -export([externalize/1,internalize/1]).
 
+%% Storing and retrieving private data
+-export([put_private/3,get_private/2]).
+
 %% init() -> State.
 
 init() ->
@@ -506,3 +509,10 @@ externalize(S) ->
 
 internalize(S) ->
     luerl_lib_math:internalize(S).
+
+put_private(Key, Value, S) ->
+    Private = maps:put(Key, Value, S#luerl.private),
+    S#luerl{private=Private}.
+
+get_private(Key, S) ->
+    maps:get(Key, S#luerl.private).
