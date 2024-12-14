@@ -113,3 +113,12 @@ Decode a term in the Luerl form into its Erlang representation.
 
 #### luerl:decode_list([LuerlTerm], State) -> [Term]
 Decode a list of Luerl terms into a list of Erlang representations.
+
+#### luerl:put_private(Key, Term, State) -> State.
+Puts a private value under key that is not exposed to the runtime.
+
+#### luerl:get_private(Key, State) -> Term.
+Get a private value for the given key.
+
+#### luerl:get_private(Key, State) -> Term.
+Deletes the private value for the given key.

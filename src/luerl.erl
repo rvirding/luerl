@@ -47,7 +47,7 @@
 -export([externalize/1,internalize/1]).
 
 %% Storing and retrieving private data
--export([put_private/3,get_private/2]).
+-export([put_private/3,get_private/2,delete_private/2]).
 
 %% init() -> State.
 
@@ -514,9 +514,15 @@ internalize(S) ->
 %%   State.
 %% get_private(Key, State) ->
 %%   Value.
+%% delete_private(Key, State) ->
+%%   Value.
 put_private(Key, Value, S) ->
     Private = maps:put(Key, Value, S#luerl.private),
     S#luerl{private=Private}.
 
 get_private(Key, S) ->
     maps:get(Key, S#luerl.private).
+
+delete_private(Key, S) ->
+    Private = maps:remove(Key, S#luerl.private),
+    S#luerl{private=Private}.
