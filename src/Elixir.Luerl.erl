@@ -23,6 +23,8 @@
 
 -module('Elixir.Luerl').
 
+-include("luerl.hrl").
+
 %% Basic user API to luerl.
 -export([init/0,gc/1,
          load/2,load/3,loadfile/2,loadfile/3,
@@ -50,7 +52,7 @@
 -export([externalize/1,internalize/1]).
 
 %% Storing and retrieving private data
--export([put_private/3,get_private/2]).
+-export([put_private/3,get_private/2,delete_private/2]).
 
 init() ->
     luerl:init().
@@ -187,5 +189,13 @@ internalize(St) ->
 put_private(St, K, V) ->
     luerl:put_private(K, V, St).
 
-get_private(St, K) ->
-    luerl:get_private(K, St).
+get_private(St, Key) ->
+    maps:get(Key, St#luerl.private, nil).
+
+delete_private(St, K) ->
+    try
+        luerl:delete_private(K, St)
+    catch
+        error:{badkey, _} ->
+            St
+    end.
