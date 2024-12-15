@@ -120,5 +120,5 @@ Puts a private value under key that is not exposed to the runtime.
 #### luerl:get_private(Key, State) -> Term.
 Get a private value for the given key.
 
-#### luerl:get_private(Key, State) -> Term.
+#### luerl:delete_private(Key, State) -> Term.
 Deletes the private value for the given key.
