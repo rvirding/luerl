@@ -42,3 +42,11 @@ invalid_value_test() ->
     State = luerl:init(),
     ?assertException(error, {badarg, {invalid, value}},
 		     luerl:encode({invalid, value}, State)).
+
+private_test() ->
+    State1 = luerl:init(),
+    State2 = luerl:put_private(secret, <<"mysecret">>, State1),
+    ?assertMatch(<<"mysecret">>, luerl:get_private(secret, State2)),
+    ?assertException(error, {badkey, missing}, luerl:get_private(missing, State2)),
+    State3 = luerl:delete_private(secret, State2),
+    ?assertException(error, {badkey, secret}, luerl:get_private(secret, State3)).

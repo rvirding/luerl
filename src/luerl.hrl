@@ -34,7 +34,8 @@
                 rand,                           %Random state
                 tag,                            %Unique tag
                 trace_func=none,                %Trace function
-                trace_data                      %Trace data
+                trace_data,                     %Trace data
+                private=#{}
                }).
 
 %% Table structure.
