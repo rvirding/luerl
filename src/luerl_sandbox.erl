@@ -67,7 +67,7 @@ init(St) ->
 
 init(St, []) -> luerl:gc(St);
 init(St0, [Path|Tail]) ->
-  St1 = luerl:set_table(Path, ?SANDBOXED_VALUE, St0),
+  {ok,St1} = luerl:set_table_keys_dec(Path, ?SANDBOXED_VALUE, St0),
   init(St1, Tail).
 
 %% The default flags for running the sandboxed process.

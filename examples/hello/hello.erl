@@ -17,6 +17,6 @@ run() ->
     % separately parse, then execute
     State0 = luerl:init(),
     {ok, Chunk, State1} = luerl:load("print(\"Hello, Chunk!\")", State0),
-    {_Ret, _NewState} = luerl:do(Chunk, State1),
+    {ok,_Ret, _NewState} = luerl:call(Chunk, [], State1),
 
     done.
