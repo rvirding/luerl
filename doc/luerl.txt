@@ -170,6 +170,43 @@ Interface functions - New Version
    luerl:delete_private(Key, State) -> Term.
        Deletes the private value for the given key.
 
+   Passing String in the Erlang Shell
+       Here  we  are  going  to  look  at  passing in command strings into the
+       luerl:do/2 function, especially when these strings contain Lua strings.
+       The problem is to make sure that the strings in the  Lua  commands  are
+       processes correctly.
+
+       First  just  just doing it from the standard Lua shell as the source of
+       truth:
+
+              >return "aÃ©b\235c"
+              aÃ©b?c
+              >string.byte("aÃ©b\235c", 1, 20)
+              97    195    169    98    235    99
+
+       Now doing it from Erlang where I need to use \\ to get  a  \  into  the
+       string:
+
+              1> St = luerl:init(), ok.
+              ok
+              2> f(S), S = "return 'aÃ©b\\235c'".
+              [114,101,116,117,114,110,32,39,97,233,98,92,50,51,53,99,39]
+              3> f(R), {ok,R,_} = luerl:do(S, St), io:write(R).
+              [<<97,195,169,98,235,99>>]
+
+       Now  doing it from Elixir using the ~C sigil to get the handling of the
+       string right:
+
+              iex(1)> st = Luerl.init(); :ok
+              :ok
+              iex(4)> s = ~C"return 'aÃ©b\235c'"
+              [114,101,116,117,114,110,32,39,97,233,98,92,50,51,53,99,39]
+              iex(3)> {ok,r,_} = Luerl.do(st, s); r
+              [<<97, 195, 169, 98, 235, 99>>]
+
+       So it works as expected.  We use io:write to write out  the  characters
+       in the binary without any parsing or trying to be smart.
+
 AUTHORS
        Jean Chassoul, Robert Virding.
 
