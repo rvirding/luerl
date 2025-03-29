@@ -1,4 +1,5 @@
 %% Copyright (c) 2013-2023 Robert Virding
+%% -*- mode: erlang; indent-tabs-mode: nil -*-
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -141,22 +142,35 @@ Erlang code.
 -export([is_keyword/1]).
 -export([string_chars/1,chars/1]).
 
+%% Luerl definitions of these types.
+-define(WHITE_SPACE(C), (C >= $\000 andalso C =< $\s)).
+-define(DIGIT(C), (C >= $0 andalso C =< $9)).
+-define(CHAR(C), (C >= O andalso C < 16#110000)).
+-define(ASCII(C), (C >= 0 andalso C =< 127)).
+-define(UNICODE(C),
+        (is_integer(C) andalso
+         (C >= 0 andalso C < 16#D800 orelse
+          C > 16#DFFF andalso C < 16#FFFE orelse
+          C > 16#FFFF andalso C =< 16#10FFFF))).
+
+-define(UNI255(C), (is_integer(C) andalso 0 =< C andalso C =< 16#ff)).
+
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
 %%  Build a name from list of legal characters, else error.
 
 name_token(Cs, L) ->
     case catch {ok,list_to_binary(Cs)} of
-	{ok,Name} ->
-	    case is_keyword(Name) of
-		true -> {token,{name_string(Name),L}};
-		false -> {token,{'NAME',L,Name}}
-	    end;
-	_ -> {error,"illegal name"}
+        {ok,Name} ->
+            case is_keyword(Name) of
+                true -> {token,{name_string(Name),L}};
+                false -> {token,{'NAME',L,Name}}
+            end;
+        _ -> {error,"illegal name"}
     end.
 
 name_string(Name) ->
-    binary_to_atom(Name, latin1).		%Only latin1 in Lua
+    binary_to_atom(Name, latin1).               %Only latin1 in Lua
 
 %% hex_float_token(TokenChars, TokenLine) ->
 %%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
@@ -165,11 +179,11 @@ name_string(Name) ->
 hex_float_token(TokenChars, TokenLine) ->
     Tcs = string:substr(TokenChars, 3),
     case lists:splitwith(fun (C) -> (C =/= $p) and (C =/= $P) end, Tcs) of
-	{Mcs,[]} when Mcs /= [] ->
-	    hex_float(Mcs, [], TokenLine);
-	{Mcs,[_P|Ecs]} when Ecs /= [] ->
-	    hex_float(Mcs, Ecs, TokenLine);
-	_Other -> {error,"malformed number"}
+        {Mcs,[]} when Mcs /= [] ->
+            hex_float(Mcs, [], TokenLine);
+        {Mcs,[_P|Ecs]} when Ecs /= [] ->
+            hex_float(Mcs, Ecs, TokenLine);
+        _Other -> {error,"malformed number"}
     end.
 
 %% hex_float(Mantissa, Exponent) -> {token,{'NUMERAL',Line,Float}} | {error,E}.
@@ -178,28 +192,28 @@ hex_float_token(TokenChars, TokenLine) ->
 
 hex_float(Mcs, [], Line) ->
     case hex_mantissa(Mcs) of
-	{float,M} -> {token,{'NUMERAL',Line,M}};
-	error -> {error,"malformed number"}
+        {float,M} -> {token,{'NUMERAL',Line,M}};
+        error -> {error,"malformed number"}
     end;
 hex_float(Mcs, Ecs, Line) ->
     case hex_mantissa(Mcs) of
-	{float,M} ->
-	    case catch list_to_integer(Ecs, 10) of
-		{'EXIT',_} -> {error,"malformed number"};
-		E -> {token,{'NUMERAL',Line,M * math:pow(2, E)}}
-	    end;
-	error -> {error,"malformed number"}
+        {float,M} ->
+            case catch list_to_integer(Ecs, 10) of
+                {'EXIT',_} -> {error,"malformed number"};
+                E -> {token,{'NUMERAL',Line,M * math:pow(2, E)}}
+            end;
+        error -> {error,"malformed number"}
     end.
 
 hex_mantissa(Mcs) ->
     case lists:splitwith(fun (C) -> C =/= $. end, Mcs) of
-	{[],[]} -> error;			%Nothing at all
-	{[],[$.]} -> error;			%Only a '.'
-	{[],[$.|Fcs]} -> {float,hex_fraction(Fcs, 16.0, 0.0)};
-	{Hcs,[]} -> {float,float(list_to_integer(Hcs, 16))};
-	{Hcs,[$.|Fcs]} ->
-	    H = float(list_to_integer(Hcs, 16)),
-	    {float,hex_fraction(Fcs, 16.0, H)}
+        {[],[]} -> error;                       %Nothing at all
+        {[],[$.]} -> error;                     %Only a '.'
+        {[],[$.|Fcs]} -> {float,hex_fraction(Fcs, 16.0, 0.0)};
+        {Hcs,[]} -> {float,float(list_to_integer(Hcs, 16))};
+        {Hcs,[$.|Fcs]} ->
+            H = float(list_to_integer(Hcs, 16)),
+            {float,hex_fraction(Fcs, 16.0, H)}
     end.
 
 hex_fraction([C|Cs], Pow, SoFar) when C >= $0, C =< $9 ->
@@ -219,8 +233,7 @@ string_token(Cs0, Len, L) ->
     Cs1 = string:substr(Cs0, 2, Len - 2),       %Strip quotes
     try
         Bytes = string_chars(Cs1),
-        String = unicode:characters_to_binary(Bytes, utf8, utf8),
-        %% String = iolist_to_binary(Bytes),
+        String = iolist_to_binary(Bytes),
         {token,{'LITERALSTRING',L,String}}
     catch
         _:_ ->
@@ -238,39 +251,29 @@ chars(Cs) ->
 string_chars(Cs) ->
     string_chars(Cs, []).
 
-string_chars([$\\ | Cs], []) ->                 %Nothing here to worry about
-    bq_chars(Cs);
 string_chars([$\\ | Cs], Acc) ->
-    [lists:reverse(Acc) | bq_chars(Cs)];
-string_chars([$\n | _], _Acc) -> throw(string_error);
-string_chars([C | Cs], Acc) -> string_chars(Cs, [C|Acc]);
-string_chars([], []) -> [];
+    string_bq_chars(Cs, Acc);
+string_chars([$\n | _], _Acc) ->
+    throw(string_error);
+string_chars([C0 | Cs], Acc) ->
+    C1 = if ?ASCII(C0) -> C0;
+            true ->
+                 case unicode:characters_to_binary([C0]) of
+                     Bin when is_binary(Bin) ->
+                         Bin;
+                     _Error ->
+                         throw(string_error)
+                 end
+         end,
+    string_chars(Cs, [C1|Acc]);
 string_chars([], Acc) ->
-    [lists:reverse(Acc)].
+    lists:reverse(Acc).
 
-%% long_string_token(InputChars, Length, BracketLength, Line) ->
-%%     {token,{'LITERALSTRING',Line,Cs}} | {error,Error}.
-
-long_string_token(Cs0, Len, BrLen, Line) ->
-    %% Strip the brackets and remove first char if a newline.
-    %% Note we export Cs1 here, :-)
-    case string:substr(Cs0, BrLen+1, Len - 2*BrLen) of
-	[$\n | Cs1] -> Cs1;
-	Cs1 -> Cs1
-    end,
-    try
-	String = unicode:characters_to_binary(Cs1, utf8, utf8),
-	{token,{'LITERALSTRING',Line,String}}
-    catch
-	_:_ ->
-	    {error,"illegal string"}
-    end.
-
-%% bq_chars(Chars)
+%% string_bq_chars(Chars, Accumulator)
 %%  Handle the backquotes characters. These always fit directly into
 %%  one byte and are never UTF-8 encoded.
 
-bq_chars([C1|Cs0]) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
+string_bq_chars([C1|Cs0], Acc) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
     I1 = C1 - $0,
     case Cs0 of
         [C2|Cs1] when C2 >= $0, C2 =< $9 ->
@@ -281,28 +284,63 @@ bq_chars([C1|Cs0]) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
                     Byte = 100*I1 + 10*I2 + I3,
                     %% Must fit into one byte!
                     (Byte =< 255) orelse throw(string_error),
-                    [Byte | string_chars(Cs2, [])];
+                    string_chars(Cs2, [Byte|Acc]);
                 _ ->
                     Byte = 10*I1 + I2,
-                    [Byte | string_chars(Cs1, [])]
+                    string_chars(Cs1, [Byte|Acc])
             end;
-        _ -> [I1 | string_chars(Cs0, [])]
+        _ -> string_chars(Cs0, [I1|Acc])
     end;
-bq_chars([$x,C1,C2|Cs]) ->                      %2 hex digits
+string_bq_chars([$x,C1,C2|Cs], Acc) ->          %2 hex digits
     case hex_char(C1) and hex_char(C2) of
         true ->
             Byte = hex_val(C1)*16 + hex_val(C2),
-            [Byte | string_chars(Cs, [])];
+            string_chars(Cs, [Byte|Acc]);
         false -> throw(string_error)
     end;
-bq_chars([$z|Cs]) ->                            %Skip blanks
-    string_chars(skip_space(Cs), []);
-bq_chars([C|Cs]) -> [escape_char(C)|string_chars(Cs, [])];
-bq_chars([]) ->
-    [].
+string_bq_chars([$z|Cs], Acc) ->                %Skip whitespace
+    string_chars(skip_space(Cs), Acc);
+string_bq_chars([C|Cs], Acc) ->
+    case escape_char(C) of
+        error -> throw(string_error);
+        Esc -> string_chars(Cs, [Esc|Acc])
+    end;
+string_bq_chars([], Acc) ->
+    Acc.
 
 skip_space([C|Cs]) when C >= 0, C =< $\s -> skip_space(Cs);
 skip_space(Cs) -> Cs.
+
+%% long_string_token(InputChars, Length, BracketLength, Line) ->
+%%     {token,{'LITERALSTRING',Line,Cs}} | {error,Error}.
+
+long_string_token(Cs0, Len, BrLen, Line) ->
+    %% Strip the brackets and remove first char if a newline.
+    %% Note we export Cs1 here, :-)
+    case string:substr(Cs0, BrLen+1, Len - 2*BrLen) of
+        [$\n | Cs1] -> Cs1;
+        Cs1 -> Cs1
+    end,
+    try
+        Bytes = long_string_chars(Cs1, []),
+        String = iolist_to_binary(Bytes),
+        {token,{'LITERALSTRING',Line,String}}
+    catch
+        _:_ ->
+            {error,"illegal string"}
+    end.
+
+long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
+    long_string_chars(Cs, [C|Acc]);
+long_string_chars([C | Cs], Acc) ->             %This could be unicode
+    case unicode:characters_to_binary([C]) of
+        Bin when is_binary(Bin) ->
+            long_string_chars(Cs, [Bin|Acc]);
+        _Error ->
+            throw(string_error)
+    end;
+long_string_chars([], Acc) ->
+    lists:reverse(Acc).
 
 hex_char(C) when C >= $0, C =< $9 -> true;
 hex_char(C) when C >= $a, C =< $f -> true;
@@ -313,16 +351,17 @@ hex_val(C) when C >= $0, C =< $9 -> C - $0;
 hex_val(C) when C >= $a, C =< $f -> C - $a + 10;
 hex_val(C) when C >= $A, C =< $F -> C - $A + 10.
 
-escape_char($n) -> $\n;				%\n = LF
-escape_char($r) -> $\r;				%\r = CR
-escape_char($t) -> $\t;				%\t = TAB
-escape_char($v) -> $\v;				%\v = VT
-escape_char($b) -> $\b;				%\b = BS
-escape_char($f) -> $\f;				%\f = FF
-escape_char($e) -> $\e;				%\e = ESC
-escape_char($s) -> $\s;				%\s = SPC
-escape_char($d) -> $\d;				%\d = DEL
-escape_char(C) -> C.
+escape_char($a) -> 7;                           %\a = BELL
+escape_char($b) -> $\b;                         %\b = BS
+escape_char($f) -> $\f;                         %\f = FF
+escape_char($n) -> $\n;                         %\n = LF
+escape_char($r) -> $\r;                         %\r = CR
+escape_char($t) -> $\t;                         %\t = TAB
+escape_char($v) -> $\v;                         %\v = VT
+escape_char($\\) -> $\\;                        %\e = BACKSLASH
+escape_char($") -> $";                          %\s = SPC
+escape_char($') -> $';                          %\d = DEL
+escape_char(_C) -> error.                       %Illegal
 
 %% is_keyword(Name) -> boolean().
 %%  Test if the name is a keyword.
