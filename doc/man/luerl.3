@@ -160,5 +160,49 @@ Puts a private value under key that is not exposed to the runtime.
 Get a private value for the given key.
 .SS luerl:delete_private(Key, State) \-> Term.
 Deletes the private value for the given key.
+.SS Passing String in the Erlang Shell
+Here we are going to look at passing in command strings into the
+\f[CR]luerl:do/2\f[R] function, especially when these strings contain
+Lua strings.
+The problem is to make sure that the strings in the Lua commands are
+processes correctly.
+.PP
+First just just doing it from the standard Lua shell as the source of
+truth:
+.IP
+.EX
+>return \[dq]aéb\[rs]235c\[dq]
+aéb?c
+>string.byte(\[dq]aéb\[rs]235c\[dq], 1, 20)
+97    195    169    98    235    99
+.EE
+.PP
+Now doing it from Erlang where I need to use \[rs]\[rs] to get a \[rs]
+into the string:
+.IP
+.EX
+1> St = luerl:init(), ok.
+ok
+2> f(S), S = \[dq]return \[aq]aéb\[rs]\[rs]235c\[aq]\[dq].
+[114,101,116,117,114,110,32,39,97,233,98,92,50,51,53,99,39]
+3> f(R), {ok,R,_} = luerl:do(S, St), io:write(R).
+[<<97,195,169,98,235,99>>]
+.EE
+.PP
+Now doing it from Elixir using the \f[CR]\[ti]C\f[R] sigil to get the
+handling of the string right:
+.IP
+.EX
+iex(1)> st = Luerl.init(); :ok
+:ok
+iex(4)> s = \[ti]C\[dq]return \[aq]aéb\[rs]235c\[aq]\[dq]
+[114,101,116,117,114,110,32,39,97,233,98,92,50,51,53,99,39]
+iex(3)> {ok,r,_} = Luerl.do(st, s); r
+[<<97, 195, 169, 98, 235, 99>>]
+.EE
+.PP
+So it works as expected.
+We use \f[CR]io:write\f[R] to write out the characters in the binary
+without any parsing or trying to be smart.
 .SH AUTHORS
 Jean Chassoul, Robert Virding.

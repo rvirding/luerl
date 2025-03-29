@@ -42,8 +42,8 @@ Spawn a new process which runs the string `String` in `State` where the default 
 
 #### run(String | Binary) -> {Result, State} | {error, Reason}.
 #### run(String | Binary, State) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, [ MexReds | Flags ]) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, MexReds, Flags) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, MexReds, Flags, Timeout) -> {Result, State} | {error, Reason}.
+#### run(String | Binary, State, [ MaxReds | Flags ]) -> {Result, State} | {error, Reason}.
+#### run(String | Binary, State, MaxReds, Flags) -> {Result, State} | {error, Reason}.
+#### run(String | Binary, State, MaxReds, Flags, Timeout) -> {Result, State} | {error, Reason}.
 
 This is the old interface to run. It still works but the new interface is recommended. Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `MaxReds` limits the number of reductions and `TimeOut` (default 100 msecs) the time to run the string, `Flags` are spawn options to the process running the evaluation.

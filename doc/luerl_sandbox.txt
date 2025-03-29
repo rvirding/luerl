@@ -58,11 +58,11 @@ Interface Functions
 
    run(String | Binary) -> {Result, State} | {error, Reason}.
    run(String | Binary, State) -> {Result, State} | {error, Reason}.
-   run(String  | Binary, State, [ MexReds | Flags ]) -> {Result, State} | {er‐
+   run(String  | Binary, State, [ MaxReds | Flags ]) -> {Result, State} | {er‐
        ror, Reason}.
-   run(String | Binary, State, MexReds, Flags) -> {Result,  State}  |  {error,
+   run(String | Binary, State, MaxReds, Flags) -> {Result,  State}  |  {error,
        Reason}.
-   run(String  |  Binary, State, MexReds, Flags, Timeout) -> {Result, State} |
+   run(String  |  Binary, State, MaxReds, Flags, Timeout) -> {Result, State} |
        {error, Reason}.
        This is the old interface to run.  It still works but the new interface
        is recommended.  Spawn a new process which runs the  string  String  in
