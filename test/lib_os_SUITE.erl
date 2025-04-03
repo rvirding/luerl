@@ -83,7 +83,7 @@ os_date_table(_) ->
 os_date_integrated(_) ->
   State = luerl:init(),
   Chunk = <<"return os.date('noformat'), os.date(), os.date('%c', 1683371767)">>,
-  {[NoFormat, _, FromTimeStamp], _State1} = luerl:do(Chunk, State),
+  {ok, [NoFormat, _, FromTimeStamp], _State1} = luerl:do(Chunk, State),
   ?assertEqual(<<"noformat">>, NoFormat),
   %% Date is "Sat May  6 13:16:07 2023",
   %% Just check year to avoid test flakiness
@@ -92,6 +92,6 @@ os_date_integrated(_) ->
 os_date_integrated_table(_) ->
   State = luerl:init(),
   Chunk = <<"return os.date('*t').year">>,
-  {[Result], _State1} = luerl:do(Chunk, State),
+  {ok, [Result], _State1} = luerl:do(Chunk, State),
   {{Year, _, _}, _} = calendar:local_time(),
   ?assertEqual(Year, Result).

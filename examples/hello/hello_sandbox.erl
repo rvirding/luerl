@@ -10,17 +10,20 @@ run() ->
     %% Default sandboxed state.
     SbSt = luerl_sandbox:init(),
 
+    io:format("inited\n"),
+
     %% Sandboxing globals
-    {error, {lua_error, Reason, _}} =
-        luerl_sandbox:run("return os.getenv(\"HOME\")", SbSt),
+    %% {error, {lua_error, Reason, _}} =
+    {lua_error, Reason, _} =
+        luerl_sandbox:run("return os.getenv(\"HOME\")", [], SbSt),
     io:format("os.getenv with sandbox: ~p~n",[Reason]),
 
     %% Customizing sandbox
     %%  first with default Luerl state.
-    {[<<"number">>], _} = luerl_sandbox:run("return type(1)", luerl:init()),
+    {ok,[<<"number">>], _} = luerl_sandbox:run("return type(1)", luerl:init()),
 
     %%  then with sandboxed type function
-    {error,  {lua_error, _, _}} =
+    {lua_error, _, _} =
         luerl_sandbox:run("return type(1)", luerl_sandbox:init([['_G', type]])),
 
     %% Using sandboxed state outside of runner
@@ -54,8 +57,8 @@ run() ->
 
     %% Unlimited reductions
     Flags3 = #{max_reductions => none},
-    {[], _} = luerl_sandbox:run("a={}; for i=1,10 do a[i] = 5 end",
-                                Flags3, SbSt),
+    {ok, [], _} = luerl_sandbox:run("a={}; for i=1,10 do a[i] = 5 end",
+                                    Flags3, SbSt),
     io:format("Finished running with unlimited reductions ~n",[]),
 
     done.

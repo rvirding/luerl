@@ -53,8 +53,8 @@ check_unicode(Config) ->
   check_unicode_call_fun(<<9810/utf8>>, 3, check_aquarius, St).
 
 check_unicode_call_fun(Input, Length, LuaFun, St) ->
-  {[Input, Input, true, Length, Length], _} =
-    luerl:call_function([LuaFun], [Input], St).
+  {ok, [Input, Input, true, Length, Length], _} =
+        luerl:call_function_dec([LuaFun], [Input], St).
 
 table_tests(Config) ->
   run_and_check(Config, "table_indexed_table.lua", [111, 222, 333]).
@@ -66,6 +66,6 @@ run_tests(Config, Tests) ->
 run_and_check(Config, Script, Expected) ->
   DataDir = ?config(data_dir, Config),
   ScriptFile = DataDir ++ Script,
-  {Result, St} = luerl:dofile(ScriptFile, luerl:init()),
+  {ok, Result, St} = luerl:dofile(ScriptFile, luerl:init()),
   Expected = Result,
   St.

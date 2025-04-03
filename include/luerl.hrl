@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -25,16 +25,17 @@
                 envs,                           %Environment table
                 usds,                           %Userdata table
                 fncs,                           %Function table
-		g,				%Global table
-		%%
-		stk=[],				%Current stack
-		cs=[],				%Current call stack
-		%%
-		meta=[],			%Data type metatables
-		rand,				%Random state
+                g,                              %Global table
+                %%
+                stk=[],                         %Current stack
+                cs=[],                          %Current call stack
+                %%
+                meta=[],                        %Data type metatables
+                rand,                           %Random state
                 tag,                            %Unique tag
                 trace_func=none,                %Trace function
-                trace_data                      %Trace data
+                trace_data,                     %Trace data
+                private=#{}
                }).
 
 %% Table structure.
@@ -46,10 +47,10 @@
 %% Metatables for atomic datatypes.
 
 -record(meta, {nil=nil,
-	       boolean=nil,
-	       number=nil,
-	       string=nil
-	      }).
+               boolean=nil,
+               number=nil,
+               string=nil
+              }).
 
 %% Frames for the call stack.
 %% Call return frame
@@ -111,10 +112,10 @@
 		  body}).			%Code block
 -define(IS_LUAFUNC(F), is_record(F, lua_func)).
 
--record(erl_func,{code}).			%Erlang code (fun)
+-record(erl_func,{code}).                       %Erlang code (fun)
 -define(IS_ERLFUNC(F), is_record(F, erl_func)).
 
--record(erl_mfa,{m,f,a}).           %Erlang code (MFA)
+-record(erl_mfa,{m,f,a}).                       %Erlang code (MFA)
 -define(IS_ERLMFA(F), is_record(F, erl_mfa)).
 
 %% Test if it a function, of either sort.
@@ -145,28 +146,31 @@
 -define(SET_TABLE(N, T, Ts), maps:put(N, T, Ts)).
 -define(UPD_TABLE(N, Upd, Ts), maps:update_with(N, Upd, Ts)).
 -define(DEL_TABLE(N, Ts), maps:remove(N, Ts)).
+-define(CHK_TABLE(N, Ts), maps:is_key(N, Ts)).
 -define(FILTER_TABLES(Pred, Ts), maps:filter(Pred, Ts)).
 -define(FOLD_TABLES(Fun, Acc, Ts), maps:fold(Fun, Acc, Ts)).
 -endif.
 
 -ifdef(TS_USE_ARRAY).
-%% Use arrays to handle tables.
+%% Use arrays to handle tables. We leave the default value as undefined.
 -define(MAKE_TABLE(), array:new()).
 -define(GET_TABLE(N, Ar), array:get(N, Ar)).
 -define(SET_TABLE(N, T, Ar), array:set(N, T, Ar)).
 -define(UPD_TABLE(N, Upd, Ar),
-	array:set(N, (Upd)(array:get(N, Ar)), Ar)).
+        array:set(N, (Upd)(array:get(N, Ar)), Ar)).
 -define(DEL_TABLE(N, Ar), array:reset(N, Ar)).
+-define(CHK_TABLE(N, Ar),
+        ((N >= 0) andalso (array:get(N, Ar) =/= undefined))).
 -define(FILTER_TABLES(Pred, Ar),
-	((fun (___Def) ->
-		  ___Fil = fun (___K, ___V) ->
-				   case Pred(___K, ___V) of
-				       true -> ___V;
-				       false -> ___Def
-				   end
-			   end,
-		  array:sparse_map(___Fil, Ar)
-	  end)(array:default(Ar)))).
+        ((fun (___Def) ->
+                  ___Fil = fun (___K, ___V) ->
+                                   case Pred(___K, ___V) of
+                                       true -> ___V;
+                                       false -> ___Def
+                                   end
+                           end,
+                  array:sparse_map(___Fil, Ar)
+          end)(array:default(Ar)))).
 -define(FOLD_TABLES(Fun, Acc, Ar), array:sparse_foldl(Fun, Acc, Ar)).
 -endif.
 
@@ -177,6 +181,7 @@
 -define(SET_TABLE(N, T, Ts), orddict:store(N, T, Ts)).
 -define(UPD_TABLE(N, Upd, Ts), orddict:update(N, Upd, Ts)).
 -define(DEL_TABLE(N, Ts), orddict:erase(N, Ts)).
+-define(CHK_TABLE(N, Ts), orddict:is_key(N, Ts)).
 -define(FILTER_TABLES(Pred, Ts), orddict:filter(Pred, Ts)).
 -define(FOLD_TABLES(Fun, Acc, Ts), orddict:fold(Fun, Acc, Ts)).
 -endif.
@@ -188,8 +193,9 @@
 -define(SET_TABLE(N, T, Pd), put(N, T)).
 -define(UPD_TABLE(N, Upd, Pd), put(N, (Upd)(get(N)))).
 -define(DEL_TABLE(N, Pd), erase(N)).
--define(FILTER_TABLES(Pred, Pd), Pd).		%This needs work
--define(FOLD_TABLES(Fun, Acc, Pd), Pd).		%This needs work
+-define(CHK_TABLE(N, Pd), (get(N) =/= undefined)).
+-define(FILTER_TABLES(Pred, Pd), Pd).           %This needs work
+-define(FOLD_TABLES(Fun, Acc, Pd), Pd).         %This needs work
 -endif.
 
 -ifdef(TS_USE_ETS).
@@ -198,13 +204,13 @@
 -define(GET_TABLE(N, E), ets:lookup_element(E, N, 2)).
 -define(SET_TABLE(N, T, E), begin ets:insert(E, {N,T}), E end).
 -define(UPD_TABLE(N, Upd, E),
-	begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
-	      E end).
+        begin ets:update_element(E, N, {2,(Upd)(ets:lookup_element(E, N, 2))}),
+              E end).
 -define(DEL_TABLE(N, E), begin ets:delete(E, N), E end).
--define(FILTER_TABLES(Pred, E), E).		%This needs work
+-define(FILTER_TABLES(Pred, E), E).             %This needs work
 -define(FOLD_TABLES(Fun, Acc, E),
-	ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
-		  Acc, E)).
+        ets:foldl(fun ({___K, ___T}, ___Acc) -> Fun(___K, ___T, ___Acc) end,
+                  Acc, E)).
 -endif.
 
 %% Define CATCH to handle deprecated get_stacktrace/0

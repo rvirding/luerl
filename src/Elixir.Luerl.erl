@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2021 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -23,21 +23,27 @@
 
 -module('Elixir.Luerl').
 
--export([eval/2,evalfile/2,
-         do/2,dofile/2,
-         load/2,load/3,
-         loadfile/2,loadfile/3,
+-include("luerl.hrl").
+
+%% Basic user API to luerl.
+-export([init/0,gc/1,
+         load/2,load/3,loadfile/2,loadfile/3,
          path_loadfile/2,path_loadfile/3,path_loadfile/4,
-         load_module/3,load_module1/3,
-         call/3,call_chunk/3,
-         call_function/3,call_function1/3,function_list/2,
-         call_method/3,call_method1/3,method_list/2,
-         get_table/2,get_table1/2,set_table/3,set_table1/3,set_table1/4,
-         init/0,stop/1,gc/1,
-         set_trace_func/2,clear_trace_func/1,
-         set_trace_data/2,get_trace_data/1,
+         load_module/3,load_module_dec/3,
+         do/2,do_dec/2,do/3,do_dec/3,
+         dofile/2,dofile/3,dofile_dec/2,dofile_dec/3,
+         call/3,call_chunk/2,call_chunk/3,
+         call_function/3,call_function_enc/3,call_function_dec/3,
+         call_method/4,call_method_dec/4,
+         get_table_keys/2,get_table_keys_dec/2,
+         set_table_keys/3,set_table_keys_dec/3,
+         get_table_key/3,set_table_key/4,
          get_stacktrace/1
         ]).
+
+%% Tracing.
+-export([set_trace_func/2,clear_trace_func/1,
+         set_trace_data/2,get_trace_data/1]).
 
 %% Encoding and decoding.
 -export([encode/2,encode_list/2,decode/2,decode_list/2]).
@@ -45,89 +51,11 @@
 %%Helping with storing VM state
 -export([externalize/1,internalize/1]).
 
-eval(St, Chunk) ->
-     luerl:eval(Chunk, St).
-
-evalfile(St, Path) ->
-    luerl:evalfile(Path, St).
-
-do(St, S) ->
-    luerl:do(S, St).
-
-dofile(St, Path) ->
-    luerl:dofile(Path, St).
-
-load(St, Bin) ->
-    luerl:load(Bin, St).
-
-load(St, Bin, Opts) ->
-    luerl:load(Bin, Opts, St).
-
-loadfile(St, Name) ->
-    luerl:loadfile(Name, St).
-
-loadfile(St, Name, Opts) ->
-    luerl:loadfile(Name, Opts, St).
-
-path_loadfile(St, Name) ->
-    luerl:path_loadfile(Name, St).
-
-path_loadfile(St, Dirs, Name) ->
-    luerl:path_loadfile(Dirs, Name, St).
-
-path_loadfile(St, Dir, Name, Opts) ->
-    luerl:path_loadfile(Dir, Name, Opts, St).
-
-load_module(St, Fp, Mod) ->
-    luerl:load_module(Fp, Mod, St).
-
-load_module1(St, Fp, Mod) ->
-    luerl:load_module1(Fp, Mod, St).
+%% Storing and retrieving private data
+-export([put_private/3,get_private/2,delete_private/2]).
 
 init() ->
     luerl:init().
-
-call(St, C, As) ->
-    luerl:call(C, As, St).
-
-call_chunk(St, C, As) ->
-    luerl:call_chunk(C, As, St).
-
-call_function(St, Fp, As) ->
-    luerl:call_function(Fp, As, St).
-
-call_function1(St, Lfp, Las) ->
-    luerl:call_function1(Lfp, Las, St).
-
-function_list(St, Ks) ->
-    luerl:function_list(Ks, St).
-
-call_method(St, Fp, As) ->
-    luerl:call_method(Fp, As, St).
-
-call_method1(St, Fp, Las) ->
-    luerl:call_method1(Fp, Las, St).
-
-method_list(St, Ks) ->
-    luerl:method_list(Ks, St).
-
-get_table(St, Fp) ->
-    luerl:get_table(Fp, St).
-
-get_table1(St, Fp) ->
-    luerl:get_table1(Fp, St).
-
-set_table(St, Fp, V) ->
-    luerl:set_table(Fp, V, St).
-
-set_table1(St, Lfp, Lv) ->
-    luerl:set_table1(Lfp, Lv, St).
-
-set_table1(St, Tab, Key, Lv) ->
-    luerl:set_table1(Tab, Key, Lv, St).
-
-stop(St) ->
-    luerl:stop(St).
 
 gc(St) ->
     luerl:gc(St).
@@ -144,23 +72,130 @@ get_trace_data(St) ->
 set_trace_data(St, Tdata) ->
     luerl:set_trace_data(Tdata, St).
 
+load(St, Bin) ->
+    luerl:load(Bin, St).
+
+load(St, Bin, Opts) ->
+    luerl:load(Bin, Opts, St).
+
+loadfile(St, Name) ->
+    luerl:loadfile(Name, St).
+
+loadfile(St, Name, Opts) ->
+    luerl:loadfile(Name, Opts, St).
+
+path_loadfile(St, Path, Name) ->
+    luerl:path_loadfile(Path, Name, St).
+
+path_loadfile(St, Path, Name, Options) ->
+    luerl:path_loadfile(Path, Name, Options, St).
+
+path_loadfile(St, Name) ->
+    luerl:path_loadfile(Name, St).
+
+load_module(St, Lfp, Mod) ->
+    luerl:load_module(Lfp, Mod, St).
+
+load_module_dec(St, Dfp, Mod) ->
+    luerl:load_module_dec(Dfp, Mod, St).
+
+do(St, S) ->
+    luerl:do(S, St).
+
+do(St, S, Opts) ->
+    luerl:do(S, Opts, St).
+
+do_dec(St, S) ->
+    luerl:do_dec(S, St).
+
+do_dec(St, S, Opts) ->
+    luerl:do_dec(S, Opts, St).
+
+dofile(St, Path) ->
+    luerl:dofile(Path, St).
+
+dofile(St, Path, Opts) ->
+    luerl:dofile(Path, Opts, St).
+
+dofile_dec(St, Path) ->
+    luerl:dofile_dec(Path, St).
+
+dofile_dec(St, Path, Opts) ->
+    luerl:dofile_dec(Path, Opts, St).
+
+call(St, C, Args) ->
+    luerl:call(C, Args, St).
+
+call_chunk(St, C) ->
+    luerl:call_chunk(C, St).
+
+call_chunk(St, C, Args) ->
+    luerl:call_chunk(C, Args, St).
+
+call_function(St, Fp, Args) ->
+    luerl:call_function(Fp, Args, St).
+
+call_function_enc(St, Dfunc, Dargs) ->
+    luerl:call_function_enc(Dfunc, Dargs, St).
+
+call_function_dec(St, Dfunc, Dargs) ->
+    luerl:call_function_dec(Dfunc, Dargs, St).
+
+call_method(St, Obj, Meth, Args) ->
+    luerl:call_method(Obj, Meth, Args, St).
+
+call_method_dec(St, Dobj, Dmeth, Dargs) ->
+    luerl:call_method_dec(Dobj, Dmeth, Dargs, St).
+
+get_table_keys(St, Keys) ->
+    luerl:get_table_keys(Keys, St).
+
+get_table_keys_dec(St, Dkeys) ->
+    luerl:get_table_keys_dec(Dkeys, St).
+
+set_table_keys(St, Keys, Val) ->
+    luerl:set_table_keys(Keys, Val, St).
+
+set_table_keys_dec(St, Dkeys, Dval) ->
+    luerl:set_table_keys_dec(Dkeys, Dval, St).
+
+get_table_key(St, Tab, Key) ->
+    luerl:get_table_key(Tab, Key, St).
+
+set_table_key(St, Tab, Key, Val) ->
+    luerl:set_table_key(Tab, Key, Val, St).
+
 get_stacktrace(St) ->
     luerl:get_stacktrace(St).
-
-encode_list(St, Ts) ->
-    luerl:encode_list(Ts, St).
 
 encode(St, V) ->
     luerl:encode(V, St).
 
-decode_list(St, Lts) ->
-    luerl:decode_list(Lts, St).
+encode_list(St, Ts) ->
+    luerl:encode_list(Ts, St).
 
 decode(St, V) ->
     luerl:decode(V, St).
 
+decode_list(St, Lts) ->
+    luerl:decode_list(Lts, St).
+
 externalize(St) ->
-    luerl_new:externalize(St).
+    luerl:externalize(St).
 
 internalize(St) ->
-    luerl_new:internalize(St).
+    luerl:internalize(St).
+
+put_private(St, K, V) ->
+    luerl:put_private(K, V, St).
+
+get_private(St, Key) ->
+    maps:get(Key, St#luerl.private, nil).
+
+delete_private(St, K) ->
+    try
+        luerl:delete_private(K, St)
+    catch
+        error:{badkey, _} ->
+            St
+    end.

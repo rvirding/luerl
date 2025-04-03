@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2023 Robert Virding
+%% Copyright (c) 2013-2024 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -304,15 +304,15 @@ load_chunk_i(I, Funrs, St) -> {I,Funrs,St}.
 
 call(Func, St) -> call(Func, [], St).
 
-call(#funref{}=Funref, Args, St0) ->		%Lua function
+call(#funref{}=Funref, Args, St0) ->            %Lua function
     {Ret,St1} = functioncall(Funref, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call(#erl_func{}=Func, Args, St0) ->		%Erlang function
+call(#erl_func{}=Func, Args, St0) ->            %Erlang function
     {Ret,St1} = functioncall(Func, Args, St0),
     %% Should do GC here.
     {Ret,St1};
-call(#erl_mfa{}=Func, Args, St0) ->   %Erlang function as MFA triplet
+call(#erl_mfa{}=Func, Args, St0) ->             %Erlang function as MFA triplet
     {Ret,St1} = functioncall(Func, Args, St0),
     {Ret,St1}.
 
@@ -791,7 +791,7 @@ call_luafunc(#lua_func{lsz=Lsz,esz=Esz,pars=_Pars,body=Fis},
 call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
     case Func(Args, St0#luerl{stk=Stk,cs=Cs0}) of
         %% {Ret,#luerl{}=St1} when is_list(Ret) ->
-        {Ret,St1} ->
+        {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
         _Other ->
@@ -807,7 +807,7 @@ call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
 
 call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
     case apply(M, F, [A, Args, St0#luerl{stk=Stk,cs=Cs0}]) of
-        {Ret,St1} ->
+        {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
         _Other ->

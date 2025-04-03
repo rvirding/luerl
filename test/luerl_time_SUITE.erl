@@ -34,8 +34,12 @@ os_date(_Config) ->
     ?assertNotMatch({badrpc, _}, LusakaLocalTime),
     ?assertNotMatch({badrpc, _}, LondonLocalTime),
     ?assert(LusakaLocalTime =/= LondonLocalTime),
-    ?assertEqual({ok,[<<"Sat May  6 13:16:07 2023">>]}, rpc:call(LusakaNode, luerl, eval, ["return os.date('%c', 1683371767)", luerl:init()])),
-    ?assertEqual({ok,[<<"Sat May  6 12:16:07 2023">>]}, rpc:call(LondonNode, luerl, eval, ["return os.date('%c', 1683371767)", luerl:init()])),
+    ?assertMatch({ok,[<<"Sat May  6 13:16:07 2023">>], _St1},
+                 rpc:call(LusakaNode, luerl, do_dec,
+                          ["return os.date('%c', 1683371767)", luerl:init()])),
+    ?assertMatch({ok,[<<"Sat May  6 12:16:07 2023">>], _St2},
+                 rpc:call(LondonNode, luerl, do_dec,
+                          ["return os.date('%c', 1683371767)", luerl:init()])),
     ok.
 
 windows_tests() ->
@@ -50,5 +54,5 @@ set_path(Node) ->
             ok;
         Err = {error, _} ->
             throw({badpath, Path, Err})
-    end || Path <- code:get_path(), filelib:is_dir(Path)],
+     end || Path <- code:get_path(), filelib:is_dir(Path)],
     ok.

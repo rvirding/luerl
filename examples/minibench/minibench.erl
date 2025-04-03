@@ -80,8 +80,8 @@ run() ->
     io:format("Pure parsing~n"),
     I6 = 100000,
     {T6,_State61} = timer:tc(fun() -> [luerl:load("return 1 + 1",
-						  luerl:init()) ||
-					  _ <- lists:seq(1,I6)] end),
+                                                  luerl:init()) ||
+                                          _ <- lists:seq(1,I6)] end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of 1 + 1.~n", [T6,I6]),
     io:format("Per call: ~p microseconds.~n", [T6/I6]),
@@ -92,11 +92,10 @@ run() ->
     io:format("Parse and execute '1 + 1', re-using state~n"),
     I7 = 100000,
     State7 = luerl:init(),
-    {T7,_State71} = timer:tc(fun() -> do_loop_state(I7, "return 1 + 1", State7) end),
+    {T7,_State71} = timer:tc(fun() -> do_loop_do(I7, "return 1 + 1", State7) end),
 
     io:format("Adding Up: ~p microseconds for ~p x calling Lua and returning the result of 1 + 1.~n", [T7,I7]),
     io:format("Per call: ~p microseconds.~n", [T7/I7]),
-
 
     done.
 
@@ -107,11 +106,16 @@ do_loop(N, Chunk) when N > 0 ->
 do_loop(0, _) -> ok.
 
 do_loop_state(N, Chunk, State) when N > 0 ->
-    luerl:do(Chunk, State),
+    luerl:call_chunk(Chunk, [], State),
     do_loop_state(N-1, Chunk, State);
 do_loop_state(0, _, _) -> ok.
 
+do_loop_do(N, String, State) when N > 0 ->
+    luerl:do(String, State),
+    do_loop_do(N-1, String, State);
+do_loop_do(0, _, _) -> ok.
+
 do_loop_chain(N, Chunk, State0) when N > 0 ->
-    {_,State1} = luerl:do(Chunk, State0),
+    {ok,_,State1} = luerl:call_chunk(Chunk, [], State0),
     do_loop_chain(N-1, Chunk, State1);
 do_loop_chain(0, _, _) -> ok.
