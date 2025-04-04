@@ -453,6 +453,7 @@ decode(nil, _, _) -> nil;
 decode(false, _, _) -> false;
 decode(true, _, _) -> true;
 decode(B, _, _) when is_binary(B) -> B;
+decode(A, _, _) when is_atom(A) -> atom_to_binary(A, utf8);
 decode(N, _, _) when is_number(N) -> N;         %Integers and floats
 decode(#tref{}=T, St, In) ->
     decode_table(T, St, In);
