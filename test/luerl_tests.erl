@@ -50,3 +50,7 @@ private_test() ->
     ?assertException(error, {badkey, missing}, luerl:get_private(missing, State2)),
     State3 = luerl:delete_private(secret, State2),
     ?assertException(error, {badkey, secret}, luerl:get_private(secret, State3)).
+
+loadfile_only_comments_test() ->
+    State1 = luerl:init(),
+    ?assertMatch({ok, _, _}, luerl:loadfile("./test/luerl_return_SUITE_data/only_comments.lua", State1)).

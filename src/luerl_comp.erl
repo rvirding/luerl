@@ -236,6 +236,7 @@ do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		      {ok,Ts,_} ->
 			  debug_print(Opts, "scan: ~p\n", [Ts]),
 			  {ok,St#luacomp{code=Ts}};
+              {eof,_} -> {ok,St#luacomp{code=[]}};
 		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
 		  end,
 	    file:close(F),
