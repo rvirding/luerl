@@ -232,14 +232,15 @@ do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		_ -> file:position(F, bof)	%Get it all
 	    end,
 	    %% Now read the file.
-	    Ret = case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
-		      {ok,Ts,_} ->
-			  debug_print(Opts, "scan: ~p\n", [Ts]),
-			  {ok,St#luacomp{code=Ts}};
+	    Ret =
+          case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
+              {ok,Ts,_} ->
+              debug_print(Opts, "scan: ~p\n", [Ts]),
+              {ok,St#luacomp{code=Ts}};
               {eof,_} -> {ok,St#luacomp{code=[]}};
-		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
-		  end,
-	    file:close(F),
+              {error,E,_} -> {error,St#luacomp{errors=[E]}}
+          end,
+        file:close(F),
 	    Ret;
 	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
