@@ -21,57 +21,38 @@
 %% around but does mean that there will be more explicit fiddleling to
 %% get it right. See block/2 and functioncall/4 for examples of this.
 
-%Table table
--record(luerl, {
-    tabs,
-    %Environment table
-    envs,
-    %Userdata table
-    usds,
-    %Function table
-    fncs,
-    %Global table
-    g,
-    %%
-
-    %Current stack
-    stk = [],
-    %Current call stack
-    cs = [],
-    %%
-
-    %Data type metatables
-    meta = [],
-    %Random state
-    rand,
-    %Unique tag
-    tag,
-    %Trace function
-    trace_func = none,
-    %Trace data
-    trace_data,
-    private = #{}
-}).
+%% erlfmt:ignore-begin
+-record(luerl, {tabs,                           %Table table
+                envs,                           %Environment table
+                usds,                           %Userdata table
+                fncs,                           %Function table
+                g,                              %Global table
+                %%
+                stk=[],                         %Current stack
+                cs=[],                          %Current call stack
+                %%
+                meta=[],                        %Data type metatables
+                rand,                           %Random state
+                tag,                            %Unique tag
+                trace_func=none,                %Trace function
+                trace_data,                     %Trace data
+                private=#{}
+               }).
 
 %% Table structure.
-
-%Data table/array
--record(tstruct, {
-    data,
-    %Index free list
-    free,
-    %Next index
-    next
-}).
+-record(tstruct, {data,                         %Data table/array
+                  free,                         %Index free list
+                  next                          %Next index
+                 }).
 
 %% Metatables for atomic datatypes.
 
--record(meta, {
-    nil = nil,
-    boolean = nil,
-    number = nil,
-    string = nil
-}).
+-record(meta, {nil=nil,
+               boolean=nil,
+               number=nil,
+               string=nil
+              }).
+%% erlfmt:ignore-end
 
 %% Frames for the call stack.
 %% Call return frame
