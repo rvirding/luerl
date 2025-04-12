@@ -190,7 +190,13 @@ put_private(St, K, V) ->
     luerl:put_private(K, V, St).
 
 get_private(St, Key) ->
-    maps:get(Key, St#luerl.private, nil).
+    try
+        {ok, maps:get(Key, St#luerl.private)}
+    catch
+        error:{badkey, _} ->
+            error
+    end.
+
 
 delete_private(St, K) ->
     try
