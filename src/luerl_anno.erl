@@ -24,7 +24,7 @@
 
 -module(luerl_anno).
 
--export([new/0,new/1,new/2,set_line/2,line/1,set/3,get/2]).
+-export([new/0, new/1, new/2, set_line/2, line/1, set/3, get/2]).
 
 %% new() -> Anno.
 %% new(Line) -> Anno.
@@ -45,39 +45,44 @@ new(Key, Val) -> set(Key, Val, new()).
 set_line(Line, Anno) when is_integer(Anno) -> Line;
 set_line(Line, Anno) -> set_line1(Line, Anno).
 
-set_line1(Line, [Old|Anno]) when is_integer(Old) -> [Line|Anno];
-set_line1(Line, [A|Anno]) ->
-    [A|set_line1(Line, Anno)];
+set_line1(Line, [Old | Anno]) when is_integer(Old) -> [Line | Anno];
+set_line1(Line, [A | Anno]) -> [A | set_line1(Line, Anno)];
 set_line1(Line, []) -> [Line].
 
 line(Anno) when is_integer(Anno) -> Anno;
 line(Anno) -> line1(Anno).
 
-line1([Line|_]) when is_integer(Line) -> Line;
-line1([_|Anno]) -> line1(Anno);
+line1([Line | _]) when is_integer(Line) -> Line;
+line1([_ | Anno]) -> line1(Anno);
 line1([]) -> undefined.
 
 %% set(Key, Value, Anno) -> Anno.
 %% get(Key, Anno) -> Value | undefined.
 %%  Generic accessing functions for the anno.
 
-set(line, Val, Anno) -> set_line(Val, Anno);
+set(line, Val, Anno) ->
+    set_line(Val, Anno);
 set(Key, Val, Anno) when is_integer(Anno) ->
-    [Anno,{Key,Val}];
-set(Key, Val, Anno) -> set1(Key, Val, Anno).
+    [Anno, {Key, Val}];
+set(Key, Val, Anno) ->
+    set1(Key, Val, Anno).
 
-set1(Key, Val, [{Key,_Old}|Anno]) ->
-    [{Key,Val}|Anno];
-set1(Key, Val, [A|Anno]) ->
-    [A|set1(Key, Val, Anno)];
+set1(Key, Val, [{Key, _Old} | Anno]) ->
+    [{Key, Val} | Anno];
+set1(Key, Val, [A | Anno]) ->
+    [A | set1(Key, Val, Anno)];
 set1(Key, Val, []) ->
-    [{Key,Val}].
+    [{Key, Val}].
 
-get(line, Anno) -> line(Anno);                  %This is untagged
-get(_Key, Anno) when is_integer(Anno) ->        %This is untagged so not Key
+%This is untagged
+get(line, Anno) ->
+    line(Anno);
+%This is untagged so not Key
+get(_Key, Anno) when is_integer(Anno) ->
     undefined;
-get(Key, Anno) -> get1(Key, Anno).
+get(Key, Anno) ->
+    get1(Key, Anno).
 
-get1(Key, [{Key,Val}|_Anno]) -> Val;
-get1(Key, [_|Anno]) -> get1(Key, Anno);
+get1(Key, [{Key, Val} | _Anno]) -> Val;
+get1(Key, [_ | Anno]) -> get1(Key, Anno);
 get1(_Key, []) -> undefined.

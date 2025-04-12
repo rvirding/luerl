@@ -18,118 +18,186 @@
 
 %% Common compiler information
 
--record(cinfo, {lfile=[],			%Lua file name
-		vfile=[],			%Virtual file name
-		opts=[]				%Compiler options
-	       }).
+%Lua file name
+-record(cinfo, {
+    lfile = [],
+    %Virtual file name
+    vfile = [],
+    %Compiler options
+    opts = []
+}).
 
 %% Some useful macros.
--define(IF(Test,True,False), case Test of true -> True; false -> False end).
--define(WHEN_OPT(Opt,Opts,Fun), ?IF(member(Opt, Opts), Fun(), ok)).
--define(DEBUG_PRINT(Format,Args,Opts),
-        ?WHEN_OPT(debug_print, Opts,
-                  fun () -> io:fwrite(Format, Args) end)).
+-define(IF(Test, True, False),
+    case Test of
+        true -> True;
+        false -> False
+    end
+).
+-define(WHEN_OPT(Opt, Opts, Fun), ?IF(member(Opt, Opts), Fun(), ok)).
+-define(DEBUG_PRINT(Format, Args, Opts),
+    ?WHEN_OPT(
+        debug_print,
+        Opts,
+        fun() -> io:fwrite(Format, Args) end
+    )
+).
 
 %% Variable data.
--record(vars, {local=[],			%Local variables
-	       free=[],				%Free variables
-	       used=[],				%Used in sub blocks
-	       fused=[]				%Used in sub-functions
-	      }).
+
+%Local variables
+-record(vars, {
+    local = [],
+    %Free variables
+    free = [],
+    %Used in sub blocks
+    used = [],
+    %Used in sub-functions
+    fused = []
+}).
 
 %% Define internal data macros.
 
 %% Statements.
 %%  The line number here, 'l', can be a line number or annotation list.
 
--record(assign_stmt, {l,vars,exps}).
+-record(assign_stmt, {l, vars, exps}).
 
--record(call_stmt, {l,call}).
+-record(call_stmt, {l, call}).
 
--record(return_stmt, {l,exps}).
+-record(return_stmt, {l, exps}).
 
 -record(break_stmt, {l}).
 
--record(block_stmt, {l,
-		     body=[],			%Block body statements
-		     vars=none,			%Variable info
-		     lsz=none,			%Local frame size
-		     loc=not_used,		%Local var block template
-		     esz=none,			%Env frame size
-		     env=not_used,		%Local env block template
-		     %%local=none,		%Local variables
-		     locf=false}).		%Local functions
+-record(block_stmt, {
+    l,
+    %Block body statements
+    body = [],
+    %Variable info
+    vars = none,
+    %Local frame size
+    lsz = none,
+    %Local var block template
+    loc = not_used,
+    %Env frame size
+    esz = none,
+    %Local env block template
+    env = not_used,
+    %%local=none,		%Local variables
 
--record(while_stmt, {l,exp,body=[]}).
+    %Local functions
+    locf = false
+}).
 
--record(repeat_stmt, {l,body=[]}).
+-record(while_stmt, {l, exp, body = []}).
 
--record(nfor_stmt, {l,
-		    var,			%Loop variable
-		    init,limit,step,		%The init, limit, step values
-		    body=[]}).			%Loop body
+-record(repeat_stmt, {l, body = []}).
 
--record(gfor_stmt, {l,
-		    vars,			%Loop variables
-		    gens,			%Generators
-		    body=[]}).			%Loop body
+-record(nfor_stmt, {
+    l,
+    %Loop variable
+    var,
+    %The init, limit, step values
+    init,
+    limit,
+    step,
+    %Loop body
+    body = []
+}).
 
--record(if_stmt, {l,tests=[],else_block}).
+-record(gfor_stmt, {
+    l,
+    %Loop variables
+    vars,
+    %Generators
+    gens,
+    %Loop body
+    body = []
+}).
 
--record(local_assign_stmt, {l,vars,exps}).
+-record(if_stmt, {l, tests = [], else_block}).
 
--record(local_fdef_stmt, {l,var,func}).
+-record(local_assign_stmt, {l, vars, exps}).
 
--record(expr_stmt, {l,exp}).			%Pseudo stmt for expressions
+-record(local_fdef_stmt, {l, var, func}).
 
--record(block, {l,
-		body=[],			%Block body statements
-		vars=none,			%Variable info
-		lsz=none,			%Local frame size
-		loc=not_used,			%Local var block template
-		esz=none,			%Env frame size
-		env=not_used,			%Local env block template
-		locf=false}).
+%Pseudo stmt for expressions
+-record(expr_stmt, {l, exp}).
+
+-record(block, {
+    l,
+    %Block body statements
+    body = [],
+    %Variable info
+    vars = none,
+    %Local frame size
+    lsz = none,
+    %Local var block template
+    loc = not_used,
+    %Env frame size
+    esz = none,
+    %Local env block template
+    env = not_used,
+    locf = false
+}).
 
 %% Expressions.
 %%  The line number here, 'l', can be a line number or annotation list.
 
--record(fdef, {l,
-	       pars=[],				%Parameters
-	       body=[],				%Function body statements
-	       vars=none,			%Variable info
-	       lsz=none,			%Local frame size
-	       loc=not_used,			%Local var block template
-	       esz=none,			%Env frame size
-	       env=not_used,			%Local env block template
-	       %%local=none,			%Local variables
-	       locf=false}).			%Local function
+-record(fdef, {
+    l,
+    %Parameters
+    pars = [],
+    %Function body statements
+    body = [],
+    %Variable info
+    vars = none,
+    %Local frame size
+    lsz = none,
+    %Local var block template
+    loc = not_used,
+    %Env frame size
+    esz = none,
+    %Local env block template
+    env = not_used,
+    %%local=none,			%Local variables
 
--record(lit, {l,val}).				%Literal value
+    %Local function
+    locf = false
+}).
 
--record(op, {l,op,args=[]}).
+%Literal value
+-record(lit, {l, val}).
 
--record(dot, {l,exp,rest}).
+-record(op, {l, op, args = []}).
 
--record(single, {l,exp}).
+-record(dot, {l, exp, rest}).
 
--record(var, {l,name}).
+-record(single, {l, exp}).
 
--record(fcall, {l,args=[]}).			%Function call
+-record(var, {l, name}).
 
--record(mcall, {l,meth,args=[]}).		%Method call
+%Function call
+-record(fcall, {l, args = []}).
 
--record(key, {l,key}).
+%Method call
+-record(mcall, {l, meth, args = []}).
 
--record(tabcon, {l,fields=[]}).			%Table constructor
+-record(key, {l, key}).
 
--record(efield, {l,val}).
+%Table constructor
+-record(tabcon, {l, fields = []}).
 
--record(kfield, {l,key,val}).
+-record(efield, {l, val}).
+
+-record(kfield, {l, key, val}).
 
 %% Variable types.
 %%  The line number here, 'l', can be a line number or annotation list.
 
--record(lvar, {l,n,d,i}).			%Local name, depth, index
--record(evar, {l,n,d,i}).			%Environment name, depth, index
--record(gvar, {l,n}).				%Global name
+%Local name, depth, index
+-record(lvar, {l, n, d, i}).
+%Environment name, depth, index
+-record(evar, {l, n, d, i}).
+%Global name
+-record(gvar, {l, n}).

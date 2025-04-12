@@ -24,9 +24,10 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,getmetatable/3,getuservalue/3,setmetatable/3,setuservalue/3]).
+-export([install/1, getmetatable/3, getuservalue/3, setmetatable/3, setuservalue/3]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).       %Shorten this
+%Shorten this
+-import(luerl_lib, [lua_error/2, badarg_error/3]).
 
 install(St) ->
     luerl_heap:alloc_table(table(), St).
@@ -34,10 +35,11 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"getmetatable">>,#erl_mfa{m=?MODULE,f=getmetatable}},
-     {<<"getuservalue">>,#erl_mfa{m=?MODULE,f=getuservalue}},
-     {<<"setmetatable">>,#erl_mfa{m=?MODULE,f=setmetatable}},
-     {<<"setuservalue">>,#erl_mfa{m=?MODULE,f=setuservalue}}
+    [
+        {<<"getmetatable">>, #erl_mfa{m = ?MODULE, f = getmetatable}},
+        {<<"getuservalue">>, #erl_mfa{m = ?MODULE, f = getuservalue}},
+        {<<"setmetatable">>, #erl_mfa{m = ?MODULE, f = setmetatable}},
+        {<<"setuservalue">>, #erl_mfa{m = ?MODULE, f = setuservalue}}
     ].
 
 %% getmetatable([Value|_], State) -> {[Table],State}.
@@ -46,21 +48,23 @@ table() ->
 %%  values, for tables and userdata it is the table of the object,
 %%  else the metatable for the type.
 
-getmetatable(_, [O|_], St) ->
-    {[luerl_heap:get_metatable(O, St)],St};
-getmetatable(_, As, St) -> badarg_error(getmetatable, As, St).
+getmetatable(_, [O | _], St) ->
+    {[luerl_heap:get_metatable(O, St)], St};
+getmetatable(_, As, St) ->
+    badarg_error(getmetatable, As, St).
 
-setmetatable(_, [T,M|_], St0) ->
+setmetatable(_, [T, M | _], St0) ->
     St1 = luerl_heap:set_metatable(T, M, St0),
-    {[T],St1};
-setmetatable(_, As, St) -> badarg_error(setmetatable, As, St).
+    {[T], St1};
+setmetatable(_, As, St) ->
+    badarg_error(setmetatable, As, St).
 
 %% getuservalue([User|_], State) -> {[Value],State}.
 %% setuservalue([User,Value|_], State) -> {[User],State}.
 %%  These are basically no-ops.
 
-getuservalue(_, [_|_], St) -> {[nil],St};
+getuservalue(_, [_ | _], St) -> {[nil], St};
 getuservalue(_, As, St) -> badarg_error(getuservalue, As, St).
 
-setuservalue(_, [U,_|_], St) -> {[U],St};
+setuservalue(_, [U, _ | _], St) -> {[U], St};
 setuservalue(_, As, St) -> badarg_error(setuservalue, As, St).

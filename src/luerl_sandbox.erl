@@ -16,34 +16,35 @@
 %% Authors : Tyler Butchart
 %% Purpose : Reduction limiting luerl sandbox.
 
-
 -module(luerl_sandbox).
 
 -include("luerl.hrl").
 
--export([init/0,init/1,init/2,
-         run/1,run/2,run/3,run/4,run/5]).
+-export([
+    init/0, init/1, init/2,
+    run/1, run/2, run/3, run/4, run/5
+]).
 
 -define(LUERL_GLOBAL, '_G').
 -define(SANDBOXED_VALUE, sandboxed).
 -define(SANDBOXED_GLOBALS, [
-        [?LUERL_GLOBAL, io],
-        [?LUERL_GLOBAL, file],
-        [?LUERL_GLOBAL, os, execute],
-        [?LUERL_GLOBAL, os, exit],
-        [?LUERL_GLOBAL, os, getenv],
-        [?LUERL_GLOBAL, os, remove],
-        [?LUERL_GLOBAL, os, rename],
-        [?LUERL_GLOBAL, os, tmpname],
-        [?LUERL_GLOBAL, package],
-        [?LUERL_GLOBAL, load],
-        [?LUERL_GLOBAL, loadfile],
-        [?LUERL_GLOBAL, require],
-        [?LUERL_GLOBAL, dofile],
-        [?LUERL_GLOBAL, load],
-        [?LUERL_GLOBAL, loadfile],
-        [?LUERL_GLOBAL, loadstring]
-    ]).
+    [?LUERL_GLOBAL, io],
+    [?LUERL_GLOBAL, file],
+    [?LUERL_GLOBAL, os, execute],
+    [?LUERL_GLOBAL, os, exit],
+    [?LUERL_GLOBAL, os, getenv],
+    [?LUERL_GLOBAL, os, remove],
+    [?LUERL_GLOBAL, os, rename],
+    [?LUERL_GLOBAL, os, tmpname],
+    [?LUERL_GLOBAL, package],
+    [?LUERL_GLOBAL, load],
+    [?LUERL_GLOBAL, loadfile],
+    [?LUERL_GLOBAL, require],
+    [?LUERL_GLOBAL, dofile],
+    [?LUERL_GLOBAL, load],
+    [?LUERL_GLOBAL, loadfile],
+    [?LUERL_GLOBAL, loadstring]
+]).
 
 -define(MAX_TIME, 100).
 
@@ -54,27 +55,28 @@
 -define(IS_MAP(T), false).
 -endif.
 
-
 %% init([, State|TablePaths[, TablePaths]]) -> State
 init() ->
-  init(luerl:init()).
+    init(luerl:init()).
 
 init(TablePaths) when is_list(TablePaths) ->
-  init(luerl:init(), TablePaths);
+    init(luerl:init(), TablePaths);
 init(St) ->
-  init(St, ?SANDBOXED_GLOBALS).
+    init(St, ?SANDBOXED_GLOBALS).
 
-
-init(St, []) -> luerl:gc(St);
-init(St0, [Path|Tail]) ->
-  {ok,St1} = luerl:set_table_keys_dec(Path, ?SANDBOXED_VALUE, St0),
-  init(St1, Tail).
+init(St, []) ->
+    luerl:gc(St);
+init(St0, [Path | Tail]) ->
+    {ok, St1} = luerl:set_table_keys_dec(Path, ?SANDBOXED_VALUE, St0),
+    init(St1, Tail).
 
 %% The default flags for running the sandboxed process.
 default_flags() ->
-    [{max_time, ?MAX_TIME},
-     {max_reductions, none},
-     {spawn_opts, []}].
+    [
+        {max_time, ?MAX_TIME},
+        {max_reductions, none},
+        {spawn_opts, []}
+    ].
 
 %% run(String|Binary) -> {Term,State} | {error,Term}.
 %% run(String|Binary, State) -> {Term,State} | {error,Term}.
@@ -92,17 +94,16 @@ default_flags() ->
 %%  This is the old interface which still works.
 
 run(S) ->
-  run(S, init()).
+    run(S, init()).
 
 run(S, St) ->
-   do_run(S, default_flags(), St).
+    do_run(S, default_flags(), St).
 
 %% The new interface.
 run(S, Flags, St) when ?IS_MAP(Flags) ->
     run(S, maps:to_list(Flags), St);
-run(S, Flags, #luerl{}=St) when is_list(Flags) ->
+run(S, Flags, #luerl{} = St) when is_list(Flags) ->
     do_run(S, Flags ++ default_flags(), St);
-
 %% The old interface.
 run(S, St, MaxR) when is_integer(MaxR) ->
     run(S, St, MaxR, []);
@@ -116,7 +117,7 @@ run(S, St, 0, Opts, MaxT) ->
     %% Need to get the old no reductions to the new no reductions.
     run(S, St, none, Opts, MaxT);
 run(S, St, MaxR, Opts, MaxT) ->
-    Flags = [{max_time,MaxT},{max_reductions,MaxR},{spawn_opts,Opts}],
+    Flags = [{max_time, MaxT}, {max_reductions, MaxR}, {spawn_opts, Opts}],
     do_run(S, Flags, St).
 
 do_run(S, Flags, St) ->
@@ -138,15 +139,18 @@ do_run(S, Flags, St) ->
     end.
 
 start(Parent, S, Opts, St) ->
-    spawn_opt(fun() ->
-        try
-            Reply = luerl:do(S, St),
-            erlang:send(Parent, {self(), Reply})
-        catch
-            error:Reason ->
-                erlang:send(Parent, {self(), {error, Reason}})
-        end
-     end, Opts).
+    spawn_opt(
+        fun() ->
+            try
+                Reply = luerl:do(S, St),
+                erlang:send(Parent, {self(), Reply})
+            catch
+                error:Reason ->
+                    erlang:send(Parent, {self(), {error, Reason}})
+            end
+        end,
+        Opts
+    ).
 
 wait_reductions(Runner, MaxR) ->
     case process_info(Runner, reductions) of
@@ -157,9 +161,11 @@ wait_reductions(Runner, MaxR) ->
             exit(Runner, kill),
             {killed, R};
         {reductions, _} ->
-	    %% We only check every default MAX_TIME so we don't
-	    %% overload the runner process too much.
-	    receive after ?MAX_TIME -> ok end,
+            %% We only check every default MAX_TIME so we don't
+            %% overload the runner process too much.
+            receive
+            after ?MAX_TIME -> ok
+            end,
             wait_reductions(Runner, MaxR)
     end.
 
@@ -168,10 +174,10 @@ receive_response(Runner, Timeout) ->
         {Runner, Reply} ->
             %% The runner has terminated.
             Reply;
-        {error, Error} -> Error
-    after
-        Timeout ->
-            %% Kill the runner as its time is up.
-            exit(Runner, kill),
-            {error, timeout}
+        {error, Error} ->
+            Error
+    after Timeout ->
+        %% Kill the runner as its time is up.
+        exit(Runner, kill),
+        {error, timeout}
     end.

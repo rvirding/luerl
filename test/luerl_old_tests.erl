@@ -25,20 +25,25 @@ encode_test() ->
     ?assertMatch({<<"atom">>, _State}, luerl_old:encode(atom, State)),
     ?assertMatch({5, _State}, luerl_old:encode(5, State)),
     ?assertMatch({{tref, _}, _State}, luerl_old:encode(#{a => 1, b => 2}, State)),
-    ?assertMatch({{tref, _}, _State}, luerl_old:encode([{a,1},{b,2}], State)).
+    ?assertMatch({{tref, _}, _State}, luerl_old:encode([{a, 1}, {b, 2}], State)).
 
 encode_error_test() ->
     State = luerl_old:init(),
-    ?assertException(error, {badarg, _}, luerl_old:encode({a,1}, State)).
+    ?assertException(error, {badarg, _}, luerl_old:encode({a, 1}, State)).
 
 encode_table_test() ->
     {Table, State} = luerl_old:encode(#{a => 1}, luerl_old:init()),
     State1 = luerl_old:set_table1([<<"foo">>], Table, State),
-    ?assertMatch({Table, _State2},
-                 luerl_old:get_table1([<<"foo">>], State1)),
+    ?assertMatch(
+        {Table, _State2},
+        luerl_old:get_table1([<<"foo">>], State1)
+    ),
     ?assertMatch({tref, _}, Table).
 
 invalid_value_test() ->
     State = luerl_old:init(),
-    ?assertException(error, {badarg, {invalid, value}},
-		     luerl_old:encode({invalid, value}, State)).
+    ?assertException(
+        error,
+        {badarg, {invalid, value}},
+        luerl_old:encode({invalid, value}, State)
+    ).

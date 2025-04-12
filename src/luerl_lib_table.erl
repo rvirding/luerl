@@ -26,17 +26,20 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,concat/3,insert/3,pack/3,remove/3,sort/3,unpack/3]).
+-export([install/1, concat/3, insert/3, pack/3, remove/3, sort/3, unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
--export([concat/4,concat/5,raw_length/2,length/2,unpack/2]).
+-export([concat/4, concat/5, raw_length/2, length/2, unpack/2]).
 
 %% Export some test functions.
--export([test_concat/1,
-	 test_insert/2,test_insert/3,
-	 test_remove/2,test_remove/3]).
+-export([
+    test_concat/1,
+    test_insert/2, test_insert/3,
+    test_remove/2, test_remove/3
+]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+%Shorten this
+-import(luerl_lib, [lua_error/2, badarg_error/3]).
 
 install(St) ->
     luerl_heap:alloc_table(table(), St).
@@ -44,35 +47,42 @@ install(St) ->
 %% table() -> [{FuncName,Function}].
 
 table() ->
-    [{<<"concat">>,#erl_mfa{m=?MODULE,f=concat}},
-     {<<"insert">>,#erl_mfa{m=?MODULE,f=insert}},
-     {<<"pack">>,#erl_mfa{m=?MODULE,f=pack}},
-     {<<"remove">>,#erl_mfa{m=?MODULE,f=remove}},
-     {<<"sort">>,#erl_mfa{m=?MODULE,f=sort}},
-     {<<"unpack">>,#erl_mfa{m=?MODULE,f=unpack}}
+    [
+        {<<"concat">>, #erl_mfa{m = ?MODULE, f = concat}},
+        {<<"insert">>, #erl_mfa{m = ?MODULE, f = insert}},
+        {<<"pack">>, #erl_mfa{m = ?MODULE, f = pack}},
+        {<<"remove">>, #erl_mfa{m = ?MODULE, f = remove}},
+        {<<"sort">>, #erl_mfa{m = ?MODULE, f = sort}},
+        {<<"unpack">>, #erl_mfa{m = ?MODULE, f = unpack}}
     ].
 
 %% concat - concat the elements of a list into a string.
 
 concat(_, As, St0) ->
     try
-	do_concat(As, St0)
+        do_concat(As, St0)
     catch
-	throw:{error,E,St1} -> lua_error(E, St1);
-	throw:{error,E} -> lua_error(E, St0)
+        throw:{error, E, St1} -> lua_error(E, St1);
+        throw:{error, E} -> lua_error(E, St0)
     end.
 
-do_concat([#tref{}=Tref|As], St) ->
-    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
-    case luerl_lib:conv_list(concat_args(As),
-			     [lua_string,lua_integer,lua_integer]) of
-	[Sep,I] ->
-	    {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))],St};
-	[Sep,I,J] ->
-	    {[do_concat(Arr, Dict, Sep, I, J)],St};
-	_ -> throw({error,{badarg,concat,As},St})
+do_concat([#tref{} = Tref | As], St) ->
+    #table{a = Arr, d = Dict} = luerl_heap:get_table(Tref, St),
+    case
+        luerl_lib:conv_list(
+            concat_args(As),
+            [lua_string, lua_integer, lua_integer]
+        )
+    of
+        [Sep, I] ->
+            {[do_concat(Arr, Dict, Sep, I, length_loop(Arr))], St};
+        [Sep, I, J] ->
+            {[do_concat(Arr, Dict, Sep, I, J)], St};
+        _ ->
+            throw({error, {badarg, concat, As}, St})
     end;
-do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
+do_concat(As, St) ->
+    throw({error, {badarg, concat, As}, St}).
 
 %% concat(Table, Sep, I, State) -> string().
 %% concat(Table, Sep, I, J, State) -> string().
@@ -80,23 +90,23 @@ do_concat(As, St) -> throw({error,{badarg,concat,As},St}).
 %%  Erlang.
 
 concat(Tref, Sep, I, St) ->
-    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+    #table{a = Arr, d = Dict} = luerl_heap:get_table(Tref, St),
     J = length_loop(Arr),
     do_concat(Arr, Dict, Sep, I, J).
 
 concat(Tref, Sep, I, J, St) ->
-    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+    #table{a = Arr, d = Dict} = luerl_heap:get_table(Tref, St),
     do_concat(Arr, Dict, Sep, I, J).
 
 test_concat(As) -> concat_args(As).
 
 concat_args([]) -> concat_args([<<>>]);
-concat_args([nil|As]) -> concat_args([<<>>|As]);
-concat_args([Sep]) -> [Sep,1.0];
-concat_args([Sep,nil|As]) -> concat_args([Sep,1.0|As]);
-concat_args([Sep,I]) -> [Sep,I];
-concat_args([Sep,I,nil|_]) -> [Sep,I];
-concat_args([Sep,I,J|_]) -> [Sep,I,J].
+concat_args([nil | As]) -> concat_args([<<>> | As]);
+concat_args([Sep]) -> [Sep, 1.0];
+concat_args([Sep, nil | As]) -> concat_args([Sep, 1.0 | As]);
+concat_args([Sep, I]) -> [Sep, I];
+concat_args([Sep, I, nil | _]) -> [Sep, I];
+concat_args([Sep, I, J | _]) -> [Sep, I, J].
 
 do_concat(Arr, Dict, Sep, I, J) ->
     Conc = concat_table(Arr, Dict, I, J),
@@ -110,49 +120,53 @@ concat_table(Arr, Dict, I, J) ->
 %% and limits as integers and explicitly use '==' to compare with
 %% float values in table.
 
-concat_tab(_, _, N, J) when N > J -> [];	%Done
-concat_tab(Arr, _, N, J) when N > 0 ->		%Done with table
+%Done
+concat_tab(_, _, N, J) when N > J -> [];
+%Done with table
+concat_tab(Arr, _, N, J) when N > 0 ->
     concat_arr(Arr, N, J);
 concat_tab(Arr, Dict, N, J) ->
     case ttdict:find(N, Dict) of
-	{ok,V} ->
-	    case luerl_lib:arg_to_list(V) of
-		error -> throw({error,{illegal_value,concat,V}});
-		S -> [S|concat_tab(Arr, Dict, N+1, J)]
-	    end;
-	error -> throw({error,{illegal_value,concat,nil}})
+        {ok, V} ->
+            case luerl_lib:arg_to_list(V) of
+                error -> throw({error, {illegal_value, concat, V}});
+                S -> [S | concat_tab(Arr, Dict, N + 1, J)]
+            end;
+        error ->
+            throw({error, {illegal_value, concat, nil}})
     end.
 
 concat_arr(_, N, J) when N > J -> [];
 concat_arr(Arr, N, J) ->
     V = array:get(N, Arr),
     case luerl_lib:arg_to_list(V) of
-	error -> throw({error,{illegal_value,concat,V}});
-	S -> [S|concat_arr(Arr, N+1, J)]
+        error -> throw({error, {illegal_value, concat, V}});
+        S -> [S | concat_arr(Arr, N + 1, J)]
     end.
 
 concat_join([E], _) -> list_to_binary(E);
-concat_join([E1|Es], Sep) ->
-    iolist_to_binary([E1|[ [Sep,E] || E <- Es ]]);
+concat_join([E1 | Es], Sep) -> iolist_to_binary([E1 | [[Sep, E] || E <- Es]]);
 concat_join([], _) -> <<>>.
 
 %% insert(Table, [Pos,] Value) -> []
 %%  Insert an element into a list shifting following elements.
 
-insert(_, [Tref,V], St) when ?IS_TREF(Tref) ->
-    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
+insert(_, [Tref, V], St) when ?IS_TREF(Tref) ->
+    #table{a = Arr0} = T = luerl_heap:get_table(Tref, St),
     Arr1 = do_insert_last(Arr0, V),
-    {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
-insert(_, [Tref,P0,V]=As, St) when ?IS_TREF(Tref) ->
-    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St),
+    {[], luerl_heap:set_table(Tref, T#table{a = Arr1}, St)};
+insert(_, [Tref, P0, V] = As, St) when ?IS_TREF(Tref) ->
+    #table{a = Arr0} = T = luerl_heap:get_table(Tref, St),
     Size = length_loop(Arr0),
     case luerl_lib:arg_to_integer(P0) of
-	P1 when P1 >=1, P1 =< Size+1 ->
-	    Arr1 = do_insert(Arr0, P1, V),
-	    {[],luerl_heap:set_table(Tref, T#table{a=Arr1}, St)};
-	_ -> badarg_error(insert, As, St)
+        P1 when P1 >= 1, P1 =< Size + 1 ->
+            Arr1 = do_insert(Arr0, P1, V),
+            {[], luerl_heap:set_table(Tref, T#table{a = Arr1}, St)};
+        _ ->
+            badarg_error(insert, As, St)
     end;
-insert(_, As, St) -> badarg_error(insert, As, St).
+insert(_, As, St) ->
+    badarg_error(insert, As, St).
 
 test_insert(A, V) -> do_insert_last(A, V).
 test_insert(A, N, V) -> do_insert(A, N, V).
@@ -162,43 +176,53 @@ test_insert(A, N, V) -> do_insert(A, N, V).
 %%  after that.
 
 do_insert_last(Arr, V) ->
-    Len = length_loop(Arr),			%Get "length"
-    array:set(Len+1, V, Arr).			%Set the value
+    %Get "length"
+    Len = length_loop(Arr),
+    %Set the value
+    array:set(Len + 1, V, Arr).
 
 %% do_insert(Array, P, V) -> Array.
 %%  We only insert elements inside the "proper" 1..n table.
 
-do_insert(Arr, P, V) ->				%Go to the array part
+%Go to the array part
+do_insert(Arr, P, V) ->
     insert_array(Arr, P, V).
 
-insert_array(Arr0, N, Here) ->			%Put this at N shifting up
+%Put this at N shifting up
+insert_array(Arr0, N, Here) ->
     case array:get(N, Arr0) of
-	nil -> array:set(N, Here, Arr0);	%Just fill hole
-	Next ->					%Take value for next slot
-	    Arr1 = array:set(N, Here, Arr0),
-	    insert_array(Arr1, N+1, Next)
+        %Just fill hole
+        nil ->
+            array:set(N, Here, Arr0);
+        %Take value for next slot
+        Next ->
+            Arr1 = array:set(N, Here, Arr0),
+            insert_array(Arr1, N + 1, Next)
     end.
 
 %% remove(Table [,Pos]) -> Value.
 %%  Remove an element from a list shifting following elements.
 
 remove(_, [Tref], St) when ?IS_TREF(Tref) ->
-    #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
-    {Ret,Arr1,Dict1} = do_remove_last(Arr0, Dict0),
-    {Ret,luerl_heap:set_table(Tref, T#table{a=Arr1,d=Dict1}, St)};
-remove(_, [Tref,P0|_]=As, St) when ?IS_TREF(Tref) ->
-    #table{a=Arr0,d=Dict0} = T = luerl_heap:get_table(Tref, St),
+    #table{a = Arr0, d = Dict0} = T = luerl_heap:get_table(Tref, St),
+    {Ret, Arr1, Dict1} = do_remove_last(Arr0, Dict0),
+    {Ret, luerl_heap:set_table(Tref, T#table{a = Arr1, d = Dict1}, St)};
+remove(_, [Tref, P0 | _] = As, St) when ?IS_TREF(Tref) ->
+    #table{a = Arr0, d = Dict0} = T = luerl_heap:get_table(Tref, St),
     case luerl_lib:arg_to_integer(P0) of
-	P1 when P1 =/= nil ->
-	    case do_remove(Arr0, Dict0, P1) of
-		{Ret,Arr1,Dict1} ->
-		    {Ret,
-		     luerl_heap:set_table(Tref, T#table{a=Arr1,d=Dict1}, St)};
-		badarg -> badarg_error(remove, As, St)
-	    end;
-	_ -> badarg_error(remove, As, St)	%nil or P < 1
+        P1 when P1 =/= nil ->
+            case do_remove(Arr0, Dict0, P1) of
+                {Ret, Arr1, Dict1} ->
+                    {Ret, luerl_heap:set_table(Tref, T#table{a = Arr1, d = Dict1}, St)};
+                badarg ->
+                    badarg_error(remove, As, St)
+            end;
+        %nil or P < 1
+        _ ->
+            badarg_error(remove, As, St)
     end;
-remove(_, As, St) -> badarg_error(remove, As, St).
+remove(_, As, St) ->
+    badarg_error(remove, As, St).
 
 test_remove(Arr, Dict) -> do_remove_last(Arr, Dict).
 test_remove(Arr, Dict, N) -> do_remove(Arr, Dict, N).
@@ -209,21 +233,21 @@ test_remove(Arr, Dict, N) -> do_remove(Arr, Dict, N).
 
 do_remove_last(Arr0, Dict0) ->
     case length_loop(Arr0) of
-	0 ->
-	    do_remove_0(Arr0, Dict0);
-	Size ->
-	    Val = array:get(Size, Arr0),
-	    Arr1 = array:set(Size, nil, Arr0),
-	    {[Val],Arr1,Dict0}
+        0 ->
+            do_remove_0(Arr0, Dict0);
+        Size ->
+            Val = array:get(Size, Arr0),
+            Arr1 = array:set(Size, nil, Arr0),
+            {[Val], Arr1, Dict0}
     end.
 
 do_remove_0(Arr, Dict0) ->
     case ttdict:find(0.0, Dict0) of
-	{ok,Val} ->
-	    Dict1 = ttdict:erase(0.0, Dict0),
-	    {[Val],Arr,Dict1};
-	error ->
-	    {[nil],Arr,Dict0}
+        {ok, Val} ->
+            Dict1 = ttdict:erase(0.0, Dict0),
+            {[Val], Arr, Dict1};
+        error ->
+            {[nil], Arr, Dict0}
     end.
 
 %% do_remove(Array, Dict, P) -> {Return,Array,Dict} | badarg.
@@ -236,59 +260,71 @@ do_remove(Arr, Dict, P) ->
 do_remove(Arr, Dict, 0, 0) ->
     do_remove_0(Arr, Dict);
 do_remove(Arr, Dict, 1, 0) ->
-    {[nil],Arr,Dict};
-do_remove(Arr0, Dict, P, Size) when P >= 1, P =< Size+1 ->
+    {[nil], Arr, Dict};
+do_remove(Arr0, Dict, P, Size) when P >= 1, P =< Size + 1 ->
     Ret = array:get(P, Arr0),
     Arr1 = remove_array_1(Arr0, P),
-    {[Ret],Arr1,Dict};
-do_remove(_, _, _, _) -> badarg.
+    {[Ret], Arr1, Dict};
+do_remove(_, _, _, _) ->
+    badarg.
 
 remove_array_1(Arr0, N) ->
-    There = array:get(N+1, Arr0),		%Next value
+    %Next value
+    There = array:get(N + 1, Arr0),
     Arr1 = array:set(N, There, Arr0),
-    if There =:= nil -> Arr1;			%End if next a nil
-       true -> remove_array_1(Arr1, N+1)
+    %End if next a nil
+    if
+        There =:= nil -> Arr1;
+        true -> remove_array_1(Arr1, N + 1)
     end.
 
 %% pack - pack arguments in to a table.
 
 pack(_, As, St0) ->
-    T = pack_loop(As, 0),			%Indexes are integers!
-    {Tab,St1} = luerl_heap:alloc_table(T, St0),
-    {[Tab],St1}.
+    %Indexes are integers!
+    T = pack_loop(As, 0),
+    {Tab, St1} = luerl_heap:alloc_table(T, St0),
+    {[Tab], St1}.
 
-pack_loop([E|Es], N) ->
-    [{N+1,E}|pack_loop(Es, N+1)];
-pack_loop([], N) -> [{<<"n">>,N}].
+pack_loop([E | Es], N) ->
+    [{N + 1, E} | pack_loop(Es, N + 1)];
+pack_loop([], N) ->
+    [{<<"n">>, N}].
 
 %% unpack - unpack table into return values.
 
-unpack(_, [#tref{}=Tref|As], St) ->
-    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+unpack(_, [#tref{} = Tref | As], St) ->
+    #table{a = Arr, d = Dict} = luerl_heap:get_table(Tref, St),
     case luerl_lib:args_to_integers(unpack_args(As)) of
-	[I] ->
-	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
-	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
-	    {Unp,St};
-	[I,J] ->
-	    Unp = do_unpack(Arr, Dict, I, J),
-	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
-	    {Unp,St};
-	error ->				%Not numbers
-	    badarg_error(unpack, [Tref|As], St)
+        [I] ->
+            Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
+            %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
+            {Unp, St};
+        [I, J] ->
+            Unp = do_unpack(Arr, Dict, I, J),
+            %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
+            {Unp, St};
+        %Not numbers
+        error ->
+            badarg_error(unpack, [Tref | As], St)
     end;
-unpack(_, [], St) -> badarg_error(unpack, [], St).
+unpack(_, [], St) ->
+    badarg_error(unpack, [], St).
 
 unpack(As, St) -> unpack(nil, As, St).
 
 %% unpack_args(Args) -> Args.
 %% Fix args for unpack getting defaults right and handling 'nil'.
 
-unpack_args([]) -> unpack_args([1.0]);		%Just start from the beginning
-unpack_args([nil|As]) -> unpack_args([1.0|As]);
-unpack_args([I]) -> [I];			%Only one argument
-unpack_args([I,nil|_]) -> [I];			%Goto the default end
-unpack_args([I,J|_]) -> [I,J].			%Only use two arguments
+%Just start from the beginning
+unpack_args([]) -> unpack_args([1.0]);
+unpack_args([nil | As]) -> unpack_args([1.0 | As]);
+%Only one argument
+unpack_args([I]) -> [I];
+%Goto the default end
+unpack_args([I, nil | _]) -> [I];
+%Only use two arguments
+unpack_args([I, J | _]) -> [I, J].
 
 %% This and concat_table are very similar.
 %% First scan over table up to 0 then the array. We have the indexes
@@ -297,90 +333,97 @@ unpack_args([I,J|_]) -> [I,J].			%Only use two arguments
 
 do_unpack(Arr, Dict, I, J) -> unpack_tab(Arr, Dict, I, J).
 
-unpack_tab(_, _, N, J) when N > J -> [];	%Done
-unpack_tab(Arr, _, N, J) when N > 0 ->		%Done with table
+%Done
+unpack_tab(_, _, N, J) when N > J -> [];
+%Done with table
+unpack_tab(Arr, _, N, J) when N > 0 ->
     unpack_arr(Arr, N, J);
 unpack_tab(Arr, Dict, N, J) ->
-    E = case ttdict:find(N, Dict) of
-	    {ok,V} -> V;
-	    error -> nil
-	end,
-    [E|unpack_tab(Arr, Dict, N+1, J)].
+    E =
+        case ttdict:find(N, Dict) of
+            {ok, V} -> V;
+            error -> nil
+        end,
+    [E | unpack_tab(Arr, Dict, N + 1, J)].
 
 unpack_arr(_, N, J) when N > J -> [];
-unpack_arr(Arr, N, J) ->
-    [array:get(N, Arr)|unpack_arr(Arr, N+1, J)].
+unpack_arr(Arr, N, J) -> [array:get(N, Arr) | unpack_arr(Arr, N + 1, J)].
 
 %% length(Table, State) -> {Length,State}.
 %% raw_length(Table, State) -> Length.
 %%  The length of a table is the number of numeric keys in sequence
 %%  from 1. Except if 1 is nil followed by non-nil. Don't ask!
 
-length(#tref{}=T, St0) ->
+length(#tref{} = T, St0) ->
     Meta = luerl_heap:get_metamethod(T, <<"__len">>, St0),
-    if ?IS_TRUE(Meta) ->
-	    {Ret,St1} = luerl_emul:functioncall(Meta, [T], St0),
-	    {luerl_lib:first_value(Ret),St1};
-       true ->
-	    {raw_length(T, St0),St0}
+    if
+        ?IS_TRUE(Meta) ->
+            {Ret, St1} = luerl_emul:functioncall(Meta, [T], St0),
+            {luerl_lib:first_value(Ret), St1};
+        true ->
+            {raw_length(T, St0), St0}
     end.
 
 raw_length(Tref, St) ->
-    #table{a=Arr} = luerl_heap:get_table(Tref, St),
+    #table{a = Arr} = luerl_heap:get_table(Tref, St),
     length_loop(Arr).
 
 length_loop(Arr) ->
-    case {array:get(1, Arr),array:get(2, Arr)} of
-	{nil,nil} -> 0;
-	{nil,_} -> length_loop(3, Arr);
-	{_,nil} -> 1;
-	{_,_} -> length_loop(3, Arr)
+    case {array:get(1, Arr), array:get(2, Arr)} of
+        {nil, nil} -> 0;
+        {nil, _} -> length_loop(3, Arr);
+        {_, nil} -> 1;
+        {_, _} -> length_loop(3, Arr)
     end.
 
 length_loop(I, Arr) ->
     case array:get(I, Arr) of
-	nil -> I-1;
-	_ -> length_loop(I+1, Arr)
+        nil -> I - 1;
+        _ -> length_loop(I + 1, Arr)
     end.
 
 %% sort(Table [,SortFun])
 %%  Sort the elements of the list after their values.
 
 sort(_, [Tref], St0) when ?IS_TREF(Tref) ->
-    Comp = fun (A, B, St) -> lt_comp(A, B, St) end,
+    Comp = fun(A, B, St) -> lt_comp(A, B, St) end,
     St1 = do_sort(Comp, St0, Tref),
-    {[],St1};
-sort(_, [Tref,Func|_], St0) when ?IS_TREF(Tref) ->
-    Comp = fun (A, B, St) ->
-		   luerl_emul:functioncall(Func, [A,B], St)
-	   end,
+    {[], St1};
+sort(_, [Tref, Func | _], St0) when ?IS_TREF(Tref) ->
+    Comp = fun(A, B, St) ->
+        luerl_emul:functioncall(Func, [A, B], St)
+    end,
     St1 = do_sort(Comp, St0, Tref),
-    {[],St1};
-sort(_, As, St) -> badarg_error(sort, As, St).
+    {[], St1};
+sort(_, As, St) ->
+    badarg_error(sort, As, St).
 
 do_sort(Comp, St0, Tref) ->
-    #table{a=Arr0} = T = luerl_heap:get_table(Tref, St0),
+    #table{a = Arr0} = T = luerl_heap:get_table(Tref, St0),
     case array:to_list(Arr0) of
-	[] -> St0;				%Nothing to do
-	[E0|Es0] ->
-	    %% 1st element index 0, skip it and then prepend it again
-	    {Es1,St1} = merge_sort(Comp, St0, Es0),
-	    Arr2 = array:from_list([E0|Es1], nil),
-	    %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
-	    luerl_heap:set_table(Tref, T#table{a=Arr2}, St1)
+        %Nothing to do
+        [] ->
+            St0;
+        [E0 | Es0] ->
+            %% 1st element index 0, skip it and then prepend it again
+            {Es1, St1} = merge_sort(Comp, St0, Es0),
+            Arr2 = array:from_list([E0 | Es1], nil),
+            %% io:fwrite("so: ~p\n", [{Arr0,Arr1,Arr2}]),
+            luerl_heap:set_table(Tref, T#table{a = Arr2}, St1)
     end.
 
 %% lt_comp(O1, O2, State) -> {[Bool],State}.
 %%  Proper Lua '<' comparison.
 
-lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2],St};
-lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2],St};
+lt_comp(O1, O2, St) when is_number(O1), is_number(O2) -> {[O1 =< O2], St};
+lt_comp(O1, O2, St) when is_binary(O1), is_binary(O2) -> {[O1 =< O2], St};
 lt_comp(O1, O2, St0) ->
     case luerl_heap:get_metamethod(O1, O2, <<"__lt">>, St0) of
-	nil -> lua_error({illegal_comp,sort}, St0);
-	Meta ->
-	    {Ret,St1} = luerl_emul:functioncall(Meta, [O1,O2], St0),
-	    {[luerl_lib:boolean_value(Ret)],St1}
+        nil ->
+            lua_error({illegal_comp, sort}, St0);
+        Meta ->
+            {Ret, St1} = luerl_emul:functioncall(Meta, [O1, O2], St0),
+            {[luerl_lib:boolean_value(Ret)], St1}
     end.
 
 %% sort(A,B,C) -> sort_up(A,B,C).
@@ -433,28 +476,30 @@ lt_comp(O1, O2, St0) ->
 %%  converted to chain State through all calls to the comparison
 %%  function.
 
-merge_sort(_, St, []) -> {[],St};
-merge_sort(_, St, [_] = L) -> {L,St};
-merge_sort(Fun, St0, [X, Y|T]) ->
-    {Ret,St1} = Fun(X, Y, St0),
+merge_sort(_, St, []) ->
+    {[], St};
+merge_sort(_, St, [_] = L) ->
+    {L, St};
+merge_sort(Fun, St0, [X, Y | T]) ->
+    {Ret, St1} = Fun(X, Y, St0),
     case luerl_lib:boolean_value(Ret) of
-	true ->
-	    fsplit_1(Y, X, Fun, St1, T, [], []);
-	false ->
-	    fsplit_2(Y, X, Fun, St1, T, [], [])
+        true ->
+            fsplit_1(Y, X, Fun, St1, T, [], []);
+        false ->
+            fsplit_2(Y, X, Fun, St1, T, [], [])
     end.
 
 %% Ascending.
-fsplit_1(Y, X, Fun, St0, [Z|L], R, Rs) ->
-    {Ret1,St1} = Fun(Y, Z, St0),
+fsplit_1(Y, X, Fun, St0, [Z | L], R, Rs) ->
+    {Ret1, St1} = Fun(Y, Z, St0),
     case luerl_lib:boolean_value(Ret1) of
         true ->
-            fsplit_1(Z, Y, Fun, St1, L, [X|R], Rs);
+            fsplit_1(Z, Y, Fun, St1, L, [X | R], Rs);
         false ->
-	    {Ret2,St2} = Fun(X, Z, St1),
+            {Ret2, St2} = Fun(X, Z, St1),
             case luerl_lib:boolean_value(Ret2) of
                 true ->
-                    fsplit_1(Y, Z, Fun, St2, L, [X|R], Rs);
+                    fsplit_1(Y, Z, Fun, St2, L, [X | R], Rs);
                 false when R == [] ->
                     fsplit_1(Y, X, Fun, St2, L, [Z], Rs);
                 false ->
@@ -462,42 +507,42 @@ fsplit_1(Y, X, Fun, St0, [Z|L], R, Rs) ->
             end
     end;
 fsplit_1(Y, X, Fun, St, [], R, Rs) ->
-    rfmergel([[Y, X|R]|Rs], [], Fun, St, asc).
+    rfmergel([[Y, X | R] | Rs], [], Fun, St, asc).
 
-fsplit_1_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
-    {Ret1,St1} = Fun(Y, Z, St0),
+fsplit_1_1(Y, X, Fun, St0, [Z | L], R, Rs, S) ->
+    {Ret1, St1} = Fun(Y, Z, St0),
     case luerl_lib:boolean_value(Ret1) of
         true ->
-            fsplit_1_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
+            fsplit_1_1(Z, Y, Fun, St1, L, [X | R], Rs, S);
         false ->
-	    {Ret2,St2} = Fun(X, Z, St1),
+            {Ret2, St2} = Fun(X, Z, St1),
             case luerl_lib:boolean_value(Ret2) of
                 true ->
-                    fsplit_1_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
+                    fsplit_1_1(Y, Z, Fun, St2, L, [X | R], Rs, S);
                 false ->
-		    {Ret3,St3} = Fun(S, Z, St2),
+                    {Ret3, St3} = Fun(S, Z, St2),
                     case luerl_lib:boolean_value(Ret3) of
                         true ->
-                            fsplit_1(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
+                            fsplit_1(Z, S, Fun, St3, L, [], [[Y, X | R] | Rs]);
                         false ->
-                            fsplit_1(S, Z, Fun, St3, L, [], [[Y, X|R]|Rs])
+                            fsplit_1(S, Z, Fun, St3, L, [], [[Y, X | R] | Rs])
                     end
             end
     end;
 fsplit_1_1(Y, X, Fun, St, [], R, Rs, S) ->
-    rfmergel([[S], [Y, X|R]|Rs], [], Fun, St, asc).
+    rfmergel([[S], [Y, X | R] | Rs], [], Fun, St, asc).
 
 %% Descending.
-fsplit_2(Y, X, Fun, St0, [Z|L], R, Rs) ->
-    {Ret1,St1} = Fun(Y, Z, St0),
+fsplit_2(Y, X, Fun, St0, [Z | L], R, Rs) ->
+    {Ret1, St1} = Fun(Y, Z, St0),
     case luerl_lib:boolean_value(Ret1) of
         false ->
-            fsplit_2(Z, Y, Fun, St1, L, [X|R], Rs);
+            fsplit_2(Z, Y, Fun, St1, L, [X | R], Rs);
         true ->
-	    {Ret2,St2} = Fun(X, Z, St1),
+            {Ret2, St2} = Fun(X, Z, St1),
             case luerl_lib:boolean_value(Ret2) of
                 false ->
-                    fsplit_2(Y, Z, Fun, St2, L, [X|R], Rs);
+                    fsplit_2(Y, Z, Fun, St2, L, [X | R], Rs);
                 true when R == [] ->
                     fsplit_2(Y, X, Fun, St2, L, [Z], Rs);
                 true ->
@@ -505,51 +550,52 @@ fsplit_2(Y, X, Fun, St0, [Z|L], R, Rs) ->
             end
     end;
 fsplit_2(Y, X, Fun, St, [], R, Rs) ->
-    fmergel([[Y, X|R]|Rs], [], Fun, St, desc).
+    fmergel([[Y, X | R] | Rs], [], Fun, St, desc).
 
-fsplit_2_1(Y, X, Fun, St0, [Z|L], R, Rs, S) ->
-    {Ret1,St1} = Fun(Y, Z, St0),
+fsplit_2_1(Y, X, Fun, St0, [Z | L], R, Rs, S) ->
+    {Ret1, St1} = Fun(Y, Z, St0),
     case luerl_lib:boolean_value(Ret1) of
         false ->
-            fsplit_2_1(Z, Y, Fun, St1, L, [X|R], Rs, S);
+            fsplit_2_1(Z, Y, Fun, St1, L, [X | R], Rs, S);
         true ->
-	    {Ret2,St2} = Fun(X, Z, St1),
+            {Ret2, St2} = Fun(X, Z, St1),
             case luerl_lib:boolean_value(Ret2) of
                 false ->
-                    fsplit_2_1(Y, Z, Fun, St2, L, [X|R], Rs, S);
+                    fsplit_2_1(Y, Z, Fun, St2, L, [X | R], Rs, S);
                 true ->
-		    {Ret3,St3} = Fun(S, Z, St2),
+                    {Ret3, St3} = Fun(S, Z, St2),
                     case luerl_lib:boolean_value(Ret3) of
                         false ->
-                            fsplit_2(Z, S, Fun, St3, L, [], [[Y, X|R]|Rs]);
+                            fsplit_2(Z, S, Fun, St3, L, [], [[Y, X | R] | Rs]);
                         true ->
-                            fsplit_2(S, Z, Fun, St3, L, [], [[Y, X|R]|Rs])
+                            fsplit_2(S, Z, Fun, St3, L, [], [[Y, X | R] | Rs])
                     end
             end
     end;
 fsplit_2_1(Y, X, Fun, St, [], R, Rs, S) ->
-    fmergel([[S], [Y, X|R]|Rs], [], Fun, St, desc).
+    fmergel([[S], [Y, X | R] | Rs], [], Fun, St, desc).
 
-fmergel([T1, [H2|T2]|L], Acc, Fun, St0, asc) ->
-    {L1,St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
-    fmergel(L, [L1|Acc], Fun, St1, asc);
-fmergel([[H2|T2], T1|L], Acc, Fun, St0, desc) ->
-    {L1,St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
-    fmergel(L, [L1|Acc], Fun, St1, desc);
-fmergel([L], [], _Fun, St, _O) -> {L,St};
+fmergel([T1, [H2 | T2] | L], Acc, Fun, St0, asc) ->
+    {L1, St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
+    fmergel(L, [L1 | Acc], Fun, St1, asc);
+fmergel([[H2 | T2], T1 | L], Acc, Fun, St0, desc) ->
+    {L1, St1} = fmerge2_1(T1, H2, Fun, St0, T2, []),
+    fmergel(L, [L1 | Acc], Fun, St1, desc);
+fmergel([L], [], _Fun, St, _O) ->
+    {L, St};
 fmergel([L], Acc, Fun, St, O) ->
-    rfmergel([lists:reverse(L, [])|Acc], [], Fun, St, O);
+    rfmergel([lists:reverse(L, []) | Acc], [], Fun, St, O);
 fmergel([], Acc, Fun, St, O) ->
     rfmergel(Acc, [], Fun, St, O).
 
-rfmergel([[H2|T2], T1|L], Acc, Fun, St0, asc) ->
-    {L1,St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
-    rfmergel(L, [L1|Acc], Fun, St1, asc);
-rfmergel([T1, [H2|T2]|L], Acc, Fun, St0, desc) ->
-    {L1,St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
-    rfmergel(L, [L1|Acc], Fun, St1, desc);
+rfmergel([[H2 | T2], T1 | L], Acc, Fun, St0, asc) ->
+    {L1, St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
+    rfmergel(L, [L1 | Acc], Fun, St1, asc);
+rfmergel([T1, [H2 | T2] | L], Acc, Fun, St0, desc) ->
+    {L1, St1} = rfmerge2_1(T1, H2, Fun, St0, T2, []),
+    rfmergel(L, [L1 | Acc], Fun, St1, desc);
 rfmergel([L], Acc, Fun, St, O) ->
-    fmergel([lists:reverse(L, [])|Acc], [], Fun, St, O);
+    fmergel([lists:reverse(L, []) | Acc], [], Fun, St, O);
 rfmergel([], Acc, Fun, St, O) ->
     fmergel(Acc, [], Fun, St, O).
 
@@ -559,51 +605,51 @@ rfmergel([], Acc, Fun, St, O) ->
 %%     T1.
 
 %% Elements from the first list are prioritized.
-fmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
-    {Ret,St1} = Fun(H1, H2, St0),
+fmerge2_1([H1 | T1], H2, Fun, St0, T2, M) ->
+    {Ret, St1} = Fun(H1, H2, St0),
     case luerl_lib:boolean_value(Ret) of
         true ->
-            fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
+            fmerge2_1(T1, H2, Fun, St1, T2, [H1 | M]);
         false ->
-            fmerge2_2(H1, T1, Fun, St1, T2, [H2|M])
+            fmerge2_2(H1, T1, Fun, St1, T2, [H2 | M])
     end;
 fmerge2_1([], H2, _Fun, St, T2, M) ->
-    {lists:reverse(T2, [H2|M]),St}.
+    {lists:reverse(T2, [H2 | M]), St}.
 
-fmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
-    {Ret,St1} = Fun(H1, H2, St0),
+fmerge2_2(H1, T1, Fun, St0, [H2 | T2], M) ->
+    {Ret, St1} = Fun(H1, H2, St0),
     case luerl_lib:boolean_value(Ret) of
         true ->
-            fmerge2_1(T1, H2, Fun, St1, T2, [H1|M]);
+            fmerge2_1(T1, H2, Fun, St1, T2, [H1 | M]);
         false ->
-            fmerge2_2(H1, T1, Fun, St1, T2, [H2|M])
+            fmerge2_2(H1, T1, Fun, St1, T2, [H2 | M])
     end;
 fmerge2_2(H1, T1, _Fun, St, [], M) ->
-    {lists:reverse(T1, [H1|M]),St}.
+    {lists:reverse(T1, [H1 | M]), St}.
 
 %% rmerge(Fun, T1, [H2 | T2]) when is_function(Fun, 2) ->
 %%     lists:reverse(rfmerge2_1(T1, H2, Fun, T2, []), []);
 %% rmerge(Fun, T1, []) when is_function(Fun, 2) ->
 %%     T1.
 
-rfmerge2_1([H1|T1], H2, Fun, St0, T2, M) ->
-    {Ret,St1} = Fun(H1, H2, St0),
+rfmerge2_1([H1 | T1], H2, Fun, St0, T2, M) ->
+    {Ret, St1} = Fun(H1, H2, St0),
     case luerl_lib:boolean_value(Ret) of
         true ->
-            rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
+            rfmerge2_2(H1, T1, Fun, St1, T2, [H2 | M]);
         false ->
-            rfmerge2_1(T1, H2, Fun, St1, T2, [H1|M])
+            rfmerge2_1(T1, H2, Fun, St1, T2, [H1 | M])
     end;
 rfmerge2_1([], H2, _Fun, St, T2, M) ->
-    {lists:reverse(T2, [H2|M]),St}.
+    {lists:reverse(T2, [H2 | M]), St}.
 
-rfmerge2_2(H1, T1, Fun, St0, [H2|T2], M) ->
-    {Ret,St1} = Fun(H1, H2, St0),
+rfmerge2_2(H1, T1, Fun, St0, [H2 | T2], M) ->
+    {Ret, St1} = Fun(H1, H2, St0),
     case luerl_lib:boolean_value(Ret) of
         true ->
-            rfmerge2_2(H1, T1, Fun, St1, T2, [H2|M]);
+            rfmerge2_2(H1, T1, Fun, St1, T2, [H2 | M]);
         false ->
-            rfmerge2_1(T1, H2, Fun, St1, T2, [H1|M])
+            rfmerge2_1(T1, H2, Fun, St1, T2, [H1 | M])
     end;
 rfmerge2_2(H1, T1, _Fun, St, [], M) ->
-    {lists:reverse(T1, [H1|M]),St}.
+    {lists:reverse(T1, [H1 | M]), St}.

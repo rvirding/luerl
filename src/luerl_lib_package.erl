@@ -28,21 +28,25 @@
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.
--export([install/1,require/3,searchpath/3,preload_searcher/3,lua_searcher/3]).
+-export([install/1, require/3, searchpath/3, preload_searcher/3, lua_searcher/3]).
 
 %% Export some functions which can be called from elsewhere.
 -export([search_path/5]).
 
--import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this
+%Shorten this
+-import(luerl_lib, [lua_error/2, badarg_error/3]).
 
 install(St0) ->
-    St1 = luerl_emul:set_global_key(<<"require">>,
-				    #erl_mfa{m=?MODULE,f=require}, St0),
-    {S,St2} = luerl_heap:alloc_table(searchers_table(), St1),
-    {L,St3} = luerl_heap:alloc_table(loaded_table(), St2),
-    {P,St4} = luerl_heap:alloc_table(preload_table(), St3),
-    {T,St5} = luerl_heap:alloc_table(table(S, L, P), St4),
-    {T,St5}.
+    St1 = luerl_emul:set_global_key(
+        <<"require">>,
+        #erl_mfa{m = ?MODULE, f = require},
+        St0
+    ),
+    {S, St2} = luerl_heap:alloc_table(searchers_table(), St1),
+    {L, St3} = luerl_heap:alloc_table(loaded_table(), St2),
+    {P, St4} = luerl_heap:alloc_table(preload_table(), St3),
+    {T, St5} = luerl_heap:alloc_table(table(S, L, P), St4),
+    {T, St5}.
 
 %% table() -> [{FuncName,Function}].
 %% meta_table() -> [{TableName,Function}].
@@ -51,17 +55,20 @@ install(St0) ->
 %% loaded_table()
 
 table(S, L, P) ->
-    [{<<"config">>,config()},
-     {<<"loaded">>,L},
-     {<<"preload">>,P},
-     {<<"path">>,path()},
-     {<<"searchers">>,S},
-     {<<"searchpath">>,#erl_mfa{m=?MODULE,f=searchpath}}
+    [
+        {<<"config">>, config()},
+        {<<"loaded">>, L},
+        {<<"preload">>, P},
+        {<<"path">>, path()},
+        {<<"searchers">>, S},
+        {<<"searchpath">>, #erl_mfa{m = ?MODULE, f = searchpath}}
     ].
 
 searchers_table() ->
-    [{1.0,#erl_mfa{m=?MODULE,f=preload_searcher}},
-     {2.0,#erl_mfa{m=?MODULE,f=lua_searcher}}].
+    [
+        {1.0, #erl_mfa{m = ?MODULE, f = preload_searcher}},
+        {2.0, #erl_mfa{m = ?MODULE, f = lua_searcher}}
+    ].
 
 preload_table() -> [].
 
@@ -77,12 +84,14 @@ loaded_table() -> [].
 %%  Generate initial data for tables.
 
 config() ->
-    <<"/\n",";\n","?\n","!\n","-\n">>.		%The defaults
+    %The defaults
+    <<"/\n", ";\n", "?\n", "!\n", "-\n">>.
 
 path() ->
     case os:getenv("LUA_PATH") of
-	false -> <<"./?.lua;./?/init.lua">>;	%Default path
-	Path -> list_to_binary(Path)
+        %Default path
+        false -> <<"./?.lua;./?/init.lua">>;
+        Path -> list_to_binary(Path)
     end.
 
 %% meta_values([_,<<"bert">>], St) ->
@@ -92,19 +101,26 @@ path() ->
 %% searchpath(Name, Path [, Sep [, Rep]]) -> [File] | [nil|Files].
 
 searchpath(_, As, St) ->
-    case luerl_lib:conv_list(search_args(As),
-			     [lua_string,lua_string,lua_string,lua_string]) of
-	[N,P,S,R] ->				%Name, path, sep, rep
-	    Ret = case search_path(N, P, S, R, []) of
-		      {ok,File} -> [File];
-		      {error,Tried} -> [nil,Tried]
-		  end,
-	    {Ret,St};
-	_ -> badarg_error(searchpath, As, St)
+    case
+        luerl_lib:conv_list(
+            search_args(As),
+            [lua_string, lua_string, lua_string, lua_string]
+        )
+    of
+        %Name, path, sep, rep
+        [N, P, S, R] ->
+            Ret =
+                case search_path(N, P, S, R, []) of
+                    {ok, File} -> [File];
+                    {error, Tried} -> [nil, Tried]
+                end,
+            {Ret, St};
+        _ ->
+            badarg_error(searchpath, As, St)
     end.
 
-search_args([N,P]) -> [N,P,<<".">>,<<"/">>];
-search_args([N,P,S]) -> [N,P,S,<<"/">>];
+search_args([N, P]) -> [N, P, <<".">>, <<"/">>];
+search_args([N, P, S]) -> [N, P, S, <<"/">>];
 search_args(As) -> As.
 
 %% search_path(Name, Path, Sep, Rep, Tried) -> {ok,File} | {error,Tried}.
@@ -115,68 +131,81 @@ search_path(N0, P, S, R, Tried) ->
     Ts = binary:split(P, <<";">>, [global]),
     search_path_loop(N1, Ts, Tried).
 
-search_path_loop(Name, [T|Ts], Tried) ->
+search_path_loop(Name, [T | Ts], Tried) ->
     File = binary:replace(T, <<"?">>, Name, [global]),
     %% Test if file can be opened for reading.
     case file:read_file_info(File) of
-	{ok,#file_info{access=A}} when A =:= read; A =:= read_write ->
-	    {ok,File};
-	_ -> search_path_loop(Name, Ts, Tried ++ [$',File,$',$\s])
+        {ok, #file_info{access = A}} when A =:= read; A =:= read_write ->
+            {ok, File};
+        _ ->
+            search_path_loop(Name, Ts, Tried ++ [$', File, $', $\s])
     end;
-search_path_loop(_, [], Tried) ->		%Couldn't find it
-    {error,unicode:characters_to_binary(Tried)}.
+%Couldn't find it
+search_path_loop(_, [], Tried) ->
+    {error, unicode:characters_to_binary(Tried)}.
 
--spec require(_, [_], _) -> {_,_} | no_return().	%To keep dialyzer quiet
+%To keep dialyzer quiet
+-spec require(_, [_], _) -> {_, _} | no_return().
 
 %% require([File|_], State) ->{Value,State}.
 %%  Main require interface.
 
 require(_, As, St) ->
     case luerl_lib:conv_list(As, [lua_string]) of
-	[Mod] -> do_require(Mod, St);
-	error -> badarg_error(require, As, St)
+        [Mod] -> do_require(Mod, St);
+        error -> badarg_error(require, As, St)
     end.
 
 do_require(Mod, St0) ->
-    {Pt,St1} = luerl_emul:get_global_key(<<"package">>, St0),
-    case luerl_emul:get_table_keys(Pt, [<<"loaded">>,Mod], St1) of
-	{nil,St2} ->				%Not loaded
-	    {Ss,St3} = luerl_emul:get_table_key(Pt, <<"searchers">>, St2),
-	    {[Ldr|Extra],St4} = search_loaders(Mod, Ss, St3),
-	    {Val,St5} = luerl_emul:functioncall(Ldr, [Mod|Extra], St4),
-	    require_ret(Mod, Val, Pt, St5);
-	{Val,St2} -> {[Val],St2}		%Already loaded
+    {Pt, St1} = luerl_emul:get_global_key(<<"package">>, St0),
+    case luerl_emul:get_table_keys(Pt, [<<"loaded">>, Mod], St1) of
+        %Not loaded
+        {nil, St2} ->
+            {Ss, St3} = luerl_emul:get_table_key(Pt, <<"searchers">>, St2),
+            {[Ldr | Extra], St4} = search_loaders(Mod, Ss, St3),
+            {Val, St5} = luerl_emul:functioncall(Ldr, [Mod | Extra], St4),
+            require_ret(Mod, Val, Pt, St5);
+        %Already loaded
+        {Val, St2} ->
+            {[Val], St2}
     end.
 
 require_ret(Mod, Val, Pt, St0) ->
-    Res = case luerl_lib:first_value(Val) of
-	      nil -> true;			%Assign true to loaded entry
-	      __tmp -> __tmp
-	  end,
-    St1 = luerl_emul:set_table_keys(Pt, [<<"loaded">>,Mod], Res, St0),
-    {[Res],St1}.
+    Res =
+        case luerl_lib:first_value(Val) of
+            %Assign true to loaded entry
+            nil -> true;
+            __tmp -> __tmp
+        end,
+    St1 = luerl_emul:set_table_keys(Pt, [<<"loaded">>, Mod], Res, St0),
+    {[Res], St1}.
 
 search_loaders(Mod, Tref, St) ->
-    #table{a=Arr} = luerl_heap:get_table(Tref, St),
+    #table{a = Arr} = luerl_heap:get_table(Tref, St),
     Ls = array:sparse_to_list(Arr),
     search_loaders_loop(Mod, Ls, <<>>, St).
 
-search_loaders_loop(Mod, [nil|Ls], Estr, St) ->	%Could find some of these
+%Could find some of these
+search_loaders_loop(Mod, [nil | Ls], Estr, St) ->
     search_loaders_loop(Mod, Ls, Estr, St);
-search_loaders_loop(Mod, [L|Ls], Estr, St0) ->	%Try the next loader
+%Try the next loader
+search_loaders_loop(Mod, [L | Ls], Estr, St0) ->
     %% Call the searcher function
     case luerl_emul:functioncall(L, [Mod], St0) of
-	%% Searcher found a loader.
-	{[F|_],_}=Ret when ?IS_FUNCTION(F) -> Ret;
-	%% Searcher found no loader.
-	{[S|_],St1} when is_binary(S) ->
-	    Estr1 = <<Estr/binary,S/binary>>,	%Append new info string
-	    search_loaders_loop(Mod, Ls, Estr1, St1);
-	{_,St1} ->				%Should be nil or []
-	    search_loaders_loop(Mod, Ls, Estr, St1)
+        %% Searcher found a loader.
+        {[F | _], _} = Ret when ?IS_FUNCTION(F) -> Ret;
+        %% Searcher found no loader.
+        {[S | _], St1} when is_binary(S) ->
+            %Append new info string
+            Estr1 = <<Estr/binary, S/binary>>,
+            search_loaders_loop(Mod, Ls, Estr1, St1);
+        %Should be nil or []
+        {_, St1} ->
+            search_loaders_loop(Mod, Ls, Estr, St1)
     end;
-search_loaders_loop(Mod, [], Estr, St) ->	%No successful loader found
-    lua_error({no_module,Mod,Estr}, St).
+%No successful loader found
+search_loaders_loop(Mod, [], Estr, St) ->
+    lua_error({no_module, Mod, Estr}, St).
 
 %% preload_searcher()
 %% lua_searcher()
@@ -185,35 +214,42 @@ search_loaders_loop(Mod, [], Estr, St) ->	%No successful loader found
 
 preload_searcher(_, As, St0) ->
     case luerl_lib:conv_list(As, [lua_string]) of
-	[Mod] ->
-	    {Pre,St1} = luerl_emul:get_table_keys([<<"package">>,<<"preload">>],
-						  St0),
-	    case luerl_emul:get_table_key(Pre, Mod, St1) of
-		{nil,St2} -> {[],St2};
-		{Val,St2} -> {[Val],St2}	%Return the chunk
-	    end;
-	error -> badarg_error(preload_searcher, As, St0)
+        [Mod] ->
+            {Pre, St1} = luerl_emul:get_table_keys(
+                [<<"package">>, <<"preload">>],
+                St0
+            ),
+            case luerl_emul:get_table_key(Pre, Mod, St1) of
+                {nil, St2} -> {[], St2};
+                %Return the chunk
+                {Val, St2} -> {[Val], St2}
+            end;
+        error ->
+            badarg_error(preload_searcher, As, St0)
     end.
 
 lua_searcher(_, As, St0) ->
     case luerl_lib:conv_list(As, [lua_string]) of
-	[Mod] ->
-	    {Path,St1} = luerl_emul:get_table_keys([<<"package">>,<<"path">>],
-						   St0),
-	    case search_path(Mod, Path, <<".">>, <<"/">>, []) of
-		{ok,File} ->
-		    Ret = luerl_comp:file(binary_to_list(File)),
-		    lua_searcher_ret(Ret, File, St1);
-		{error,Tried} ->
-		    {[Tried],St1}
-	    end;
-	error -> badarg_error(lua_searcher, As, St0)
+        [Mod] ->
+            {Path, St1} = luerl_emul:get_table_keys(
+                [<<"package">>, <<"path">>],
+                St0
+            ),
+            case search_path(Mod, Path, <<".">>, <<"/">>, []) of
+                {ok, File} ->
+                    Ret = luerl_comp:file(binary_to_list(File)),
+                    lua_searcher_ret(Ret, File, St1);
+                {error, Tried} ->
+                    {[Tried], St1}
+            end;
+        error ->
+            badarg_error(lua_searcher, As, St0)
     end.
 
-lua_searcher_ret({ok,Chunk}, File, St0) ->
+lua_searcher_ret({ok, Chunk}, File, St0) ->
     %% Wrap chunk in function to be consistent.
-    {Func,St1} = luerl_emul:load_chunk(Chunk, St0),
-    {[Func,File],St1};
-lua_searcher_ret({error,[{_,Mod,E}|_],_}, _, St) ->
+    {Func, St1} = luerl_emul:load_chunk(Chunk, St0),
+    {[Func, File], St1};
+lua_searcher_ret({error, [{_, Mod, E} | _], _}, _, St) ->
     Msg = unicode:characters_to_binary(Mod:format_error(E)),
-    {[Msg],St}.
+    {[Msg], St}.

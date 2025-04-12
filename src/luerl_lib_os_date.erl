@@ -55,19 +55,18 @@
 %% %j - Day of year as decimal number (001 - 366)
 %% %U - Week of year as decimal number, with Sunday as first day of week 1 (00 - 53)
 
-
 %% format(DateTime, Format) -> Formatted.
 %%  *t format returns a table with the datetime values.
 format(DateTime, <<"*t">>) ->
-    {{Ye,Mo,Da}=Date,{Ho,Mi,Sec}} = DateTime,
+    {{Ye, Mo, Da} = Date, {Ho, Mi, Sec}} = DateTime,
     [
-     {<<"year">>, Ye},
-     {<<"month">>, Mo},
-     {<<"day">>, Da},
-     {<<"hour">>, Ho},
-     {<<"min">>, Mi},
-     {<<"sec">>, Sec},
-     {<<"wday">>, get_day_number(Date)+1}
+        {<<"year">>, Ye},
+        {<<"month">>, Mo},
+        {<<"day">>, Da},
+        {<<"hour">>, Ho},
+        {<<"min">>, Mi},
+        {<<"sec">>, Sec},
+        {<<"wday">>, get_day_number(Date) + 1}
     ];
 format(DateTime, Format) ->
     Patterns = [
@@ -101,12 +100,16 @@ format(DateTime, Format) ->
         <<"%Z">>,
         <<"%%">>
     ],
-    lists:foldl(fun(Pat, Str) -> replace_pattern(Str, DateTime, Pat) end,
-                Format, Patterns).
+    lists:foldl(
+        fun(Pat, Str) -> replace_pattern(Str, DateTime, Pat) end,
+        Format,
+        Patterns
+    ).
 
 replace_pattern(Str, DateTime, Pat) ->
     case re:run(Str, Pat) of
-        nomatch -> Str;
+        nomatch ->
+            Str;
         {match, _} ->
             {Format, Val} = get_pattern_values(Pat, DateTime),
             Formatted = io_lib:fwrite(Format, Val),
@@ -123,56 +126,78 @@ get_pattern_values(<<"%B">>, {{_, Mo, _}, _}) ->
     {"~s", [get_month_name(Mo)]};
 get_pattern_values(<<"%b">>, {{_, Mo, _}, _}) ->
     {"~s", [get_abbreviated_month_name(Mo)]};
-get_pattern_values(<<"%c">>, {{Ye, Mo, Da}=Date, {Ho, Mi, Sec}}) ->
-    {"~s ~s ~.2w ~.2.0w:~.2.0w:~.2.0w ~.4.0w",
-        [get_abbreviated_day_name(get_day_number(Date)),
-         get_abbreviated_month_name(Mo),Da,
-         Ho,Mi,Sec,
-         Ye]};
+get_pattern_values(<<"%c">>, {{Ye, Mo, Da} = Date, {Ho, Mi, Sec}}) ->
+    {"~s ~s ~.2w ~.2.0w:~.2.0w:~.2.0w ~.4.0w", [
+        get_abbreviated_day_name(get_day_number(Date)),
+        get_abbreviated_month_name(Mo),
+        Da,
+        Ho,
+        Mi,
+        Sec,
+        Ye
+    ]};
 get_pattern_values(<<"%D">>, {{Ye, Mo, Da}, _}) ->
     {"~.2.0w/~.2.0w/~.2.0w", [Mo, Da, Ye rem 100]};
-get_pattern_values(<<"%d">>, {{_, _, Da}, _}) -> {"~.2.0w", [Da]};
-get_pattern_values(<<"%e">>, {{_, _, Da}, _}) -> {"~.2w", [Da]};
+get_pattern_values(<<"%d">>, {{_, _, Da}, _}) ->
+    {"~.2.0w", [Da]};
+get_pattern_values(<<"%e">>, {{_, _, Da}, _}) ->
+    {"~.2w", [Da]};
 get_pattern_values(<<"%F">>, {{Ye, Mo, Da}, _}) ->
     {"~.4.0w-~.2.0w-~.2.0w", [Ye, Mo, Da]};
-get_pattern_values(<<"%H">>, {_, {Ho, _, _}}) -> {"~.2.0w", [Ho]};
+get_pattern_values(<<"%H">>, {_, {Ho, _, _}}) ->
+    {"~.2.0w", [Ho]};
 get_pattern_values(<<"%I">>, {_, {Ho, _, _}}) ->
     {"~.2.0w", [get_am_pm_hour(Ho)]};
-get_pattern_values(<<"%M">>, {_, {_, Mi, _}}) -> {"~.2.0w", [Mi]};
-get_pattern_values(<<"%m">>, {{_, Mo, _}, _}) -> {"~.2.0w", [Mo]};
-get_pattern_values(<<"%n">>, _) -> {"\n", []};
+get_pattern_values(<<"%M">>, {_, {_, Mi, _}}) ->
+    {"~.2.0w", [Mi]};
+get_pattern_values(<<"%m">>, {{_, Mo, _}, _}) ->
+    {"~.2.0w", [Mo]};
+get_pattern_values(<<"%n">>, _) ->
+    {"\n", []};
 get_pattern_values(<<"%P">>, {_, {Ho, _, _}}) ->
-    Val = if Ho < 12 -> <<"am">>;
-             true -> <<"pm">>
-          end,
+    Val =
+        if
+            Ho < 12 -> <<"am">>;
+            true -> <<"pm">>
+        end,
     {"~s", [Val]};
 get_pattern_values(<<"%p">>, {_, {Ho, _, _}}) ->
-    Val = if Ho < 12 -> <<"AM">>;
-             true -> <<"PM">>
-          end,
+    Val =
+        if
+            Ho < 12 -> <<"AM">>;
+            true -> <<"PM">>
+        end,
     {"~s", [Val]};
-get_pattern_values(<<"%S">>, {_, {_, _, Sec}}) -> {"~.2.0w", [Sec]};
+get_pattern_values(<<"%S">>, {_, {_, _, Sec}}) ->
+    {"~.2.0w", [Sec]};
 get_pattern_values(<<"%T">>, {_, {Ho, Mi, Sec}}) ->
     {"~.2.0w:~.2.0w:~.2.0w", [Ho, Mi, Sec]};
-get_pattern_values(<<"%t">>, _) -> {"\t", []};
+get_pattern_values(<<"%t">>, _) ->
+    {"\t", []};
 get_pattern_values(<<"%u">>, {Date, _}) ->
-    {"~.1.0w", [calendar:day_of_the_week(Date)]}; % Mon = 1 Sun = 7
+    % Mon = 1 Sun = 7
+    {"~.1.0w", [calendar:day_of_the_week(Date)]};
 get_pattern_values(<<"%V">>, {Date, _}) ->
-    {_Year,Week} = calendar:iso_week_number(Date),
+    {_Year, Week} = calendar:iso_week_number(Date),
     {"~.2.0w", [Week]};
 get_pattern_values(<<"%W">>, {Date, _}) ->
-    {_Year,Week} = calendar:iso_week_number(Date),
+    {_Year, Week} = calendar:iso_week_number(Date),
     {"~.2.0w", [Week]};
 get_pattern_values(<<"%w">>, {Date, _}) ->
-    {"~.1.0w", [get_day_number(Date)]};         % Sun = 0 Sat = 6
+    % Sun = 0 Sat = 6
+    {"~.1.0w", [get_day_number(Date)]};
 get_pattern_values(<<"%X">>, {_, {Ho, Mi, Sec}}) ->
     {"~.2.0w:~.2.0w:~.2.0w", [Ho, Mi, Sec]};
 get_pattern_values(<<"%x">>, {{Ye, Mo, Da}, _}) ->
     {"~.2.0w/~.2.0w/~.2.0w", [Mo, Da, Ye rem 100]};
-get_pattern_values(<<"%Y">>, {{Ye, _, _}, _}) -> {"~.4.0w", [Ye]};
-get_pattern_values(<<"%y">>, {{Ye, _, _}, _}) -> {"~.2.0w", [Ye rem 100]};
-get_pattern_values(<<"%Z">>, _) -> {"", []};
-get_pattern_values(<<"%%">>, _) -> {"~c", [$%]}.
+get_pattern_values(<<"%Y">>, {{Ye, _, _}, _}) ->
+    {"~.4.0w", [Ye]};
+get_pattern_values(<<"%y">>, {{Ye, _, _}, _}) ->
+    {"~.2.0w", [Ye rem 100]};
+get_pattern_values(<<"%Z">>, _) ->
+    {"", []};
+get_pattern_values(<<"%%">>, _) ->
+    {"~c", [$%]}.
 
 %% get_day_number(Date) -> DayNumber.
 %%  This is US so Sunday is day 1.

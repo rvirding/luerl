@@ -26,6 +26,7 @@ jobs:
           otp-version: ${{matrix.otp}}
           rebar3-version: ${{matrix.rebar3}}
       - run: rebar3 do eunit, ct --cover, cover
+      - run: rebar3 fmt --check
 
   newer-builds:
     name: Newer Erlang/OTP ${{matrix.otp}}
@@ -41,3 +42,4 @@ jobs:
           otp-version: ${{matrix.otp}}
           rebar3-version: ${{matrix.rebar3}}
       - run: rebar3 do eunit, ct --cover, cover
+      - run: rebar3 fmt --check

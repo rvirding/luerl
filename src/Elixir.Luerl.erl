@@ -26,33 +26,52 @@
 -include("luerl.hrl").
 
 %% Basic user API to luerl.
--export([init/0,gc/1,
-         load/2,load/3,loadfile/2,loadfile/3,
-         path_loadfile/2,path_loadfile/3,path_loadfile/4,
-         load_module/3,load_module_dec/3,
-         do/2,do_dec/2,do/3,do_dec/3,
-         dofile/2,dofile/3,dofile_dec/2,dofile_dec/3,
-         call/3,call_chunk/2,call_chunk/3,
-         call_function/3,call_function_enc/3,call_function_dec/3,
-         call_method/4,call_method_dec/4,
-         get_table_keys/2,get_table_keys_dec/2,
-         set_table_keys/3,set_table_keys_dec/3,
-         get_table_key/3,set_table_key/4,
-         get_stacktrace/1
-        ]).
+-export([
+    init/0,
+    gc/1,
+    load/2, load/3,
+    loadfile/2, loadfile/3,
+    path_loadfile/2, path_loadfile/3, path_loadfile/4,
+    load_module/3,
+    load_module_dec/3,
+    do/2,
+    do_dec/2,
+    do/3,
+    do_dec/3,
+    dofile/2, dofile/3,
+    dofile_dec/2, dofile_dec/3,
+    call/3,
+    call_chunk/2, call_chunk/3,
+    call_function/3,
+    call_function_enc/3,
+    call_function_dec/3,
+    call_method/4,
+    call_method_dec/4,
+    get_table_keys/2,
+    get_table_keys_dec/2,
+    set_table_keys/3,
+    set_table_keys_dec/3,
+    get_table_key/3,
+    set_table_key/4,
+    get_stacktrace/1
+]).
 
 %% Tracing.
--export([set_trace_func/2,clear_trace_func/1,
-         set_trace_data/2,get_trace_data/1]).
+-export([
+    set_trace_func/2,
+    clear_trace_func/1,
+    set_trace_data/2,
+    get_trace_data/1
+]).
 
 %% Encoding and decoding.
--export([encode/2,encode_list/2,decode/2,decode_list/2]).
+-export([encode/2, encode_list/2, decode/2, decode_list/2]).
 
 %%Helping with storing VM state
--export([externalize/1,internalize/1]).
+-export([externalize/1, internalize/1]).
 
 %% Storing and retrieving private data
--export([put_private/3,get_private/2,delete_private/2]).
+-export([put_private/3, get_private/2, delete_private/2]).
 
 init() ->
     luerl:init().

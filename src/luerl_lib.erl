@@ -24,92 +24,103 @@
 
 -include("luerl.hrl").
 
--export([lua_error/2,badarg_error/3,badarith_error/3,format_error/1,
-         format_value/1]).
+-export([
+    lua_error/2,
+    badarg_error/3,
+    badarith_error/3,
+    format_error/1,
+    format_value/1
+]).
 
--export([boolean_value/1,first_value/1]).
+-export([boolean_value/1, first_value/1]).
 
 -export([number_to_list/1]).
 
--export([arg_to_list/1,args_to_lists/1,args_to_lists/2]).
+-export([arg_to_list/1, args_to_lists/1, args_to_lists/2]).
 
--export([arg_to_number/1,arg_to_number/2,args_to_numbers/1,args_to_numbers/2]).
+-export([arg_to_number/1, arg_to_number/2, args_to_numbers/1, args_to_numbers/2]).
 
--export([arg_to_integer/1,args_to_integers/1,args_to_integers/2]).
+-export([arg_to_integer/1, args_to_integers/1, args_to_integers/2]).
 
--export([arg_to_float/1,args_to_floats/1,args_to_floats/2]).
+-export([arg_to_float/1, args_to_floats/1, args_to_floats/2]).
 
--export([arg_to_string/1,args_to_strings/1,args_to_strings/2]).
+-export([arg_to_string/1, args_to_strings/1, args_to_strings/2]).
 
--export([conv_list/2,conv_list/3]).
+-export([conv_list/2, conv_list/3]).
 
--spec lua_error(_,_) -> no_return().
--spec badarg_error(_,_,_) -> no_return().
+-spec lua_error(_, _) -> no_return().
+-spec badarg_error(_, _, _) -> no_return().
 
-lua_error(E, St) -> error({lua_error,E,St}).
+lua_error(E, St) -> error({lua_error, E, St}).
 
-badarg_error(What, Args, St) -> lua_error({badarg,What,Args}, St). 
+badarg_error(What, Args, St) -> lua_error({badarg, What, Args}, St).
 
-badarith_error(What, Args, St) -> lua_error({badarith,What,Args}, St).
+badarith_error(What, Args, St) -> lua_error({badarith, What, Args}, St).
 
 %% format_error(LuaError) -> ErrorString.
 %%  The ErrorString is a UTF-8 encoded binary. The UTF-8 encoded
 %%  codepoints can come from Lua/Luerl strings.  Some of these use
 %%  same text as Lua error string, so be careful if modifying them.
 
-format_error({badarg,Where,Args}) ->
+format_error({badarg, Where, Args}) ->
     %% Note Args is a list which must be kept as its own list!
-    format_error("bad argument ~ts to ~ts", [Args,Where]);
-format_error({badarith,Op,Args}) ->
+    format_error("bad argument ~ts to ~ts", [Args, Where]);
+format_error({badarith, Op, Args}) ->
     %% Note Args is a list which must be kept as its own list!
-    format_error("bad arithmetic ~ts on ~ts", [Op,Args]);
-format_error({illegal_index,Where,Index}) ->
-    format_error("invalid index in ~ts: ~ts", [Where,Index]);
-format_error({illegal_value,Where,Val}) ->
-    format_error("invalid value in ~ts: ~ts", [Where,Val]);
-format_error({illegal_value,Val}) ->
+    format_error("bad arithmetic ~ts on ~ts", [Op, Args]);
+format_error({illegal_index, Where, Index}) ->
+    format_error("invalid index in ~ts: ~ts", [Where, Index]);
+format_error({illegal_value, Where, Val}) ->
+    format_error("invalid value in ~ts: ~ts", [Where, Val]);
+format_error({illegal_value, Val}) ->
     format_error("invalid value: ~ts", [Val]);
-format_error({illegal_comp,Where}) ->
+format_error({illegal_comp, Where}) ->
     Msg = io_lib:format("illegal comparison in ~ts", [Where]),
     unicode:characters_to_binary(Msg);
 %% format_error({invalid_order,Where}) ->          %Keep text!
 %%     io_lib:format("invalid order function in ~w", [Where]);
-format_error({undefined_function,Name}) ->
+format_error({undefined_function, Name}) ->
     format_error("undefined function ~ts", [Name]);
-format_error({undefined_method,Object,Name}) ->
-    format_error("undefined method ~ts in ~ts", [Name,Object]);
+format_error({undefined_method, Object, Name}) ->
+    format_error("undefined method ~ts in ~ts", [Name, Object]);
 format_error(illegal_return_value) ->
     <<"illegal format of return value">>;
 %% Pattern errors.
-format_error(invalid_pattern) ->                %Keep text!
+
+%Keep text!
+format_error(invalid_pattern) ->
     <<"malformed pattern">>;
-format_error(invalid_capture) ->                %Keep text!
+%Keep text!
+format_error(invalid_capture) ->
     <<"malformed pattern">>;
-format_error({invalid_char_class,C}) ->         %Keep text!
+%Keep text!
+format_error({invalid_char_class, C}) ->
     Msg = io_lib:format("malformed pattern (class ~c)", [C]),
     unicode:characters_to_binary(Msg);
-format_error(invalid_char_set) ->               %Keep text!
+%Keep text!
+format_error(invalid_char_set) ->
     <<"malformed pattern (missing ']')">>;
 %% Illegal or undefined ops.
-format_error({illegal_op,Op}) ->
+format_error({illegal_op, Op}) ->
     format_error("illegal op: ~ts", [Op]);
-format_error({no_module,Mod}) ->
+format_error({no_module, Mod}) ->
     %% We know the module name is an atom.
     Msg = io_lib:format("module '~s' not found", [Mod]),
     unicode:characters_to_binary(Msg);
 %% Assertions
-format_error({assert_error,Obj}) ->
-    if is_binary(Obj) ->
-            <<Obj/binary,$!>>;
-       true ->
+format_error({assert_error, Obj}) ->
+    if
+        is_binary(Obj) ->
+            <<Obj/binary, $!>>;
+        true ->
             Type = luerl_lib_basic:type(Obj),
-            <<"error object is a ",Type/binary,$!>>
+            <<"error object is a ", Type/binary, $!>>
     end;
 %% We have an error message here already.
-format_error({error_message,Msg}) ->
+format_error({error_message, Msg}) ->
     Msg;
 %% Error is called.
-format_error({error_call,Args}) ->
+format_error({error_call, Args}) ->
     format_error_call(Args);
 %% Everything we don't recognise or know about.
 format_error(Error) ->
@@ -118,15 +129,16 @@ format_error(Error) ->
 %% format_error_call(Args) -> ErrorString.
 %%  Just get it more or less equivalent to what Lua does.
 
-format_error_call([A|_]) when is_binary(A) -> A;
-format_error_call([A|_]) when is_number(A) ->
+format_error_call([A | _]) when is_binary(A) -> A;
+format_error_call([A | _]) when is_number(A) ->
     iolist_to_binary(format_value(A));
 format_error_call(Args) ->
-    Type = case Args of
-               [A|_] -> luerl_lib_basic:type(A);
-               [] -> <<"nil">>
-           end,
-    <<"error object is a ",Type/binary," value">>.
+    Type =
+        case Args of
+            [A | _] -> luerl_lib_basic:type(A);
+            [] -> <<"nil">>
+        end,
+    <<"error object is a ", Type/binary, " value">>.
 
 %% format_error(FormatString, Values) -> ErrorString.
 %%  Useful when all the values in the list need to be formatted
@@ -140,38 +152,46 @@ format_error(Format, Vals) ->
 %%  Take an Luerl data and return a "printable" representation suitable
 %%  to use when printing error messages.
 
-format_value(nil) -> <<"nil">>;
-format_value(true) -> <<"true">>;
-format_value(false) -> <<"false">>;
+format_value(nil) ->
+    <<"nil">>;
+format_value(true) ->
+    <<"true">>;
+format_value(false) ->
+    <<"false">>;
 format_value(N) when is_number(N) -> io_lib:write(N);
 format_value(B) when is_binary(B) ->
     %% A luerl string which we print with quotes around it.
     %% Note that the string can contain unicode codepoints.
-    [$\',B,$\'];
-format_value(#tref{}) -> <<"table">>;
-format_value(#usdref{}) -> <<"userdata">>;
-format_value(#funref{}) -> <<"function">>;
-format_value(#erl_func{code=Fun}) ->
-    {name,Name} = erlang:fun_info(Fun, name),
+    [$\', B, $\'];
+format_value(#tref{}) ->
+    <<"table">>;
+format_value(#usdref{}) ->
+    <<"userdata">>;
+format_value(#funref{}) ->
+    <<"function">>;
+format_value(#erl_func{code = Fun}) ->
+    {name, Name} = erlang:fun_info(Fun, name),
     atom_to_binary(Name, utf8);
-format_value(#erl_mfa{f=Func}) -> atom_to_binary(Func, utf8);
+format_value(#erl_mfa{f = Func}) ->
+    atom_to_binary(Func, utf8);
 format_value(List) when is_list(List) ->
     Pl = lists:map(fun format_value/1, List),
     lists:join($\,, Pl);
 %% Treat atoms as binary strings here, probably just a name.
 format_value(A) when is_atom(A) ->
-    [$\',atom_to_binary(A, utf8),$\'];
+    [$\', atom_to_binary(A, utf8), $\'];
 %% Everything else just straight through.
-format_value(_Other) -> <<"unknown stuff">>.
+format_value(_Other) ->
+    <<"unknown stuff">>.
 
 %% boolean_value(Rets) -> boolean().
 %% first_value(Rets) -> Value | nil.
 %%  Test first value of return list.
 
-boolean_value([V|_]) -> ?IS_TRUE(V);
+boolean_value([V | _]) -> ?IS_TRUE(V);
 boolean_value([]) -> false.
 
-first_value([V|_]) -> V;
+first_value([V | _]) -> V;
 first_value([]) -> nil.
 
 %% bin_to_number(Binary) -> {ok,Number} | error.
@@ -182,18 +202,18 @@ bin_to_number(B) -> str_to_number(binary_to_list(B)).
 
 str_to_number(S) ->
     case luerl_scan:string(S) of
-	{ok,[{'NUMERAL',_,N}],_} -> {ok,N};
-	{ok,[{'+',_},{'NUMERAL',_,N}],_} -> {ok,N};
-	{ok,[{'-',_},{'NUMERAL',_,N}],_} -> {ok,-N};
-	_ -> error
+        {ok, [{'NUMERAL', _, N}], _} -> {ok, N};
+        {ok, [{'+', _}, {'NUMERAL', _, N}], _} -> {ok, N};
+        {ok, [{'-', _}, {'NUMERAL', _, N}], _} -> {ok, -N};
+        _ -> error
     end.
 
 number_to_list(N) ->
     io_lib:write(N).
-    %% case ?IS_FLOAT_INT(N, I) of			%Is it an "integer"?
-    %%     true -> integer_to_list(I);
-    %%     false -> io_lib:write(N)
-    %% end.
+%% case ?IS_FLOAT_INT(N, I) of			%Is it an "integer"?
+%%     true -> integer_to_list(I);
+%%     false -> io_lib:write(N)
+%% end.
 
 %% arg_to_list(Arg) -> List | 'error'.
 %% args_to_lists(Args) -> Lists | 'error'.
@@ -218,19 +238,24 @@ args_to_lists(As, Acc) ->
 arg_to_number(N) when is_number(N) -> N;
 arg_to_number(B) when is_binary(B) ->
     case bin_to_number(B) of
-	{ok,N} -> float(N);
-	error -> error
+        {ok, N} -> float(N);
+        error -> error
     end;
-arg_to_number(_) -> error.
+arg_to_number(_) ->
+    error.
 
 arg_to_number(A, B) ->
-    case conv_list([A,B], [erl_list,lua_integer]) of
-	[N0,Base] ->
-	    case catch begin [N1] = string:tokens(N0, [9,10,11,12,13,32,160]),
-			     {ok,list_to_integer(N1, Base)} end of
-		{ok,I} -> float(I);
-		_ -> error
-	    end
+    case conv_list([A, B], [erl_list, lua_integer]) of
+        [N0, Base] ->
+            case
+                catch begin
+                    [N1] = string:tokens(N0, [9, 10, 11, 12, 13, 32, 160]),
+                    {ok, list_to_integer(N1, Base)}
+                end
+            of
+                {ok, I} -> float(I);
+                _ -> error
+            end
     end.
 
 %% arg_to_number(A, B) ->
@@ -242,12 +267,13 @@ arg_to_number(A, B) ->
 
 args_to_numbers(A1, A2) ->
     case luerl_lib:arg_to_number(A1) of
-	error -> error;
-	N1 ->
-	    case luerl_lib:arg_to_number(A2) of
-		error -> error;
-		N2 -> [N1,N2]
-	    end
+        error ->
+            error;
+        N1 ->
+            case luerl_lib:arg_to_number(A2) of
+                error -> error;
+                N2 -> [N1, N2]
+            end
     end.
 
 args_to_numbers(As) ->
@@ -260,19 +286,21 @@ args_to_numbers(As) ->
 
 arg_to_integer(A) ->
     case arg_to_number(A) of
-	N when is_integer(N) -> N;
-	N when ?IS_FLOAT_INT(N) -> round(N);
-	_Other -> error				%Other floats are bad here
+        N when is_integer(N) -> N;
+        N when ?IS_FLOAT_INT(N) -> round(N);
+        %Other floats are bad here
+        _Other -> error
     end.
 
 args_to_integers(A1, A2) ->
     case arg_to_integer(A1) of
-	error -> error;
-	N1 ->
-	    case arg_to_integer(A2) of
-		error -> error;
-		N2 -> [N1,N2]
-	    end
+        error ->
+            error;
+        N1 ->
+            case arg_to_integer(A2) of
+                error -> error;
+                N2 -> [N1, N2]
+            end
     end.
 
 args_to_integers(As) ->
@@ -285,19 +313,20 @@ args_to_integers(As) ->
 
 arg_to_float(A) ->
     case arg_to_number(A) of
-	N when is_integer(N) -> float(N);
-	N when is_float(N) -> N;
-	_Other -> error
+        N when is_integer(N) -> float(N);
+        N when is_float(N) -> N;
+        _Other -> error
     end.
 
 args_to_floats(A1, A2) ->
     case arg_to_float(A1) of
-	error -> error;
-	N1 ->
-	    case arg_to_float(A2) of
-		error -> error;
-		N2 -> [N1,N2]
-	    end
+        error ->
+            error;
+        N1 ->
+            case arg_to_float(A2) of
+                error -> error;
+                N2 -> [N1, N2]
+            end
     end.
 
 args_to_floats(As) ->
@@ -320,12 +349,14 @@ args_to_strings(As, Acc) ->
 %%  Step over list using foldl and return list or 'error'. We assume
 %%  the list won't be very long so appending is ok.
 
-to_loop([A|As], Fun, Acc) ->
+to_loop([A | As], Fun, Acc) ->
     case Fun(A) of
-	error -> error;				%Terminate on error
-	E -> to_loop(As, Fun, Acc ++ [E])
+        %Terminate on error
+        error -> error;
+        E -> to_loop(As, Fun, Acc ++ [E])
     end;
-to_loop([], _Fun, Acc) -> Acc.
+to_loop([], _Fun, Acc) ->
+    Acc.
 
 %% conv_list(Args, ToTypes) -> List | 'error'.
 %% conv_list(Args, ToTypes, Done) -> List | 'error'.
@@ -333,24 +364,31 @@ to_loop([], _Fun, Acc) -> Acc.
 
 conv_list(As, Tos) -> conv_list(As, Tos, []).
 
-conv_list(_, _, error) -> error;		%Propagate error
-conv_list([A|As], [To|Tos], Rs) ->
+%Propagate error
+conv_list(_, _, error) ->
+    error;
+conv_list([A | As], [To | Tos], Rs) ->
     %% Get the right value.
-    Ret = case To of
-	      %% Erlang types.
-	      erl_list -> arg_to_list(A);
-	      erl_string -> arg_to_list(A);
-	      %% Lua types.
-	      lua_any -> A;
-	      lua_integer -> arg_to_integer(A);
-	      lua_number -> arg_to_number(A);
-	      lua_string -> arg_to_string(A);
-	      lua_bool -> ?IS_TRUE(A)
-	  end,
+    Ret =
+        case To of
+            %% Erlang types.
+            erl_list -> arg_to_list(A);
+            erl_string -> arg_to_list(A);
+            %% Lua types.
+            lua_any -> A;
+            lua_integer -> arg_to_integer(A);
+            lua_number -> arg_to_number(A);
+            lua_string -> arg_to_string(A);
+            lua_bool -> ?IS_TRUE(A)
+        end,
     case Ret of
-	error -> error;				%Return error
-	Ret -> 
-	    conv_list(As, Tos, [Ret|Rs])
+        %Return error
+        error -> error;
+        Ret -> conv_list(As, Tos, [Ret | Rs])
     end;
-conv_list([], _, Rs) -> lists:reverse(Rs);	%No more arguments, done
-conv_list(_, [], Rs) -> lists:reverse(Rs).	%No more conversions, done
+%No more arguments, done
+conv_list([], _, Rs) ->
+    lists:reverse(Rs);
+%No more conversions, done
+conv_list(_, [], Rs) ->
+    lists:reverse(Rs).

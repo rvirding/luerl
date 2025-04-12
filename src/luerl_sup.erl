@@ -45,9 +45,11 @@ start_link() ->
 %%                  type => worker(),       % optional
 %%                  modules => modules()}   % optional
 init([]) ->
-    SupFlags = #{strategy => one_for_one,
-                 intensity => 5,
-                 period => 10},
+    SupFlags = #{
+        strategy => one_for_one,
+        intensity => 5,
+        period => 10
+    },
     ChildSpecs = [],
     {ok, {SupFlags, ChildSpecs}}.
 

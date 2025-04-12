@@ -21,8 +21,10 @@
 
 %% Convert error names to errnos and strings.
 errname_info(Name) ->
-    #{errno => get_errno(Name),
-      errstr => erl_posix_msg:message(Name)}.
+    #{
+        errno => get_errno(Name),
+        errstr => erl_posix_msg:message(Name)
+    }.
 
 %% Made using the following command (`errno' from the moreutils package):
 %% `errno -l | sort -k2 -n | awk '{print "get_errno("tolower($1)") -> "$2";"}''

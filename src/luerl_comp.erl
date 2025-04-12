@@ -26,12 +26,12 @@
 
 -module(luerl_comp).
 
--export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
--export([forms/1,forms/2]).
+-export([file/1, file/2, string/1, string/2, chunk/1, chunk/2]).
+-export([forms/1, forms/2]).
 
 -export([debug_print/3]).
 
--import(lists, [member/2,keysearch/3,mapfoldl/3,foreach/2]).
+-import(lists, [member/2, keysearch/3, mapfoldl/3, foreach/2]).
 
 -include_lib("kernel/include/file.hrl").
 
@@ -40,16 +40,24 @@
 
 %% The main Lua compiler state.
 
--record(luacomp, {base="",			%Base name
-		  ldir="",			%Lua file dir
-		  lfile="",			%Lua file
-		  odir=".",			%Output directory
-		  opts=[],			%User options
-		  code=none,			%Code after last pass.
-		  cinfo=none,			%Common compiler info
-		  errors=[],
-		  warnings=[]
-		 }).
+%Base name
+-record(luacomp, {
+    base = "",
+    %Lua file dir
+    ldir = "",
+    %Lua file
+    lfile = "",
+    %Output directory
+    odir = ".",
+    %User options
+    opts = [],
+    %Code after last pass.
+    code = none,
+    %Common compiler info
+    cinfo = none,
+    errors = [],
+    warnings = []
+}).
 
 -define(NOFILE, "-no-file-").
 
@@ -58,10 +66,10 @@
 %% file(Name, Options) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
-file(Name) -> file(Name, [verbose,report]).
+file(Name) -> file(Name, [verbose, report]).
 
 file(Name, Opts) ->
-    St0 = #luacomp{opts=Opts},
+    St0 = #luacomp{opts = Opts},
     St1 = filenames(Name, St0),
     do_compile(file_passes(), St1).
 
@@ -70,12 +78,12 @@ file(Name, Opts) ->
 %% string(String, Options) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
-string(Str) -> string(Str, [verbose,report]).
+string(Str) -> string(Str, [verbose, report]).
 
 string(Str, Opts) when is_binary(Str) ->
     string(binary_to_list(Str), Opts);
 string(Str, Opts) when is_list(Str) ->
-    St0 = #luacomp{opts=Opts,code=Str},
+    St0 = #luacomp{opts = Opts, code = Str},
     File = prop(module, Opts, ?NOFILE),
     St1 = filenames(File, St0),
     do_compile(list_passes(), St1).
@@ -85,10 +93,10 @@ string(Str, Opts) when is_list(Str) ->
 %% chunk(Chunk, Options) ->
 %%     {ok,Chunk} | {error,Error,Warnings} | error}.
 
-chunk(Chunk) -> chunk(Chunk, [verbose,report]).
+chunk(Chunk) -> chunk(Chunk, [verbose, report]).
 
 chunk(Chunk, Opts) ->
-    St0 = #luacomp{opts=Opts,code=Chunk},
+    St0 = #luacomp{opts = Opts, code = Chunk},
     File = prop(module, Opts, ?NOFILE),
     St1 = filenames(File, St0),
     do_compile(chunk_passes(), St1).
@@ -105,18 +113,21 @@ forms(C, Opts) -> chunk(C, Opts).
 
 do_compile(Passes, St0) ->
     %% The compiler state already contains the filenames.
-    Cinfo = compiler_info(St0),                 %The compiler info
-    St1 = St0#luacomp{cinfo=Cinfo},
+
+    %The compiler info
+    Cinfo = compiler_info(St0),
+    St1 = St0#luacomp{cinfo = Cinfo},
     case do_passes(Passes, St1) of
-        {ok,St2} -> do_ok_return(St2);
-        {error,St2} -> do_error_return(St2)
+        {ok, St2} -> do_ok_return(St2);
+        {error, St2} -> do_error_return(St2)
     end.
 
 %% filenames(File, State) -> State.
 %%  The default output dir is the current directory unless an
 %%  explicit one has been given in the options.
 
-filenames(?NOFILE, St) -> St#luacomp{lfile=?NOFILE};
+filenames(?NOFILE, St) ->
+    St#luacomp{lfile = ?NOFILE};
 filenames(File, St) ->
     Suffix = ".lua",
     %% Test for explicit outdir.
@@ -124,60 +135,70 @@ filenames(File, St) ->
     Ldir = filename:dirname(File),
     Base = filename:basename(File, Suffix),
     Lfile = luafile(Ldir, Base, Suffix),
-    St#luacomp{base=Base,
-	       ldir=Ldir,
-	       lfile=Lfile,
-	       odir=Odir}.
+    St#luacomp{
+        base = Base,
+        ldir = Ldir,
+        lfile = Lfile,
+        odir = Odir
+    }.
 
 luafile(".", Base, Suffix) -> Base ++ Suffix;
-luafile(Dir, Base, Suffix) ->
-    filename:join(Dir, Base ++ Suffix).
+luafile(Dir, Base, Suffix) -> filename:join(Dir, Base ++ Suffix).
 
 %% prop(Key, PropList, Default) -> Value | Default.
 %%  Find Key, Val from PropList else Default.
 
-prop(Key, [{Key,Val}|_], _Def) -> Val;
-prop(Key, [_|Plist], Def) ->  prop(Key, Plist, Def);
+prop(Key, [{Key, Val} | _], _Def) -> Val;
+prop(Key, [_ | Plist], Def) -> prop(Key, Plist, Def);
 prop(_Key, [], Def) -> Def.
 
 %% compiler_info(State) -> CompInfo.
 %%  Initialise the #cinfo record passed into all compiler passes.
 
-compiler_info(#luacomp{lfile=F,opts=Opts}) ->
+compiler_info(#luacomp{lfile = F, opts = Opts}) ->
     %% The file option may get a binary so we are helpful.
     Vfile = iolist_to_binary(prop(file, Opts, F)),
-    #cinfo{lfile=F,vfile=Vfile,opts=Opts}.
+    #cinfo{lfile = F, vfile = Vfile, opts = Opts}.
 
 %% file_passes() -> [Pass].
 %% list_passes() -> [Pass].
 %% chunk_passes() -> [Pass].
 %%  Build list of passes.
 
-file_passes() ->				%Reading from file
-    [{do,fun do_scan_file/1},
-     {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_parse/1} |
-     chunk_passes()].
+%Reading from file
+file_passes() ->
+    [
+        {do, fun do_scan_file/1},
+        {when_flag, to_scan, {done, fun(St) -> {ok, St} end}},
+        {do, fun do_parse/1}
+        | chunk_passes()
+    ].
 
-list_passes() ->				%Scanning string
-    [{do,fun do_scan_string/1},
-     {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_parse/1}|
-     chunk_passes()].
+%Scanning string
+list_passes() ->
+    [
+        {do, fun do_scan_string/1},
+        {when_flag, to_scan, {done, fun(St) -> {ok, St} end}},
+        {do, fun do_parse/1}
+        | chunk_passes()
+    ].
 
-chunk_passes() ->				%Doing the chunk
-    [{when_flag,to_parse,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_init_comp/1},
-     {do,fun do_comp_normalise/1},
-     {when_flag,to_norm,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_comp_lint/1},
-     {do,fun do_comp_vars/1},
-     {when_flag,to_vars,{done,fun(St) -> {ok,St} end}},
-     %% {do,fun do_comp_locf/1},
-     {do,fun do_comp_env/1},
-     {when_flag,to_env,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_code_gen/1},
-     {unless_flag,no_iopt,{do,fun do_peep_op/1}}].
+%Doing the chunk
+chunk_passes() ->
+    [
+        {when_flag, to_parse, {done, fun(St) -> {ok, St} end}},
+        {do, fun do_init_comp/1},
+        {do, fun do_comp_normalise/1},
+        {when_flag, to_norm, {done, fun(St) -> {ok, St} end}},
+        {do, fun do_comp_lint/1},
+        {do, fun do_comp_vars/1},
+        {when_flag, to_vars, {done, fun(St) -> {ok, St} end}},
+        %% {do,fun do_comp_locf/1},
+        {do, fun do_comp_env/1},
+        {when_flag, to_env, {done, fun(St) -> {ok, St} end}},
+        {do, fun do_code_gen/1},
+        {unless_flag, no_iopt, {do, fun do_peep_op/1}}
+    ].
 
 %% do_passes(Passes, State) -> {ok,State} | {error,Reason}.
 %%  Interpret the list of commands in a pass.
@@ -189,24 +210,25 @@ chunk_passes() ->				%Doing the chunk
 %%  {do,Fun}
 %%  {done,PrintFun,Ext}
 
-do_passes([{do,Fun}|Ps], St0) ->
+do_passes([{do, Fun} | Ps], St0) ->
     case Fun(St0) of
-	{ok,St1} -> do_passes(Ps, St1); 
-	{error,St1} -> {error,St1}
+        {ok, St1} -> do_passes(Ps, St1);
+        {error, St1} -> {error, St1}
     end;
-do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
+do_passes([{when_flag, Flag, Cmd} | Ps], St) ->
     case member(Flag, St#luacomp.opts) of
-	true -> do_passes([Cmd|Ps], St);
-	false -> do_passes(Ps, St)
+        true -> do_passes([Cmd | Ps], St);
+        false -> do_passes(Ps, St)
     end;
-do_passes([{unless_flag,Flag,Cmd}|Ps], St) ->
+do_passes([{unless_flag, Flag, Cmd} | Ps], St) ->
     case member(Flag, St#luacomp.opts) of
-	true -> do_passes(Ps, St);
-	false -> do_passes([Cmd|Ps], St)
+        true -> do_passes(Ps, St);
+        false -> do_passes([Cmd | Ps], St)
     end;
-do_passes([{done,Fun}|_], St) ->
+do_passes([{done, Fun} | _], St) ->
     Fun(St);
-do_passes([], St) -> {ok,St}.
+do_passes([], St) ->
+    {ok, St}.
 
 %% do_scan_file(State) -> {ok,State} | {error,State}.
 %% do_scan_string(State) -> {ok,State} | {error,State}.
@@ -220,62 +242,72 @@ do_passes([], St) -> {ok,St}.
 %% do_comp_peep(State) -> {ok,State} | {error,State}.
 %%  The actual compiler passes.
 
-do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
+do_scan_file(#luacomp{lfile = Name, opts = Opts} = St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
-    case file:open(Name, [read,{encoding,unicode}]) of
-	{ok,F} ->
-	    %% Check if first line a script or Windows BOM, if so skip it.
-	    case io:get_line(F, '') of
-		"#" ++ _ -> ok;			%Skip line
-		[239,187,191|_] ->
-		    file:position(F, 3);	%Skip BOM
-		_ -> file:position(F, bof)	%Get it all
-	    end,
-	    %% Now read the file.
-	    Ret = case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
-		      {ok,Ts,_} ->
-			  debug_print(Opts, "scan: ~p\n", [Ts]),
-			  {ok,St#luacomp{code=Ts}};
-		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
-		  end,
-	    file:close(F),
-	    Ret;
-	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
+    case file:open(Name, [read, {encoding, unicode}]) of
+        {ok, F} ->
+            %% Check if first line a script or Windows BOM, if so skip it.
+            case io:get_line(F, '') of
+                %Skip line
+                "#" ++ _ ->
+                    ok;
+                [239, 187, 191 | _] ->
+                    %Skip BOM
+                    file:position(F, 3);
+                %Get it all
+                _ ->
+                    file:position(F, bof)
+            end,
+            %% Now read the file.
+            Ret =
+                case io:request(F, {get_until, unicode, '', luerl_scan, tokens, [1]}) of
+                    {ok, Ts, _} ->
+                        debug_print(Opts, "scan: ~p\n", [Ts]),
+                        {ok, St#luacomp{code = Ts}};
+                    {error, E, _} ->
+                        {error, St#luacomp{errors = [E]}}
+                end,
+            file:close(F),
+            Ret;
+        {error, E} ->
+            {error, St#luacomp{errors = [{none, file, E}]}}
     end.
 
-do_scan_string(#luacomp{code=Str,opts=Opts}=St) ->
+do_scan_string(#luacomp{code = Str, opts = Opts} = St) ->
     case luerl_scan:string(Str) of
-	{ok,Ts,_} ->
-	    debug_print(Opts, "scan: ~p\n", [Ts]),
-	    {ok,St#luacomp{code=Ts}};
-	{error,E,_} -> {error,St#luacomp{errors=[E]}}
+        {ok, Ts, _} ->
+            debug_print(Opts, "scan: ~p\n", [Ts]),
+            {ok, St#luacomp{code = Ts}};
+        {error, E, _} ->
+            {error, St#luacomp{errors = [E]}}
     end.
 
-do_parse(#luacomp{code=Ts,opts=Opts}=St) ->
+do_parse(#luacomp{code = Ts, opts = Opts} = St) ->
     case luerl_parse:chunk(Ts) of
-	{ok,Chunk} ->
-	    debug_print(Opts, "parse: ~p\n", [Chunk]),
-	    {ok,St#luacomp{code=Chunk}};
-	{error,E} -> {error,St#luacomp{errors=[E]}}
+        {ok, Chunk} ->
+            debug_print(Opts, "parse: ~p\n", [Chunk]),
+            {ok, St#luacomp{code = Chunk}};
+        {error, E} ->
+            {error, St#luacomp{errors = [E]}}
     end.
 
-do_init_comp(#luacomp{}=St) ->
+do_init_comp(#luacomp{} = St) ->
     %% Nothing to do here now.
-    {ok,St}.
+    {ok, St}.
 
-do_comp_normalise(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
-    {ok,Code1} = luerl_comp_normalise:chunk(Code0, Cinfo),
-    {ok,St#luacomp{code=Code1}}.
+do_comp_normalise(#luacomp{code = Code0, cinfo = Cinfo} = St) ->
+    {ok, Code1} = luerl_comp_normalise:chunk(Code0, Cinfo),
+    {ok, St#luacomp{code = Code1}}.
 
-do_comp_lint(#luacomp{code=Code,cinfo=Cinfo}=St) ->
+do_comp_lint(#luacomp{code = Code, cinfo = Cinfo} = St) ->
     case luerl_comp_lint:chunk(Code, Cinfo) of
-	{ok,Ws} -> {ok,St#luacomp{warnings=Ws}};
-	{error,Es,Ws} -> {error,St#luacomp{errors=Es,warnings=Ws}}
+        {ok, Ws} -> {ok, St#luacomp{warnings = Ws}};
+        {error, Es, Ws} -> {error, St#luacomp{errors = Es, warnings = Ws}}
     end.
 
-do_comp_vars(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
-    {ok,Code1} = luerl_comp_vars:chunk(Code0, Cinfo),
-    {ok,St#luacomp{code=Code1}}.
+do_comp_vars(#luacomp{code = Code0, cinfo = Cinfo} = St) ->
+    {ok, Code1} = luerl_comp_vars:chunk(Code0, Cinfo),
+    {ok, St#luacomp{code = Code1}}.
 
 %% do_comp_locf(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
 %%     case luerl_comp_locf:chunk(Code0, Cinfo) of
@@ -284,46 +316,61 @@ do_comp_vars(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
 %%         {error,Es} -> {error,St#luacomp{errors=Es}}
 %%     end.
 
-do_comp_env(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
-    {ok,Code1} = luerl_comp_env:chunk(Code0, Cinfo),
-    {ok,St#luacomp{code=Code1}}.
+do_comp_env(#luacomp{code = Code0, cinfo = Cinfo} = St) ->
+    {ok, Code1} = luerl_comp_env:chunk(Code0, Cinfo),
+    {ok, St#luacomp{code = Code1}}.
 
-do_code_gen(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
-    {ok,Code1} = luerl_comp_cg:chunk(Code0, Cinfo),
-    {ok,St#luacomp{code=Code1}}.
+do_code_gen(#luacomp{code = Code0, cinfo = Cinfo} = St) ->
+    {ok, Code1} = luerl_comp_cg:chunk(Code0, Cinfo),
+    {ok, St#luacomp{code = Code1}}.
 
-do_peep_op(#luacomp{code=Code0,cinfo=Cinfo}=St) ->
-    {ok,Code1} = luerl_comp_peep:chunk(Code0, Cinfo),
-    {ok,St#luacomp{code=Code1}}.
+do_peep_op(#luacomp{code = Code0, cinfo = Cinfo} = St) ->
+    {ok, Code1} = luerl_comp_peep:chunk(Code0, Cinfo),
+    {ok, St#luacomp{code = Code1}}.
 
-do_ok_return(#luacomp{lfile=Lfile,opts=Opts,code=C,warnings=Ws}) ->
+do_ok_return(#luacomp{lfile = Lfile, opts = Opts, code = C, warnings = Ws}) ->
     Report = lists:member(report, Opts),
     ?IF(Report, list_warnings(Lfile, Ws), ok),
-    {ok,C}.
+    {ok, C}.
 
-do_error_return(#luacomp{lfile=Lfile,opts=Opts,errors=Es,warnings=Ws}) ->
+do_error_return(#luacomp{lfile = Lfile, opts = Opts, errors = Es, warnings = Ws}) ->
     Report = lists:member(report, Opts),
     Return = lists:member(return, Opts),
-    ?IF(Report, begin list_errors(Lfile, Es), list_warnings(Lfile, Ws) end, ok),
-    ?IF(Return, {error,Es,Ws}, error).
+    ?IF(
+        Report,
+        begin
+            list_errors(Lfile, Es),
+            list_warnings(Lfile, Ws)
+        end,
+        ok
+    ),
+    ?IF(Return, {error, Es, Ws}, error).
 
 debug_print(Opts, Format, Args) ->
     ?DEBUG_PRINT(Format, Args, Opts).
 
 list_warnings(F, Ws) ->
-    foreach(fun ({Line,Mod,Warn}) ->
-                    Cs = Mod:format_error(Warn),
-                    io:format("~s:~w: Warning: ~s\n", [F,Line,Cs]);
-                ({Mod,Warn}) ->
-                    Cs = Mod:format_error(Warn),
-                    io:format("~s: Warning: ~s\n", [F,Cs])
-            end, Ws).
+    foreach(
+        fun
+            ({Line, Mod, Warn}) ->
+                Cs = Mod:format_error(Warn),
+                io:format("~s:~w: Warning: ~s\n", [F, Line, Cs]);
+            ({Mod, Warn}) ->
+                Cs = Mod:format_error(Warn),
+                io:format("~s: Warning: ~s\n", [F, Cs])
+        end,
+        Ws
+    ).
 
 list_errors(F, Es) ->
-    foreach(fun ({Line,Mod,Error}) ->
-                    Cs = Mod:format_error(Error),
-                    io:format("~s:~w: ~s\n", [F,Line,Cs]);
-                ({Mod,Error}) ->
-                    Cs = Mod:format_error(Error),
-                    io:format("~s: ~s\n", [F,Cs])
-            end, Es).
+    foreach(
+        fun
+            ({Line, Mod, Error}) ->
+                Cs = Mod:format_error(Error),
+                io:format("~s:~w: ~s\n", [F, Line, Cs]);
+            ({Mod, Error}) ->
+                Cs = Mod:format_error(Error),
+                io:format("~s: ~s\n", [F, Cs])
+        end,
+        Es
+    ).
