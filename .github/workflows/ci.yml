@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        otp: ["22.3.4.27", "23.3.4.20", "24.3.4.17"]
-        rebar3: ["3.14.1", "3.14.3"]
+        otp: ["24.3.4.17"]
+        rebar3: ["3.14.3"]
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
