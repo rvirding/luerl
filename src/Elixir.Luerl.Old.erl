@@ -26,7 +26,7 @@
 -include("luerl.hrl").
 
 ?MODULEDOC("""
-Legacy Elixir API for Luerl, supporting Lua 5.2 compatibility.
+Legacy Elixir API for Luerl
 
 This module provides Elixir-friendly wrappers for the luerl_old module
 with state as the first argument for better pipe operator usage.
