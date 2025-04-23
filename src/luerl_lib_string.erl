@@ -18,9 +18,9 @@
 
 -module(luerl_lib_string).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 %% The basic entry point to set up the function table.
 -export([install/1,byte/3,char/3,dump/3,find/3,format/3,gmatch/3,gsub/3,len/3,lower/3,

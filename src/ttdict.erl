@@ -22,6 +22,8 @@
 
 -module(ttdict).
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 %% Standard interface.

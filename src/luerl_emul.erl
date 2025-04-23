@@ -31,11 +31,11 @@
 
 -module(luerl_emul).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 -include("luerl_instrs.hrl").
+
+?MODULEDOC(false).
 
 %% Basic interface.
 -export([init/0,gc/1]).

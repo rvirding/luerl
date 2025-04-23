@@ -14,6 +14,8 @@
 
 -module(luerl_sup).
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 -behaviour(supervisor).

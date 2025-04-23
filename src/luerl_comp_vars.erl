@@ -20,10 +20,10 @@
 
 -module(luerl_comp_vars).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+
+?MODULEDOC(false).
 
 -export([chunk/2]).
 

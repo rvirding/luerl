@@ -17,6 +17,8 @@
 
 -module(luerl_util).
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 -export([errname_info/1]).

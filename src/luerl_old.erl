@@ -18,6 +18,8 @@
 
 -module(luerl_old).
 
+-include("luerl.hrl").
+
 ?MODULEDOC("""
 Legacy API for Luerl, implementing Lua 5.2 compatibility.
 This module is provided for backwards compatibility with earlier versions
@@ -26,8 +28,6 @@ of Luerl. New code should use the luerl module instead.
 For Elixir users, the Elixir.Luerl.Old module provides an idiomatic interface
 with state as the first argument for better pipe operator usage.
 """).
-
--include("luerl.hrl").
 
 -export([eval/2,evalfile/2,
 	 do/2,dofile/2,

@@ -120,6 +120,8 @@ Rules.
 
 Erlang code.
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 %% Copyright (c) 2013-2023 Robert Virding

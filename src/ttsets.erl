@@ -22,6 +22,8 @@
 
 -module(ttsets).
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 %% Standard interface.

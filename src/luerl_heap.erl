@@ -23,9 +23,10 @@
 
 -module(luerl_heap).
 
-?MODULEDOC(false).
 
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 -export([init/0]).
 

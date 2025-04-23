@@ -23,9 +23,9 @@
 
 -module(luerl_lib_table).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 %% The basic entry point to set up the function table.
 -export([install/1,concat/3,insert/3,pack/3,remove/3,sort/3,unpack/3]).

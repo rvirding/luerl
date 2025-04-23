@@ -18,9 +18,9 @@
 
 -module(luerl_lib_basic).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 %% The basic entry point to set up the function table.
 -export([install/1,assert/3,error_call/3,collectgarbage/3,dofile/3,

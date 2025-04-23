@@ -18,6 +18,8 @@
 
 -module(luerl_lib_os_date).
 
+-include("luerl.hrl").
+
 ?MODULEDOC(false).
 
 -export([format/2]).

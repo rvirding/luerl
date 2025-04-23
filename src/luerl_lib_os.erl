@@ -18,9 +18,9 @@
 
 -module(luerl_lib_os).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 -export([install/1, clock/3, date/3, difftime/3, execute/3, lua_exit/3, getenv/3, remove/3, rename/3, time/3, tmpname/3]).
 

@@ -20,11 +20,12 @@
 
 -module(luerl_comp_peep).
 
-?MODULEDOC(false).
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 -include("luerl_instrs.hrl").
+
+?MODULEDOC(false).
 
 -export([chunk/2]).
 

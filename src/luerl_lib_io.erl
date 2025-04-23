@@ -20,9 +20,9 @@
 
 -module(luerl_lib_io).
 
-?MODULEDOC(false).
-
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 -export([install/1,flush/3,write/3]).
 
