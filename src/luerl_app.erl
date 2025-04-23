@@ -14,6 +14,8 @@
 
 -module(luerl_app).
 
+-moduledoc(false).
+
 -behaviour(application).
 
 %% Application callbacks

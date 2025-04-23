@@ -17,6 +17,8 @@
 
 -module(luerl_util).
 
+-moduledoc(false).
+
 -export([errname_info/1]).
 
 %% Convert error names to errnos and strings.

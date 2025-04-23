@@ -23,6 +23,14 @@
 
 -module('Elixir.Luerl.Old').
 
+-moduledoc("""
+Legacy Elixir API for Luerl, supporting Lua 5.2 compatibility.
+
+This module provides Elixir-friendly wrappers for the luerl_old module
+with state as the first argument for better pipe operator usage.
+New code should use the Luerl module instead.
+""").
+
 -export([eval/2,evalfile/2,
          do/2,dofile/2,
          load/2,load/3,

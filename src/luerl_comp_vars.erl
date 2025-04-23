@@ -20,6 +20,8 @@
 
 -module(luerl_comp_vars).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 

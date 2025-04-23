@@ -26,6 +26,8 @@
 
 -module(luerl_lib_math).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 -export([install/1,abs/3,acos/3,asin/3,atan2/3,atan/3,ceil/3,cos/3,cosh/3,deg/3,exp/3,floor/3,

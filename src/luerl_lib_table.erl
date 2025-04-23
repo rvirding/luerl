@@ -23,6 +23,8 @@
 
 -module(luerl_lib_table).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.

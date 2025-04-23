@@ -18,6 +18,8 @@
 
 -module(luerl_lib_os_date).
 
+-moduledoc(false).
+
 -export([format/2]).
 
 %% IMPLEMENTED FORMATS:

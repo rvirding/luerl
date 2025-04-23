@@ -18,6 +18,8 @@
 
 -module(luerl_lib_utf8).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 -export([install/1,utf8_char/3,codes/3,codepoint/3,utf8_len/3,offset/3]).

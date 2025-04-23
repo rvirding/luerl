@@ -22,6 +22,8 @@
 
 -module(ttsets).
 
+-moduledoc(false).
+
 %% Standard interface.
 -export([new/0,is_set/1,size/1,to_list/1,from_list/1]).
 -export([is_element/2,add_element/2,del_element/2]).

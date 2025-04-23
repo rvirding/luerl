@@ -18,6 +18,8 @@
 
 -module(luerl_lib_string).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 %% The basic entry point to set up the function table.

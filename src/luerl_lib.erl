@@ -22,6 +22,8 @@
 
 -module(luerl_lib).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 -export([lua_error/2,badarg_error/3,badarith_error/3,format_error/1,

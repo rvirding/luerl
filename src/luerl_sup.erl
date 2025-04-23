@@ -14,6 +14,8 @@
 
 -module(luerl_sup).
 
+-moduledoc(false).
+
 -behaviour(supervisor).
 
 %% API

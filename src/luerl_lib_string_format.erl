@@ -18,6 +18,8 @@
 
 -module(luerl_lib_string_format).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 -export([format/3]).

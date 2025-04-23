@@ -20,6 +20,8 @@
 
 -module(luerl_lib_bit32).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 
 -export([install/1,fband/3,fbnot/3,fbor/3,fbtest/3,fbxor/3,flshift/3,frshift/3,

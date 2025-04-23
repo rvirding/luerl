@@ -24,6 +24,8 @@
 
 -module(luerl_comp_cg).
 
+-moduledoc(false).
+
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 -include("luerl_instrs.hrl").
