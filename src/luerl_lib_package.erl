@@ -23,7 +23,7 @@
 
 -module(luerl_lib_package).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -include_lib("kernel/include/file.hrl").
 

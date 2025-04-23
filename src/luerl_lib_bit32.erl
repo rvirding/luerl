@@ -20,7 +20,7 @@
 
 -module(luerl_lib_bit32).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -include("luerl.hrl").
 

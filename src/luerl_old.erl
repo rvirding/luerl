@@ -18,7 +18,7 @@
 
 -module(luerl_old).
 
--moduledoc("""
+-?MODULEDOC("""
 Legacy API for Luerl, implementing Lua 5.2 compatibility.
 This module is provided for backwards compatibility with earlier versions
 of Luerl. New code should use the luerl module instead.

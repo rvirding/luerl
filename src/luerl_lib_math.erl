@@ -26,7 +26,7 @@
 
 -module(luerl_lib_math).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -include("luerl.hrl").
 

@@ -17,7 +17,7 @@
 
 -module(luerl_util).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -export([errname_info/1]).
 

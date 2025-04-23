@@ -20,7 +20,7 @@
 
 -module(luerl_lib_io).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -include("luerl.hrl").
 

@@ -22,7 +22,7 @@
 
 -module(ttsets).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 %% Standard interface.
 -export([new/0,is_set/1,size/1,to_list/1,from_list/1]).

@@ -22,7 +22,7 @@
 
 -module(ttdict).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 %% Standard interface.
 -export([new/0,is_key/2,to_list/1,from_list/1,size/1]).

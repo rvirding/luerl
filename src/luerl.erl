@@ -18,7 +18,7 @@
 
 -module(luerl).
 
--moduledoc("""
+-?MODULEDOC("""
 Luerl is an implementation of Lua 5.3 written in Erlang.
 This is the main public API module for interfacing with Luerl.
 

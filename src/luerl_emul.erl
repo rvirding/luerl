@@ -31,7 +31,7 @@
 
 -module(luerl_emul).
 
--moduledoc(false).
+-?MODULEDOC(false).
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
