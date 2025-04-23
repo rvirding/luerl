@@ -26,7 +26,7 @@
 
 -module(luerl_comp).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
 -export([forms/1,forms/2]).

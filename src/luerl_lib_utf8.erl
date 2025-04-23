@@ -18,7 +18,7 @@
 
 -module(luerl_lib_utf8).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 

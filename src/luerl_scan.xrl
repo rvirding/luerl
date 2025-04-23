@@ -120,7 +120,7 @@ Rules.
 
 Erlang code.
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 %% Copyright (c) 2013-2023 Robert Virding
 %% -*- mode: erlang; indent-tabs-mode: nil -*-

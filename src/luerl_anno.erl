@@ -24,7 +24,7 @@
 
 -module(luerl_anno).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -export([new/0,new/1,new/2,set_line/2,line/1,set/3,get/2]).
 

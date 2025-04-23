@@ -14,7 +14,7 @@
 
 -module(luerl_app).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -behaviour(application).
 

@@ -14,7 +14,7 @@
 
 -module(luerl_sup).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -behaviour(supervisor).
 

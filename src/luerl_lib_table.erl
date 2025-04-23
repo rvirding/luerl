@@ -23,7 +23,7 @@
 
 -module(luerl_lib_table).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 

@@ -18,7 +18,7 @@
 
 -module(luerl_lib_os).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 

@@ -23,7 +23,7 @@
 
 -module(luerl_comp_lint).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").

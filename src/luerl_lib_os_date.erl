@@ -18,7 +18,7 @@
 
 -module(luerl_lib_os_date).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -export([format/2]).
 

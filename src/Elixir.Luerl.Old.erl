@@ -23,7 +23,7 @@
 
 -module('Elixir.Luerl.Old').
 
--?MODULEDOC("""
+?MODULEDOC("""
 Legacy Elixir API for Luerl, supporting Lua 5.2 compatibility.
 
 This module provides Elixir-friendly wrappers for the luerl_old module

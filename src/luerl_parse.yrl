@@ -209,7 +209,7 @@ uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 %% Copyright (c) 2013-2019 Robert Virding
 %%

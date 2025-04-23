@@ -23,7 +23,7 @@
 
 -module(luerl_heap).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 

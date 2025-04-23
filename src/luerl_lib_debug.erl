@@ -21,7 +21,7 @@
 
 -module(luerl_lib_debug).
 
--?MODULEDOC(false).
+?MODULEDOC(false).
 
 -include("luerl.hrl").
 
