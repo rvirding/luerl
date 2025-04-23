@@ -35,6 +35,8 @@
 -include("luerl_comp.hrl").
 -include("luerl_instrs.hrl").
 
+?MODULEDOC(false).
+
 %% Basic interface.
 -export([init/0,gc/1]).
 -export([call/2,call/3,emul/2]).

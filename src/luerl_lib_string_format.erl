@@ -20,6 +20,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 -export([format/3]).
 
 format(F, As, St0) ->

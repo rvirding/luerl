@@ -28,6 +28,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 -export([install/1,abs/3,acos/3,asin/3,atan2/3,atan/3,ceil/3,cos/3,cosh/3,deg/3,exp/3,floor/3,
          fmod/3,frexp/3,ldexp/3,log/3,log10/3,max/3,min/3,modf/3,pow/3,rad/3,random/3,randomseed/3,
          sin/3,sinh/3,sqrt/3,tan/3,tanh/3,tointeger/3,type/3]).

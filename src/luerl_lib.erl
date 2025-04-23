@@ -24,6 +24,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 -export([lua_error/2,badarg_error/3,badarith_error/3,format_error/1,
          format_value/1]).
 

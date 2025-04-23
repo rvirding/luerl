@@ -28,6 +28,8 @@
 -include("luerl_comp.hrl").
 -include("luerl_instrs.hrl").
 
+?MODULEDOC(false).
+
 -export([chunk/2]).
 
 -import(ordsets, [add_element/2,is_element/2,union/1,union/2,

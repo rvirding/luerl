@@ -26,6 +26,7 @@
 
 -module(luerl_comp).
 
+
 -export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
 -export([forms/1,forms/2]).
 
@@ -37,6 +38,8 @@
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+
+?MODULEDOC(false).
 
 %% The main Lua compiler state.
 

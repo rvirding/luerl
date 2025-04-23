@@ -14,6 +14,10 @@
 
 -module(luerl_app).
 
+-include("luerl.hrl").
+
+?MODULEDOC(false).
+
 -behaviour(application).
 
 %% Application callbacks

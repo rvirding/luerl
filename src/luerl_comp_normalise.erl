@@ -23,6 +23,8 @@
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
+?MODULEDOC(false).
+
 -export([chunk/2]).
 
 %% chunk(Code, CompInfo) -> {ok,Code} | {error,Reason}.

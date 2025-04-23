@@ -23,6 +23,8 @@
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
+?MODULEDOC(false).
+
 -export([chunk/2]).
 
 -import(ordsets, [is_element/2,intersection/2,subtract/2]).
