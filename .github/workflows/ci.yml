@@ -16,8 +16,9 @@ jobs:
     name: Older Erlang/OTP ${{matrix.otp}}
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
-        otp: ["24"]
+        otp: ["24.3.4.7"]
         rebar3: ["3.22.1"]
     steps:
       - uses: actions/checkout@v4
