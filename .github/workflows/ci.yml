@@ -14,7 +14,7 @@ on:
 jobs:
   older-builds:
     name: Older Erlang/OTP ${{matrix.otp}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         otp: ["24.3.4.17"]
@@ -30,7 +30,7 @@ jobs:
 
   newer-builds:
     name: Newer Erlang/OTP ${{matrix.otp}}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         otp: ["25", "26", "27"]
