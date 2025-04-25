@@ -99,21 +99,33 @@ Interface functions - New Version
        State} | {lua_error, Error, State}
        Call a function already defined in the state.  Result is NOT decoded.
 
-   luerl:call_function_dec(KeyPath, Args, State)  ->  {ok,  Result,  State}  |
+   luerl:call_function_enc(KeyPath, Args, State)  ->  {ok,  Result,  State}  |
        {lua_error, Error, State}
        Call  a  function  already  defined in the state.  KeyPath is a list of
-       keys to the function.  KeyPath, Args and Result are  automatically  en‐
-       coded/decoded.
+       keys to the function.  KeyPath  and  Args  are  automatically  encoded,
+       while Result is NOT decoded.
 
-   luerl:call_method(ObjRef,  Method, ArgRefs, State) -> {ok, Result, State} |
+   luerl:call_function_dec(KeyPath,  Args,  State)  ->  {ok,  Result, State} |
        {lua_error, Error, State}
-       Call a method already defined in the state.
+       Call a function already defined in the state.  KeyPath  is  a  list  of
+       keys  to  the function.  KeyPath and Args are automatically encoded and
+       Result is automatically decoded.
+
+   luerl:call_method(ObjRef, Method, ArgRefs, State) -> {ok, Result, State}  |
+       {lua_error, Error, State}
+       Call a method already defined in the state.  Result is NOT decoded.
+
+   luerl:call_method_enc(KeyPath,  Method, Args, State) -> {ok, Result, State}
+       | {lua_error, Error, State}
+       Call a method already defined in the state.  KeyPath is a list of  keys
+       to  the  method.   KeyPath,  Method and Args are automatically encoded,
+       while Result is NOT decoded.
 
    luerl:call_method_dec(KeyPath, Method, Args, State) -> {ok, Result,  State}
        | {lua_error, Error, State}
        Call  a method already defined in the state.  KeyPath is a list of keys
-       to the method.  KeyPath, Method, Args and Result are automatically  en‐
-       coded/decoded.
+       to the method.  KeyPath, Method and Args are automatically encoded  and
+       Result is automatically decoded.
 
    luerl:get_table_keys(KeyPath,  State)  -> {ok, Result, State} | {lua_error,
        Error, State}

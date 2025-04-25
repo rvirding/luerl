@@ -67,98 +67,109 @@ State}\f[R]
 .PD
 This is the return value from evaluating a Lua call.
 .SS Functions
-.SS luerl:init() \-> State
+.SS \f[B]\f[CB]luerl:init() \-> State\f[B]\f[R]
 Get a new Lua State = a fresh Lua VM instance.
-.SS luerl:gc(State) \-> State
+.SS \f[B]\f[CB]luerl:gc(State) \-> State\f[B]\f[R]
 Runs the garbage collector on a state and returns the new state.
-.SS luerl:load(String|Binary[, CompileOptions], State) \-> {ok, Function, State} | CompileError
+.SS \f[B]\f[CB]luerl:load(String|Binary[, CompileOptions], State) \-> {ok, Function, State} | CompileError\f[B]\f[R]
 Parse a Lua chunk as string or binary, and return a compiled chunk
 (`form').
-.SS luerl:loadfile(FileName[, CompileOptions], State) \-> {ok, Function, State} | CompileError
+.SS \f[B]\f[CB]luerl:loadfile(FileName[, CompileOptions], State) \-> {ok, Function, State} | CompileError\f[B]\f[R]
 Parse a Lua file, and return a compiled chunk (`form').
-.SS luerl:path_loadfile([Path, ], FileName[, CompileOptions], State) \-> {ok,Function,FullName,State} | {error, Reason}
+.SS \f[B]\f[CB]luerl:path_loadfile([Path, ], FileName[, CompileOptions], State) \-> {ok,Function,FullName,State} | {error, Reason}\f[B]\f[R]
 Search Path until the file FileName is found.
 Parse the file and return a compiled chunk (`form').
 If Path is not given then the path defined in the environment variable
 LUA_LOAD_PATH is used.
-.SS luerl:load_module(KeyPath, ErlangModule, State) \-> State
+.SS \f[B]\f[CB]luerl:load_module(KeyPath, ErlangModule, State) \-> State\f[B]\f[R]
 Load \f[CR]ErlangModule\f[R] and install its table at \f[CR]KeyPath\f[R]
 which is \f[B]NOT\f[R] encoded.
-.SS luerl:load_module_dec(EncodedKeyPath, ErlangModule, State) \-> State
+.SS \f[B]\f[CB]luerl:load_module_dec(EncodedKeyPath, ErlangModule, State) \-> State\f[B]\f[R]
 Load \f[CR]ErlangModule\f[R] and install its table at \f[CR]KeyPath\f[R]
 which is encoded.
-.SS luerl:do(String|Binary|Form, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError
+.SS \f[B]\f[CB]luerl:do(String|Binary|Form, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError\f[B]\f[R]
 Evaluate a Lua expression and return its result which is \f[B]NOT\f[R]
 decoded, and the new Lua State.
-.SS luerl:do_dec(String|Binary|Form, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError
+.SS \f[B]\f[CB]luerl:do_dec(String|Binary|Form, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError\f[B]\f[R]
 Evaluate a Lua expression and return its result which is automatically
 decoded, and the new Lua State.
-.SS luerl:dofile(Path, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError
+.SS \f[B]\f[CB]luerl:dofile(Path, State) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError\f[B]\f[R]
 Load and execute the Lua code in the file and return its result which is
 \f[B]NOT\f[R] decoded, and the new Lua State.
 Equivalent to doing luerl:do(\[lq]return dofile(`FileName')\[rq]).
-.SS luerl:dofile_dec(Path[, State]) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError
+.SS \f[B]\f[CB]luerl:dofile_dec(Path[, State]) \-> {ok, Result, NewState} | {lua_error, Error, State} | CompileError\f[B]\f[R]
 Load and execute the Lua code in the file and return its result which is
 automatically decoded, and the new Lua State.
-.SS luerl:call(FuncRef, ArgRefs, State) \-> {ok, Result, State}
-.SS luerl:call_chunk(FuncRef, ArgRefs, State) \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:call(FuncRef, ArgRefs, State) \-> {ok, Result, State}\f[B]\f[R]
+.SS \f[B]\f[CB]luerl:call_chunk(FuncRef, ArgRefs, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Call a compiled chunk or function.
 Use the call_chunk, call has been kept for backwards compatibility.
-.SS luerl:call_function(FuncRef | FuncPath, ArgRefs, State] \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:call_function(FuncRef | FuncPath, ArgRefs, State] \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Call a function already defined in the state.
 \f[CR]Result\f[R] is \f[B]NOT\f[R] decoded.
-.SS luerl:call_function_dec(KeyPath, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:call_function_enc(KeyPath, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Call a function already defined in the state.
 \f[CR]KeyPath\f[R] is a list of keys to the function.
-\f[CR]KeyPath\f[R], \f[CR]Args\f[R] and \f[CR]Result\f[R] are
-automatically encoded/decoded.
-.SS luerl:call_method(ObjRef, Method, ArgRefs, State) \-> {ok, Result, State} | {lua_error, Error, State}
+\f[CR]KeyPath\f[R] and \f[CR]Args\f[R] are automatically encoded, while
+\f[CR]Result\f[R] is \f[B]NOT\f[R] decoded.
+.SS \f[B]\f[CB]luerl:call_function_dec(KeyPath, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
+Call a function already defined in the state.
+\f[CR]KeyPath\f[R] is a list of keys to the function.
+\f[CR]KeyPath\f[R] and \f[CR]Args\f[R] are automatically encoded and
+\f[CR]Result\f[R] is automatically decoded.
+.SS \f[B]\f[CB]luerl:call_method(ObjRef, Method, ArgRefs, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Call a method already defined in the state.
-.SS luerl:call_method_dec(KeyPath, Method, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}
+\f[CR]Result\f[R] is \f[B]NOT\f[R] decoded.
+.SS \f[B]\f[CB]luerl:call_method_enc(KeyPath, Method, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Call a method already defined in the state.
 \f[CR]KeyPath\f[R] is a list of keys to the method.
-\f[CR]KeyPath\f[R], \f[CR]Method\f[R], \f[CR]Args\f[R] and
-\f[CR]Result\f[R] are automatically encoded/decoded.
-.SS luerl:get_table_keys(KeyPath, State) \-> {ok, Result, State} | {lua_error, Error, State}
+\f[CR]KeyPath\f[R], \f[CR]Method\f[R] and \f[CR]Args\f[R] are
+automatically encoded, while \f[CR]Result\f[R] is \f[B]NOT\f[R] decoded.
+.SS \f[B]\f[CB]luerl:call_method_dec(KeyPath, Method, Args, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
+Call a method already defined in the state.
+\f[CR]KeyPath\f[R] is a list of keys to the method.
+\f[CR]KeyPath\f[R], \f[CR]Method\f[R] and \f[CR]Args\f[R] are
+automatically encoded and \f[CR]Result\f[R] is automatically decoded.
+.SS \f[B]\f[CB]luerl:get_table_keys(KeyPath, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Gets a value inside the Lua state.
 \f[CR]KeyPath\f[R] and \f[CR]Result\f[R] are \f[B]NOT\f[R]
 encoded/decoded.
-.SS luerl:get_table_keys_dec(KeyPath, State) \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:get_table_keys_dec(KeyPath, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Gets a value inside the Lua state.
 \f[CR]KeyPath\f[R] is automatically encoded and \f[CR]Result\f[R] is
 decoded.
-.SS luerl:set_table_keys(KeyPath, Value, State) \-> {ok,State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:set_table_keys(KeyPath, Value, State) \-> {ok,State} | {lua_error, Error, State}\f[B]\f[R]
 Sets a value inside the Lua state.
 \f[CR]KeyPath\f[R] and \f[CR]Value\f[R] are \f[B]NOT\f[R] encoded.
-.SS luerl:set_table_keys_dec(KeyPath, Value, State) \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:set_table_keys_dec(KeyPath, Value, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Sets a value inside the Lua state.
 \f[CR]KeyPath\f[R] and \f[CR]Value\f[R] are automatically encoded and
 \f[CR]Result\f[R] is decoded.
-.SS luerl:get_table_key(Table, Key, State) \-> {ok, Result, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:get_table_key(Table, Key, State) \-> {ok, Result, State} | {lua_error, Error, State}\f[B]\f[R]
 Gets the value of a key in a table.
 \f[CR]Table\f[R] and \f[CR]Key\f[R] are \f[B]NOT\f[R] encoded and
 \f[CR]Result\f[R] is \f[B]NOT\f[R] decoded.
-.SS luerl:set_table_key(Table, Key, Value, State) \-> {ok, State} | {lua_error, Error, State}
+.SS \f[B]\f[CB]luerl:set_table_key(Table, Key, Value, State) \-> {ok, State} | {lua_error, Error, State}\f[B]\f[R]
 Sets the value of a key in a table.
 \f[CR]Table\f[R], \f[CR]Key\f[R] and \f[CR]Value\f[R] are \f[B]NOT\f[R]
 encoded.
-.SS luerl:get_stacktrace(State) \-> [{FuncName,{file,FileName},{line,Line}}]
+.SS \f[B]\f[CB]luerl:get_stacktrace(State) \-> [{FuncName,{file,FileName},{line,Line}}]\f[B]\f[R]
 Return a stack trace of the current call stack in the state.
-.SS luerl:encode(Term, State) \-> {LuerlTerm,State}
+.SS \f[B]\f[CB]luerl:encode(Term, State) \-> {LuerlTerm,State}\f[B]\f[R]
 Encode the Erlang representation of a term into Luerl form updating the
 state when necessary.
-.SS luerl:encode_list([Term], State) \-> {[LuerlTerm],State}
+.SS \f[B]\f[CB]luerl:encode_list([Term], State) \-> {[LuerlTerm],State}\f[B]\f[R]
 Encode a list of Erlang term representations into a list of Luerl forms
 updating the state when necessary.
-.SS luerl:decode(LuerlTerm, State) \-> Term
+.SS \f[B]\f[CB]luerl:decode(LuerlTerm, State) \-> Term\f[B]\f[R]
 Decode a term in the Luerl form into its Erlang representation.
-.SS luerl:decode_list([LuerlTerm], State) \-> [Term]
+.SS \f[B]\f[CB]luerl:decode_list([LuerlTerm], State) \-> [Term]\f[B]\f[R]
 Decode a list of Luerl terms into a list of Erlang representations.
-.SS luerl:put_private(Key, Term, State) \-> State.
+.SS \f[B]\f[CB]luerl:put_private(Key, Term, State) \-> State.\f[B]\f[R]
 Puts a private value under key that is not exposed to the runtime.
-.SS luerl:get_private(Key, State) \-> Term.
+.SS \f[B]\f[CB]luerl:get_private(Key, State) \-> Term.\f[B]\f[R]
 Get a private value for the given key.
-.SS luerl:delete_private(Key, State) \-> Term.
+.SS \f[B]\f[CB]luerl:delete_private(Key, State) \-> Term.\f[B]\f[R]
 Deletes the private value for the given key.
 .SS Passing String in the Erlang Shell
 Here we are going to look at passing in command strings into the

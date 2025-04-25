@@ -194,7 +194,7 @@ chunk_passes() ->				%Doing the chunk
 
 do_passes([{do,Fun}|Ps], St0) ->
     case Fun(St0) of
-	{ok,St1} -> do_passes(Ps, St1); 
+	{ok,St1} -> do_passes(Ps, St1);
 	{error,St1} -> {error,St1}
     end;
 do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
