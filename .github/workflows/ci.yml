@@ -25,6 +25,7 @@ jobs:
         with:
           version-type: strict
           otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
       - run: rebar3 do eunit, ct --cover, cover
 
   newer-builds:
