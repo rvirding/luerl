@@ -17,13 +17,13 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        otp: ["24.3.4.17"]
-        rebar3: ["3.24"]
+        otp: ["24"]
+        rebar3: ["3.24.0"]
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
         with:
-          version-type: strict
+          version-type: loose
           otp-version: ${{matrix.otp}}
           rebar3-version: ${{matrix.rebar3}}
       - run: rebar3 do eunit, ct --cover, cover
