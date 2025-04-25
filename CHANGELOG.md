@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `luerl:get_private` returns `{ok, Val}` `error` tuple
+- `luerl:get_private` returns `{ok, Val} | error` tuple
 
 ### Fixed
 
