@@ -27,7 +27,7 @@ jobs:
           version-type: loose
           otp-version: ${{matrix.otp}}
           rebar3-version: ${{matrix.rebar3}}
-      - run: rebar3 do eunit, ct --cover, cover
+      - run: DIAGNOSTIC=1 rebar3 do eunit, ct --cover, cover
 
   newer-builds:
     name: Newer Erlang/OTP ${{matrix.otp}}
