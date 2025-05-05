@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - files with only comments can now be loaded
 - atoms are now decoded as strings
+- Erlang functions that return errors are now properly propagated upward and state is updated
 
 
 [unreleased]: https://github.com/olivierlacan/keep-a-changelog/compare/v1.4.0...HEAD

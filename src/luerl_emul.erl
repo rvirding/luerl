@@ -796,6 +796,8 @@ call_erlfunc(Func, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
         {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
+        {lua_error, Reason, St1} ->
+            lua_error(Reason, St1);
         _Other ->
             %% Don't include the erl_func in the call stack.
             lua_error(illegal_return_value, St0#luerl{stk=Stk0,cs=tl(Cs0)})
@@ -812,7 +814,9 @@ call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
         {Ret,St1} when is_list(Ret) ->
             [#call_frame{is=Is,cont=Cont,lvs=Lvs,env=Env}|Cs1] = Cs0,
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
-        _Other ->
+        {lua_error, Reason, St1} ->
+            lua_error(Reason, St1);
+        Other ->
             %% Don't include the erl_func in the call stack.
             lua_error(illegal_return_value, St0#luerl{stk=Stk0,cs=tl(Cs0)})
     end.

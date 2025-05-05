@@ -20,6 +20,9 @@
 -module(luerl_funcall_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-import(luerl_lib, [lua_error/2]).
+
+-export([bad_return_value/3]).
 
 external_fun_test() ->
     State = luerl:init(),
@@ -29,16 +32,94 @@ external_fun_test() ->
                 luerl:encode_list([A + 2, [A + 3, A + 4]], S)
         end,
     {ok, State1} = luerl:set_table_keys_dec([<<"testFun">>], F, State),
-    Chunk = <<"function test(i)\n"
-              "  local a, b = testFun(i)\n"
-              "  return (a == i + 2), (b[1] == i + 3), (b[2] == i + 4)\n"
-              "end">>,
+    Chunk = """
+            function test(i)
+              local a, b = testFun(i)
+              return (a == i + 2), (b[1] == i + 3), (b[2] == i + 4)
+            end
+            """,
     {ok, _, State2} = luerl:do(Chunk, State1),
     {ok, Res, _State3} = luerl:call_function_dec([test], [2], State2),
     [BoolVal, BoolVal2, BoolVal3] = Res = [true,true,true],
     ?assertEqual(true, BoolVal),
     ?assertEqual(true, BoolVal2),
     ?assertEqual(true, BoolVal3).
+
+%% If an error happens in a function call inside Erlang,
+%% allow the user to propagate it up
+external_error_test() ->
+    State = luerl:init(),
+    F = fun([Func], S) ->
+                case luerl:call(Func, [], S) of
+                    {ok, Ret, S1} -> {Ret, S1};
+                    Error -> Error
+                end
+        end,
+    {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
+    Chunk = """
+            global = 1
+
+            local success, message =
+              pcall(function()
+                return foo(function()
+                  global = 2
+
+                  error("whoopsie")
+
+                  return "yay"
+                end)
+              end)
+            return global, success, message
+            """,
+    {ok, [Global, Success, Message], _State2} = luerl:do(Chunk, State1),
+    ?assertEqual(Global, 2),
+    ?assertEqual(Success, false),
+    ?assertEqual(Message, <<"whoopsie">>).
+
+bad_return_value_test() ->
+    State = luerl:init(),
+    F = fun(_Args, S) ->
+                {bad_value, S}
+        end,
+    {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
+    ?assertMatch({lua_error, illegal_return_value, _State}, luerl:call_function_dec([foo], [], State1)),
+    Chunk = """
+            return foo();
+            """,
+    ?assertMatch({lua_error, illegal_return_value, _State}, luerl:do_dec(Chunk, State1)).
+
+propagate_error_mfa_pcall_test() ->
+    State = luerl:init(),
+    {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], {luerl_funcall_tests, bad_return_value, []}, State),
+    ?assertMatch({lua_error, something_bad_happened, _State}, luerl:call_function_dec([foo], [], State1)),
+    Chunk = """
+            global = 1
+            local success, message =
+              pcall(function()
+                global = 2
+                return foo();
+              end)
+            return global, success, message
+            """,
+    ?assertMatch({ok, [2, false, <<"something_bad_happened!">>], _State}, luerl:do_dec(Chunk, State1)).
+
+bad_return_value_pcall_test() ->
+    State = luerl:init(),
+    F = fun(_Args, S) ->
+                {bad_value, S}
+        end,
+    {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
+    ?assertMatch({lua_error, illegal_return_value, _State}, luerl:call_function_dec([foo], [], State1)),
+    Chunk = """
+            global = 1
+            local success, message =
+              pcall(function()
+                global = 2
+                return foo();
+              end)
+            return global, success, message
+            """,
+    ?assertMatch({ok, [2, false, <<"illegal format of return value">>], _State}, luerl:do_dec(Chunk, State1)).
 
 return_lib_function_test() ->
     State = luerl:init(),
@@ -111,3 +192,6 @@ newindex_metamethod_test() ->
     {ok, [TVal, MVal], _State1} = luerl:do_dec(Chunk, State),
     ?assertEqual(456, TVal),
     ?assertEqual(nil, MVal).
+
+bad_return_value(_Arg, _Args, State) ->
+    lua_error(something_bad_happened, State).
