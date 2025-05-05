@@ -816,7 +816,7 @@ call_erlmfa({M,F,A}, Args, Stk, Cs0, #luerl{stk=Stk0}=St0) ->
             emul(Is, Cont, Lvs, [Ret|Stk], Env, Cs1, St1#luerl{stk=Stk0,cs=Cs1});
         {lua_error, Reason, St1} ->
             lua_error(Reason, St1);
-        Other ->
+        _Other ->
             %% Don't include the erl_func in the call stack.
             lua_error(illegal_return_value, St0#luerl{stk=Stk0,cs=tl(Cs0)})
     end.

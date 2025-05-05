@@ -32,12 +32,10 @@ external_fun_test() ->
                 luerl:encode_list([A + 2, [A + 3, A + 4]], S)
         end,
     {ok, State1} = luerl:set_table_keys_dec([<<"testFun">>], F, State),
-    Chunk = """
-            function test(i)
-              local a, b = testFun(i)
-              return (a == i + 2), (b[1] == i + 3), (b[2] == i + 4)
-            end
-            """,
+    Chunk = <<"function test(i)\n"
+              "  local a, b = testFun(i)\n"
+              "  return (a == i + 2), (b[1] == i + 3), (b[2] == i + 4)\n"
+              "end\n">>,
     {ok, _, State2} = luerl:do(Chunk, State1),
     {ok, Res, _State3} = luerl:call_function_dec([test], [2], State2),
     [BoolVal, BoolVal2, BoolVal3] = Res = [true,true,true],
@@ -56,21 +54,16 @@ external_error_test() ->
                 end
         end,
     {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
-    Chunk = """
-            global = 1
-
-            local success, message =
-              pcall(function()
-                return foo(function()
-                  global = 2
-
-                  error("whoopsie")
-
-                  return "yay"
-                end)
-              end)
-            return global, success, message
-            """,
+    Chunk = <<"global = 1\n"
+              "local success, message =\n"
+              "  pcall(function()\n"
+              "    return foo(function()\n"
+              "    global = 2\n"
+              "    error(\"whoopsie\")\n"
+              "    return \"yay\"\n"
+              "  end)\n"
+              "end)\n"
+              "return global, success, message\n">>,
     {ok, [Global, Success, Message], _State2} = luerl:do(Chunk, State1),
     ?assertEqual(Global, 2),
     ?assertEqual(Success, false),
@@ -83,24 +76,20 @@ bad_return_value_test() ->
         end,
     {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
     ?assertMatch({lua_error, illegal_return_value, _State}, luerl:call_function_dec([foo], [], State1)),
-    Chunk = """
-            return foo();
-            """,
+    Chunk = <<"return foo();">>,
     ?assertMatch({lua_error, illegal_return_value, _State}, luerl:do_dec(Chunk, State1)).
 
 propagate_error_mfa_pcall_test() ->
     State = luerl:init(),
     {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], {luerl_funcall_tests, bad_return_value, []}, State),
     ?assertMatch({lua_error, something_bad_happened, _State}, luerl:call_function_dec([foo], [], State1)),
-    Chunk = """
-            global = 1
-            local success, message =
-              pcall(function()
-                global = 2
-                return foo();
-              end)
-            return global, success, message
-            """,
+    Chunk = <<"global = 1\n"
+              "local success, message =\n"
+              "pcall(function()\n"
+              "  global = 2\n"
+              "  return foo();\n"
+              "end)\n"
+              "return global, success, message\n">>,
     ?assertMatch({ok, [2, false, <<"something_bad_happened!">>], _State}, luerl:do_dec(Chunk, State1)).
 
 bad_return_value_pcall_test() ->
@@ -110,15 +99,13 @@ bad_return_value_pcall_test() ->
         end,
     {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
     ?assertMatch({lua_error, illegal_return_value, _State}, luerl:call_function_dec([foo], [], State1)),
-    Chunk = """
-            global = 1
-            local success, message =
-              pcall(function()
-                global = 2
-                return foo();
-              end)
-            return global, success, message
-            """,
+    Chunk = <<"global = 1\n"
+              "local success, message =\n"
+              "pcall(function()\n"
+              "  global = 2\n"
+              "  return foo();\n"
+              "end)\n"
+              "return global, success, message\n">>,
     ?assertMatch({ok, [2, false, <<"illegal format of return value">>], _State}, luerl:do_dec(Chunk, State1)).
 
 return_lib_function_test() ->
