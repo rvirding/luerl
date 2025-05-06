@@ -23,6 +23,16 @@
 
 -module('Elixir.Luerl.Old').
 
+-include("luerl.hrl").
+
+?MODULEDOC("""
+Legacy Elixir API for Luerl
+
+This module provides Elixir-friendly wrappers for the luerl_old module
+with state as the first argument for better pipe operator usage.
+New code should use the Luerl module instead.
+""").
+
 -export([eval/2,evalfile/2,
          do/2,dofile/2,
          load/2,load/3,

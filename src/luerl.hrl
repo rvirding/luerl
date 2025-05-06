@@ -219,3 +219,12 @@
 -else.
 -define(CATCH(C, E, S), C:E -> S = erlang:get_stacktrace(),).
 -endif.
+
+%% Define MODULEDOC and DOC to handle module and function documentation.
+-if(?OTP_RELEASE >= 27).
+-define(MODULEDOC(Str), -moduledoc(Str)).
+-define(DOC(Str), -doc(Str)).
+-else.
+-define(MODULEDOC(Str), -compile([])).
+-define(DOC(Str), -compile([])).
+-endif.

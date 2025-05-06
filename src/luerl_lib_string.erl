@@ -20,6 +20,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 %% The basic entry point to set up the function table.
 -export([install/1,byte/3,char/3,dump/3,find/3,format/3,gmatch/3,gsub/3,len/3,lower/3,
          match/3,rep/3,reverse/3,sub/3,upper/3]).

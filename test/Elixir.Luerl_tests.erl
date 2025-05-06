@@ -19,7 +19,7 @@
 private_test() ->
     State1 = 'Elixir.Luerl':init(),
     State2 = 'Elixir.Luerl':put_private(State1, secret, <<"mysecret">>),
-    ?assertMatch(<<"mysecret">>, 'Elixir.Luerl':get_private(State2, secret)),
-    ?assertMatch(nil, 'Elixir.Luerl':get_private(State2, missing)),
+    ?assertMatch({ok, <<"mysecret">>}, 'Elixir.Luerl':get_private(State2, secret)),
+    ?assertMatch(error, 'Elixir.Luerl':get_private(State2, missing)),
     State3 = 'Elixir.Luerl':delete_private(State2, secret),
-    ?assertMatch(nil, 'Elixir.Luerl':get_private(State3, secret)).
+    ?assertMatch(error, 'Elixir.Luerl':get_private(State3, secret)).

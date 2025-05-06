@@ -26,6 +26,8 @@
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
 
+?MODULEDOC(false).
+
 -export([chunk/2,format_error/1]).
 
 -record(lint, {opts=[],                         %Options

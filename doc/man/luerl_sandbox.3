@@ -56,18 +56,18 @@ nested names, e.g.\ [table,pack] for table.pack.
 .PD
 \f[B]Keys\f[R] means Lua table keys, the keys of a key\-value structure.
 .SS Functions
-.SS init() \-> State.
-.SS init([ State | TablePaths]) \-> State.
-.SS init(State, TablePaths) \-> State.
+.SS \f[B]\f[CB]init() \-> State.\f[B]\f[R]
+.SS \f[B]\f[CB]init([ State | TablePaths]) \-> State.\f[B]\f[R]
+.SS \f[B]\f[CB]init(State, TablePaths) \-> State.\f[B]\f[R]
 Create a new sandboxed state.
 If a state is given as an argument then that state will be used
 otherwise a new default be be generated.
 \f[CR]TablePaths\f[R] is a list of paths to functions which will be
 blocked.
 If none is given then the default list will be used.
-.SS run(String | Binary) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, State) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, Flags, State) \-> {Result, State} | {error, Reason}.
+.SS \f[B]\f[CB]run(String | Binary) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, State) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, Flags, State) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
 Spawn a new process which runs the string \f[CR]String\f[R] in
 \f[CR]State\f[R] where the default sandbox state will be used if none is
 given.
@@ -84,11 +84,11 @@ following fields
 \f[CR]MaxTime\f[R] (default 100 msecs) the time to run the string,
 \f[CR]SpawnOpts\f[R] are spawn options to the process running the
 evaluation.
-.SS run(String | Binary) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, State) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, State, [ MaxReds | Flags ]) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, State, MaxReds, Flags) \-> {Result, State} | {error, Reason}.
-.SS run(String | Binary, State, MaxReds, Flags, Timeout) \-> {Result, State} | {error, Reason}.
+.SS \f[B]\f[CB]run(String | Binary) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, State) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, State, [ MaxReds | Flags ]) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, State, MaxReds, Flags) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
+.SS \f[B]\f[CB]run(String | Binary, State, MaxReds, Flags, Timeout) \-> {Result, State} | {error, Reason}.\f[B]\f[R]
 This is the old interface to run.
 It still works but the new interface is recommended.
 Spawn a new process which runs the string \f[CR]String\f[R] in

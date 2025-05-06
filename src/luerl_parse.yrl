@@ -1,4 +1,5 @@
-%% Copyright (c) 2013-2019 Robert Virding
+%% Copyright (c) 2013-2025 Robert Virding
+%% -*- mode: erlang; indent-tabs-mode: nil -*-
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -233,6 +234,10 @@ unop -> uminus : '$1' .
 uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.
+
+-include("luerl.hrl").
+
+?MODULEDOC(false).
 
 -export([chunk/1]).
 

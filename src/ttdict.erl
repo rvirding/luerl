@@ -22,6 +22,10 @@
 
 -module(ttdict).
 
+-include("luerl.hrl").
+
+?MODULEDOC(false).
+
 %% Standard interface.
 -export([new/0,is_key/2,to_list/1,from_list/1,size/1]).
 -export([fetch/2,find/2,fetch_keys/1,erase/2]).

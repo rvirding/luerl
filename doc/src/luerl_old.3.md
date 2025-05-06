@@ -27,68 +27,68 @@ Note that Lua **Chunks** (see definition below) can travel between different Sta
 
     eval --> {ok, Result} | {error, Reason}
 
-#### luerl:eval(String|Binary|Form, State) -> {ok, Result} | {error, Reason, StackTrace}.
+### **`luerl:eval(String|Binary|Form, State) -> {ok, Result} | {error, Reason, StackTrace}.`**
  Evaluate a Lua expression passed in as a string or binary, and return its result.
 
-#### luerl:evalfile(Path, State) -> {ok, Result} | {error, Reason, StackTrace}.
+### **`luerl:evalfile(Path, State) -> {ok, Result} | {error, Reason, StackTrace}.`**
  Load and execute a file, and return the result.
 
-#### luerl:do(String|Binary|Form, State) -> {Result, NewState}.
+### **`luerl:do(String|Binary|Form, State) -> {Result, NewState}.`**
  Evaluate a Lua expression and return its result, and the new Lua State.
 
-#### luerl:dofile(Path, State) -> {Result, NewState}.
+### **`luerl:dofile(Path, State) -> {Result, NewState}.`**
  Load and execute the Lua code in the file and return its result, and the new Lua State. Equivalent to doing luerl:do("return dofile('FileName')").
 
-#### luerl:load(String|Binary[, CompileOptions], State) -> {ok,Function,NewState} | {error, Reason}.
+### **`luerl:load(String|Binary[, CompileOptions], State) -> {ok,Function,NewState} | {error, Reason}.`**
  Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
 
-#### luerl:loadfile(FileName[, CompileOptions], State) -> {ok,Function,NewState} | {error, Reason}.
+### **`luerl:loadfile(FileName[, CompileOptions], State) -> {ok,Function,NewState} | {error, Reason}.`**
  Parse a Lua file, and return a compiled chunk ('form').
 
-#### luerl:path_loadfile([Path, ], FileName[, CompileOptions], State) -> {ok,Function,FullName,State} | {error, Reason}.
+### **`luerl:path_loadfile([Path, ], FileName[, CompileOptions], State) -> {ok,Function,FullName,State} | {error, Reason}.`**
  Search Path until the file FileName is found. Parse the file and return a compiled chunk ('form'). If Path is not given then the path defined in the environment variable LUA_LOAD_PATH is used.
 
-#### luerl:load_module(KeyPath, ErlangModule, State) -> State.
+### **`luerl:load_module(KeyPath, ErlangModule, State) -> State.`**
  Load `ErlangModule` and install its table at `KeyPath` which is encoded.
 
-#### luerl:load_module1(KeyPath, ErlangModule, State) -> State.
+### **`luerl:load_module1(KeyPath, ErlangModule, State) -> State.`**
  Load `ErlangModule` and install its table at `KeyPath` which is **NOT** encoded
 
-#### luerl:init() -> State.
+### **`luerl:init() -> State.`**
  Get a new Lua State = a fresh Lua VM instance.
 
-#### luerl:call(Form, Args, State) -> {Result,State}
-#### luerl:call_chunk(Form, Args, State) -> {Result,State}
+### **`luerl:call(Form, Args, State) -> {Result,State}`**
+### **`luerl:call_chunk(Form, Args, State) -> {Result,State}`**
 Call a compiled chunk or function. Use the call_chunk, call has been kept for backwards compatibility.
 
-#### luerl:call_function(KeyPath, Args, State) -> {Result,NewState}
+### **`luerl:call_function(KeyPath, Args, State) -> {Result,NewState}`**
 Call a function already defined in the state. `KeyPath` is a list of names to the function. `KeyPath`, `Args` and `Result` are automatically encoded/decoded.
 
-#### luerl:call_function1(KeyPath, Args, State) -> {Result,NewState}
+### **`luerl:call_function1(KeyPath, Args, State) -> {Result,NewState}`**
 Call a function already defined in the state. `KeyPath` is a list of keys to the function. `KeyPath`, `Args` and `Result` are **NOT** encoded/decoded.
 
-#### luerl:call_method(MethPath, Args, State) -> {Result,NewState}.
+### **`luerl:call_method(MethPath, Args, State) -> {Result,NewState}.`**
 Call a method already defined in the state. `MethPath` is a list of names to the method. `MethPath`, `Args` and `Result` are automatically encoded/decoded.
 
-#### luerl:call_method1(MethPath, Args, State) -> {Result,NewState}
+### **`luerl:call_method1(MethPath, Args, State) -> {Result,NewState}`**
 Call a method already defined in the state. `MethPath` is a list of keys to the method. `Keys`, `Args` and `Result` are **NOT** encoded/decoded.
 
-#### luerl:stop(State) -> GCedState.
+### **`luerl:stop(State) -> GCedState.`**
  Garbage collects the state and (todo:) does away with it.
 
-#### luerl:gc(State) -> State.
+### **`luerl:gc(State) -> State.`**
  Runs the garbage collector on a state and returns the new state.
 
-#### luerl:set_table(KeyPath, Value, State) -> State.
+### **`luerl:set_table(KeyPath, Value, State) -> State.`**
  Sets a value inside the Lua state. Value is automatically encoded.
 
-#### luerl:set_table1(KeyPath, Value, State) -> State.
+### **`luerl:set_table1(KeyPath, Value, State) -> State.`**
  Sets a value inside the Lua state. `KeyPath` and `Value` are **NOT** encoded.
 
-#### luerl:get_table(KeyPath, State) -> {Result,State}.
+### **`luerl:get_table(KeyPath, State) -> {Result,State}.`**
  Gets a value inside the Lua state. `KeyPath` and `Result` are automatically encoded.
 
-#### luerl:get_table1(KeyPath, State) -> {Result,State}.
+### **`luerl:get_table1(KeyPath, State) -> {Result,State}.`**
  Gets a value inside the Lua state. `KeyPath` and `Result` are **NOT** encoded/decoded.
 
  You can use this function to expose an function to the Lua code by using this interface:

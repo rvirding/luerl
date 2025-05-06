@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2023 Robert Virding
+%% Copyright (c) 2013-2025 Robert Virding
 %% -*- mode: erlang; indent-tabs-mode: nil -*-
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
@@ -138,6 +138,10 @@ Rules.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
 
 Erlang code.
+
+-include("luerl.hrl").
+
+?MODULEDOC(false).
 
 -export([is_keyword/1]).
 -export([string_chars/1,chars/1]).

@@ -20,6 +20,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 %% The basic entry point to set up the function table.
 -export([install/1,assert/3,error_call/3,collectgarbage/3,dofile/3,
          eprint/3,getmetatable/3,ipairs/3,ipairs_next/3,
@@ -421,8 +423,7 @@ pcall(_, [F|As], St0) ->
                   end,
             {[false,Msg],St2};
         error:{lua_error,E,St2} ->
-            %% Basic formatting for now.
-            Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
+            Msg = luerl_lib:format_error(E),
             {[false,Msg],St2}
     end.
 

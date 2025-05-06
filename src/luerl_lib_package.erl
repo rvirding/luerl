@@ -23,9 +23,12 @@
 
 -module(luerl_lib_package).
 
+
 -include_lib("kernel/include/file.hrl").
 
 -include("luerl.hrl").
+
+?MODULEDOC(false).
 
 %% The basic entry point to set up the function table.
 -export([install/1,require/3,searchpath/3,preload_searcher/3,lua_searcher/3]).

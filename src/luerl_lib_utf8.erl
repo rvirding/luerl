@@ -20,6 +20,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 -export([install/1,utf8_char/3,codes/3,codepoint/3,utf8_len/3,offset/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these

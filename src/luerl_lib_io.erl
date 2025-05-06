@@ -22,6 +22,8 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC(false).
+
 -export([install/1,flush/3,write/3]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]).	%Shorten this

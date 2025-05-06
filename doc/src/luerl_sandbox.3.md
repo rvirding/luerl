@@ -22,15 +22,15 @@ Note that Lua **Chunks** (see definition below) can travel between different Sta
 
 ## Functions
 
-#### init() -> State.
-#### init([ State | TablePaths]) -> State.
-#### init(State, TablePaths) -> State.
+### **` init() -> State.`**
+### **` init([ State | TablePaths]) -> State.`**
+### **` init(State, TablePaths) -> State.`**
 
 Create a new sandboxed state. If a state is given as an argument then that state will be used otherwise a new default be be generated. ``TablePaths`` is a list of paths to functions which will be blocked. If none is given then the default list will be used.
 
-#### run(String | Binary) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, Flags, State) -> {Result, State} | {error, Reason}.
+### **`run(String | Binary) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, State) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, Flags, State) -> {Result, State} | {error, Reason}.`**
 
 Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `Flags` is a map or keyword list which can contain the following fields
 
@@ -40,10 +40,10 @@ Spawn a new process which runs the string `String` in `State` where the default 
 
 `MaxReds` limits the number of reductions and `MaxTime` (default 100 msecs) the time to run the string, `SpawnOpts` are spawn options to the process running the evaluation.
 
-#### run(String | Binary) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, [ MaxReds | Flags ]) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, MaxReds, Flags) -> {Result, State} | {error, Reason}.
-#### run(String | Binary, State, MaxReds, Flags, Timeout) -> {Result, State} | {error, Reason}.
+### **`run(String | Binary) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, State) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, State, [ MaxReds | Flags ]) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, State, MaxReds, Flags) -> {Result, State} | {error, Reason}.`**
+### **`run(String | Binary, State, MaxReds, Flags, Timeout) -> {Result, State} | {error, Reason}.`**
 
 This is the old interface to run. It still works but the new interface is recommended. Spawn a new process which runs the string `String` in `State` where the default sandbox state will be used if none is given. `MaxReds` limits the number of reductions and `TimeOut` (default 100 msecs) the time to run the string, `Flags` are spawn options to the process running the evaluation.

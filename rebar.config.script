@@ -72,17 +72,26 @@ Copts = Copts0 ++ AppendCopts(Version,
                                {"20",'HAS_FLOOR'},
                                {"20",'HAS_CEIL'},
                                {"21",'NEW_STACKTRACE'},
-                               {"23",'EEP48'}],
+                               {"23",'EEP48'},
+                               {"27",'OTP27_MAYBE'}],
                               AppendCopts),
 
 %% Ensure they are in erl_opts.
 
+%% Make sure debug_info is always included for documentation
+AllOpts = [{debug_info, true} | Copts],
+
 Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
             {erl_opts,Opts} ->                  %Existing erl_opts
-                NewOpts = {erl_opts,Opts ++ Copts},
+                %% Make sure debug_info is included in the final options
+                OptsWithDebug = case lists:member(debug_info, Opts) of
+                                    true -> lists:delete(debug_info, Opts) ++ [{debug_info, true}];
+                                    false -> Opts ++ [{debug_info, true}]
+                                end,
+                NewOpts = {erl_opts, OptsWithDebug ++ Copts},
                 lists:keyreplace(erl_opts, 1, Conf0, NewOpts);
             false ->                            %No erl_opts
-                Conf0 ++ [{erl_opts,Copts}]
+                Conf0 ++ [{erl_opts, AllOpts}]
         end,
 
 %% TestConfig = [{cover_enabled, true}, {cover_opts, [verbose]}],
@@ -92,5 +101,6 @@ Conf1 = case lists:keyfind(erl_opts, 1, Conf0) of
 %% ]}],
 
 %% Conf1 ++ TestConfig ++ Aliases.
+%%
 
 Conf1.

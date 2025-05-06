@@ -20,6 +20,14 @@
 
 -include("luerl.hrl").
 
+?MODULEDOC("""
+Luerl is an implementation of Lua 5.3 written in Erlang.
+This is the main public API module for interfacing with Luerl.
+
+For Elixir users, the `Elixir.Luerl` module provides an idiomatic interface
+with state as the first argument for better pipe operator usage.
+""").
+
 %% Basic user API to luerl.
 -export([init/0,gc/1,
          load/2,load/3,loadfile/2,loadfile/3,
@@ -453,6 +461,7 @@ decode(nil, _, _) -> nil;
 decode(false, _, _) -> false;
 decode(true, _, _) -> true;
 decode(B, _, _) when is_binary(B) -> B;
+decode(A, _, _) when is_atom(A) -> atom_to_binary(A, utf8);
 decode(N, _, _) when is_number(N) -> N;         %Integers and floats
 decode(#tref{}=T, St, In) ->
     decode_table(T, St, In);

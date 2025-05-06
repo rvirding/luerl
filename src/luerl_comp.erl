@@ -26,6 +26,7 @@
 
 -module(luerl_comp).
 
+
 -export([file/1,file/2,string/1,string/2,chunk/1,chunk/2]).
 -export([forms/1,forms/2]).
 
@@ -37,6 +38,8 @@
 
 -include("luerl.hrl").
 -include("luerl_comp.hrl").
+
+?MODULEDOC(false).
 
 %% The main Lua compiler state.
 
@@ -191,7 +194,7 @@ chunk_passes() ->				%Doing the chunk
 
 do_passes([{do,Fun}|Ps], St0) ->
     case Fun(St0) of
-	{ok,St1} -> do_passes(Ps, St1); 
+	{ok,St1} -> do_passes(Ps, St1);
 	{error,St1} -> {error,St1}
     end;
 do_passes([{when_flag,Flag,Cmd}|Ps], St) ->
@@ -232,13 +235,17 @@ do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 		_ -> file:position(F, bof)	%Get it all
 	    end,
 	    %% Now read the file.
-	    Ret = case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
-		      {ok,Ts,_} ->
-			  debug_print(Opts, "scan: ~p\n", [Ts]),
-			  {ok,St#luacomp{code=Ts}};
-		      {error,E,_} -> {error,St#luacomp{errors=[E]}}
-		  end,
-	    file:close(F),
+	    Ret =
+          case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
+              {ok,Ts,_} ->
+                  debug_print(Opts, "scan: ~p\n", [Ts]),
+                  {ok,St#luacomp{code=Ts}};
+              {eof,_} ->
+                  {ok,St#luacomp{code=[]}};
+              {error,E,_} ->
+                  {error,St#luacomp{errors=[E]}}
+          end,
+        file:close(F),
 	    Ret;
 	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
     end.
