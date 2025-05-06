@@ -11,13 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `luerl:get_private` returns `{ok, Val} | error` tuple
+- (breaking) `luerl:get_private` returns `{ok, Val} | error` tuple
 
 ### Fixed
 
 - files with only comments can now be loaded
 - atoms are now decoded as strings
 - Erlang functions that return errors are now properly propagated upward and state is updated
+- binary error messages captured in pcall are not formatted
 
 
 [unreleased]: https://github.com/olivierlacan/keep-a-changelog/compare/v1.4.0...HEAD
