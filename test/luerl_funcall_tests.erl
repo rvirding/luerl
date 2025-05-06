@@ -69,6 +69,16 @@ external_error_test() ->
     ?assertEqual(Success, false),
     ?assertEqual(Message, <<"whoopsie">>).
 
+pcall_error_test() ->
+    State = luerl:init(),
+    F = fun([Message], S) ->
+                lua_error(Message, S)
+        end,
+    {ok, State1} = luerl:set_table_keys_dec([<<"foo">>], F, State),
+    ?assertMatch({lua_error, <<"one">>, _State}, luerl:call_function_dec([foo], [<<"one">>], State1)),
+    ?assertMatch({lua_error, <<"two">>, _State}, luerl:do(<<"return foo(\"two\")">>, State1)),
+    ?assertMatch({ok, [false, <<"three!">>], _State}, luerl:do(<<"return pcall(function()\nreturn foo(\"three\")\nend)\n">>, State1)).
+
 bad_return_value_test() ->
     State = luerl:init(),
     F = fun(_Args, S) ->

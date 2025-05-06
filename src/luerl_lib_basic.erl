@@ -423,8 +423,7 @@ pcall(_, [F|As], St0) ->
                   end,
             {[false,Msg],St2};
         error:{lua_error,E,St2} ->
-            %% Basic formatting for now.
-            Msg = unicode:characters_to_binary(luerl_lib:format_error(E)),
+            Msg = luerl_lib:format_error(E),
             {[false,Msg],St2}
     end.
 
