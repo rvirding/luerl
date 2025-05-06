@@ -113,6 +113,9 @@ format_error({error_message,Msg}) ->
 %% Error is called.
 format_error({error_call,Args}) ->
     format_error_call(Args);
+%% binary is passed, we treat as an error message
+format_error(Binary) when is_binary(Binary) ->
+    <<Binary/binary, "!">>;
 %% Everything we don't recognise or know about.
 format_error(Error) ->
     unicode:characters_to_binary(io_lib:format(<<"~w!">>, [Error])).
