@@ -244,7 +244,7 @@ difftime(_, [T2,T1|_], St) ->
 difftime(_, As, St) -> badarg_error(difftime, As, St).
 
 time(_, As=[#tref{}=Tref], St) ->
-    L = luerl_new:decode(Tref, St),
+    L = luerl:decode(Tref, St),
     compute_time(proplists:to_map(L), As, St);
 time(_, _, St) ->                                  %Time since 1 Jan 1970
     {[current_timestamp()],St}.
