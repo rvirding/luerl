@@ -168,7 +168,7 @@ decode(St, V) ->
     luerl_old:decode(V, St).
 
 externalize(St) ->
-    luerl_old_new:externalize(St).
+    luerl_old:externalize(St).
 
 internalize(St) ->
-    luerl_old_new:internalize(St).
+    luerl_old:internalize(St).

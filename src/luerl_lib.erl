@@ -45,6 +45,8 @@
 
 -export([conv_list/2,conv_list/3]).
 
+-dialyzer({[no_return], [lua_error/2, badarg_error/3, badarith_error/3]}).
+
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
 
