@@ -249,6 +249,8 @@ scan1([$(|Cs], Line, Col, St) ->
 scan1([$)|Cs], Line, Col, St) ->
     {ok,{')',Line},Cs,Line,Col+1,St};
 scan1([${|Cs], Line, Col, St) ->
+    {ok,{'{',Line},Cs,Line,Col+1,St};
+scan1([$}|Cs], Line, Col, St) ->
     {ok,{'}',Line},Cs,Line,Col+1,St};
 scan1([$[|Cs], Line, Col, St) ->
     scan_square_bracket([$[|Cs], Line, Col, St);
