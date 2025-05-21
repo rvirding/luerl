@@ -113,7 +113,7 @@ tests:
 #####################
 
 # Targets for generating docs and man pages
-DOCDIR = doc
+DOCDIR = doc_legacy
 DOCSRC = $(DOCDIR)/src
 MANDIR = $(DOCDIR)/man
 PDFDIR = $(DOCDIR)/pdf

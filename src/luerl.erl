@@ -1,4 +1,4 @@
-%% Copyright (c) 2020-2024 Robert Virding
+%% Copyright (c) 2020-2025 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -20,13 +20,14 @@
 
 -include("luerl.hrl").
 
-?MODULEDOC("""
+?MODULEDOC( """
 Luerl is an implementation of Lua 5.3 written in Erlang.
 This is the main public API module for interfacing with Luerl.
 
-For Elixir users, the `Elixir.Luerl` module provides an idiomatic interface
-with state as the first argument for better pipe operator usage.
+The `LuaState` parameter is the state of a Lua VM instance. It must be created with the `init/0` call and be carried from one call to the next.
 """).
+
+?MODULEDOC( #{group => <<"Trace Control functions">>} ).
 
 %% Basic user API to luerl.
 -export([init/0,gc/1,
@@ -57,12 +58,35 @@ with state as the first argument for better pipe operator usage.
 %% Storing and retrieving private data
 -export([put_private/3,get_private/2,delete_private/2]).
 
-%% init() -> State.
+-type luerlstate() :: #luerl{}.
+
+-type luerldata() ::
+        nil | boolean() | binary() | number() |
+        #tref{} |                               %Table reference
+        #usdref{} |                             %Userdata reference
+        #eref{} |                               %Environment reference
+        #funref{} |                             %Lua function reference
+        #erl_func{} |                           %Erlang function
+        #erl_mfa{}                              %Erlang Mod, Func, Arg.
+        .
+
+?DOC( """
+Create a new Lua state which is a fresh Lua VM instance.
+""").
+
+-spec init() -> LuaState when
+      LuaState :: luerlstate().
 
 init() ->
     luerl_emul:init().
 
-%% gc(State) -> State.
+?DOC( """
+Runs the garbage collector on a state and returns the new state.
+""").
+
+-spec gc(LuaState) -> LuaState when
+      LuaState :: luerlstate().
+
 gc(St) ->
     luerl_heap:gc(St).
 
@@ -72,14 +96,49 @@ gc(St) ->
 %% set_trace_data(TraceData, State) -> State.
 %%  Set the trace function and access the trace data.
 
+?DOC( """
+Set the trace function.
+""").
+?DOC( #{group => <<"Trace Control functions">>} ).
+
+-spec set_trace_func(Function, LuaState) -> LuaState when
+      Function :: fun(),
+      LuaState :: luerlstate().
+
 set_trace_func(Tfunc, St) ->
     St#luerl{trace_func=Tfunc}.
+
+?DOC( """
+Clear the trace function.
+""").
+?DOC( #{group => <<"Trace Control functions">>} ).
+
+-spec clear_trace_func(LuaState) -> LuaState when
+      LuaState :: luerlstate().
 
 clear_trace_func(St) ->
     St#luerl{trace_func=none}.
 
+?DOC( """
+Get the current trace data.
+""").
+?DOC( #{group => <<"Trace Control functions">>} ).
+
+-spec get_trace_data(LuaState) -> TraceData when
+      LuaState :: luerlstate(),
+      TraceData :: term().
+
 get_trace_data(St) ->
     St#luerl.trace_data.
+
+?DOC( """
+Set the trace data.
+""").
+?DOC( #{group => <<"Trace Control functions">>} ).
+
+-spec set_trace_data(TraceData, LuaState) -> LuaState when
+      LuaState :: luerlstate(),
+      TraceData :: term().
 
 set_trace_data(Tdata, St) ->
     St#luerl{trace_data=Tdata}.
@@ -87,7 +146,26 @@ set_trace_data(Tdata, St) ->
 %% load(String|Binary, State) -> {ok,FuncRef,NewState}.
 %% load(String|Binary, Options, State) -> {ok,FuncRef,NewState}.
 
+?DOC( #{equiv => load(Chunk, [return], LuaState)} ).
+
+-spec load(Chunk, LuaState) -> {ok,Function,LuaState} | CompileError when
+      Chunk :: binary() | string(),
+      Function :: #funref{},
+      LuaState :: luerlstate(),
+      CompileError :: term().
+
 load(Bin, St) -> load(Bin, [return], St).
+
+?DOC( """
+Parse a Lua chunk as string or binary, and return a compiled chunk ('form').
+""").
+
+-spec load(Chunk, CompileOptions, LuaState) -> {ok,Function,LuaState} | CompileError when
+      Chunk :: binary() | string(),
+      CompileOptions :: [term()],
+      Function :: #funref{},
+      LuaState :: luerlstate(),
+      CompileError :: term().
 
 load(Bin, Opts, St) when is_binary(Bin) ->
     load(binary_to_list(Bin), Opts, St);
@@ -103,7 +181,26 @@ load(Str, Opts, St0) ->
 %% loadfile(FileName, State) -> {ok,FuncRef,NewState}.
 %% loadfile(FileName, Options, State) -> {ok,FuncRef,NewState}.
 
+?DOC( #{equiv => loadfile(FileName, [return], LuaState)}).
+
+-spec loadfile(FileName, LuaState) -> {ok,Function,LuaState} | CompileError when
+      FileName :: string(),
+      Function :: #funref{},
+      LuaState :: luerlstate(),
+      CompileError :: term().
+
 loadfile(Name, St) -> loadfile(Name, [return], St).
+
+?DOC( """
+Parse a Lua file, and return a compiled chunk ('form').
+""").
+
+-spec loadfile(FileName, CompileOptions, LuaState) -> {ok,Function,LuaState} | CompileError when
+      FileName :: string(),
+      CompileOptions :: [term()],
+      Function :: #funref{},
+      LuaState :: luerlstate(),
+      CompileError :: term().
 
 loadfile(Name, Opts, St0) ->
     case luerl_comp:file(Name, Opts) of
@@ -117,9 +214,16 @@ loadfile(Name, Opts, St0) ->
 %% path_loadfile(Path, FileName, State) -> {ok,Function,FullName,State}.
 %% path_loadfile(Path, FileName, Options, State) ->
 %%     {ok,Function,FullName,State}.
-%%  When no path is given we use the value of LUA_LOAD_PATH.
-%%  We manually step down the path to get the correct handling of
-%%  filenames by the compiler.
+
+?DOC( """
+Calls `path_loadfile/4` with Path set the value of `LUA_LOAD_PATH` and
+`CompileOptions` set to `[return]`.
+""").
+
+-spec path_loadfile(FileName, LuaState) -> {ok,Function,LuaState} when
+      FileName :: string(),
+      Function :: #funref{},
+      LuaState :: luerlstate().
 
 path_loadfile(Name, St) ->
     Path = case os:getenv("LUA_LOAD_PATH") of
@@ -134,8 +238,27 @@ path_loadfile(Name, St) ->
            end,
     path_loadfile(Path, Name, [return], St).
 
+?DOC( #{equiv => path_loadfile(Path, FileName, [return], LuaState)}).
+
+-spec path_loadfile(Path, FileName, LuaState) -> {ok,Function,LuaState} when
+      Path :: [string()],
+      FileName :: string(),
+      Function :: #funref{},
+      LuaState :: luerlstate().
+
 path_loadfile(Dirs, Name, St) ->
     path_loadfile(Dirs, Name, [return], St).
+
+?DOC( """
+Search down a `Path` to find the Lua file and return a compiled ('form').
+""").
+
+-spec path_loadfile(Path, FileName, CompileOptions, LuaState) -> {ok,Function,LuaState} when
+      Path :: list(string()),
+      FileName :: string(),
+      Function :: #funref{},
+      LuaState :: luerlstate(),
+      CompileOptions :: [term()].
 
 path_loadfile([Dir|Dirs], Name, Opts, St0) ->
     Full = filename:join(Dir, Name),
@@ -149,8 +272,17 @@ path_loadfile([Dir|Dirs], Name, Opts, St0) ->
 path_loadfile([], _, _, _) ->
     {error,[{none,file,enoent}],[]}.
 
-%% load_module(LuaTablePath, ModuleName, State) -> State.
-%%  Load module and add module table to the path.
+%% load_module(KeyPath, ErlangModule, State) -> State.
+%% load_module_dec(DecodedTablePath, ModuleName, State) -> State.
+
+?DOC( """
+Load `ErlangModule` and install its table at `KeyPath` in the LuaTable which is **NOT** Lua encoded.
+""").
+
+-spec load_module(KeyPath, ErlangModule, LuaState) -> LuaState when
+      KeyPath :: [term()],
+      ErlangModule :: atom(),
+      LuaState :: luerlstate().
 
 load_module([_|_] = Lfp, Mod, St0) ->
     {Tab,St1} = Mod:install(St0),
@@ -158,8 +290,15 @@ load_module([_|_] = Lfp, Mod, St0) ->
 load_module(_, _, _) ->
     error(badarg).
 
-%% load_module_dec(DecodedTablePath, ModuleName, State) -> State.
-%%  Load module and add module table to the path.
+?DOC( """
+Load `ErlangModule` and install its table at `KeyPath` in the LuaTable
+which is automatically Lua encoded.
+""").
+
+-spec load_module_dec(KeyPath, ErlangModule, LuaState) -> LuaState when
+      KeyPath :: [term()],
+      ErlangModule :: atom(),
+      LuaState :: luerlstate().
 
 load_module_dec([_|_] = Dfp, Mod, St0) ->
     {Efp,St1} = encode_list(Dfp, St0),
@@ -171,7 +310,27 @@ load_module_dec(_, _, _) ->
 %% luerl:do(String|Binary|Form, CompileOptions, State) ->
 %%     {ok,Result,NewState} | {lua_error,Error,State}.
 
+?DOC( #{equiv => do(Expression, [return], LuaState)} ).
+
+-spec do(Expression, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      Expression :: string(),
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
+
 do(S, St) -> do(S, [return], St).
+
+?DOC( """
+Compile a Lua expression string, evaluate it and return its result, which is
+**NOT** decoded, and the new Lua State.
+""").
+
+-spec do(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      Expression :: string(),
+      CompileOptions :: [term()],
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 do(S, Opts, St0) ->
     case load(S, Opts, St0) of
@@ -180,8 +339,28 @@ do(S, Opts, St0) ->
         Error -> Error
     end.
 
+?DOC( #{equiv => do_dec(Expression, [return], LuaState)} ).
+
+-spec do_dec(Expression, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      Expression :: string(),
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
+
 do_dec(S, St) ->
     do_dec(S, [return], St).
+
+?DOC( """
+Compile a Lua expression string, evaluate it and return its result, which is
+is decoded, and the new Lua State.
+""").
+
+-spec do_dec(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      Expression :: string(),
+      CompileOptions :: [term()],
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 do_dec(S, Opts, St0) ->
     case do(S, Opts, St0) of
@@ -194,7 +373,28 @@ do_dec(S, Opts, St0) ->
 %% luerl:dofile(FileName, CompileOptions, State) ->
 %%     {ok,Result,NewState} | {lua_error,Error,State}.
 
+?DOC( #{equiv => dofile(FileName, [return], LuaState)} ).
+
+-spec dofile(FileName, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      FileName :: string(),
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
+
 dofile(File, St) -> dofile(File, [], St).
+
+?DOC( """
+Load and execute the Lua code in the file and return its result which
+is **NOT** decoded, and the new Lua State. Equivalent to doing
+luerl:do("return dofile('FileName')").
+""").
+
+-spec dofile(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      FileName :: string(),
+      CompileOptions :: [term()],
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 dofile(File, Opts, St0) ->
     case loadfile(File, Opts, St0) of
@@ -203,8 +403,29 @@ dofile(File, Opts, St0) ->
         Error -> Error
     end.
 
+?DOC( #{equiv => dofile_dec(FileName, [return], LuaState)} ).
+
+-spec dofile_dec(FileName, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      FileName :: string(),
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
+
 dofile_dec(File, St) ->
     dofile_dec(File, [], St).
+
+?DOC( """
+Load and execute the Lua code in the file and return its result which
+is Lua  decoded, and the new Lua State. Equivalent to doing
+luerl:do("return dofile('FileName')").
+""").
+
+-spec dofile_dec(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+      FileName :: string(),
+      CompileOptions :: [term()],
+      Result :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 dofile_dec(File, Opts, St0) ->
     case dofile(File, Opts, St0) of
@@ -218,17 +439,38 @@ dofile_dec(File, Opts, St0) ->
 %% call_chunk(FuncRef, Args, State) ->
 %%     {ok,Return,State} | {lua_error,Error,State}.
 
-call(C, As, St) ->
-    call_function(C, As, St).
+?DOC( #{equiv => call_function(LuaFuncRef, Args, LuaState)} ).
+?DOC( #{group => <<"Function/Method Call functions">>} ).
 
-call_chunk(C, St) ->
-    call_chunk(C, [], St).
+call(LuaFuncRef, Args, LuaState) ->
+    call_function(LuaFuncRef, Args, LuaState).
 
-call_chunk(C, As, St) ->
-    call_function(C, As, St).
+?DOC( #{equiv => call_function(LuaFuncRef, [], LuaState)} ).
+?DOC( #{group => <<"Function/Method Call functions">>} ).
+
+call_chunk(LuaFuncRef, LuaState) ->
+    call_function(LuaFuncRef, [], LuaState).
+
+?DOC( #{equiv => call_function(LuaFuncRef, Args, LuaState)} ).
+?DOC( #{group => <<"Function/Method Call functions">>} ).
+
+call_chunk(LuaFuncRef, Args, LuaState) ->
+    call_function(LuaFuncRef, Args, LuaState).
 
 %% call_function(LuaFuncRef | LuaTablePath, Args, State) ->
 %%     {ok,LuaReturn,State} | {lua_error,Error,State}.
+
+?DOC( """
+Call a function already defined in the state. `LuaFuncReaf` and `Args` are **NOT** encoded and `Result` is **NOT** decoded.
+""").
+?DOC( #{group => <<"Function/Method Call functions">>} ).
+
+-spec call_function(LuaFuncRef, Args, LuaState) -> {ok,Result,LuaState} | Error when
+      LuaFuncRef :: [term()],
+      Args :: [luerldata()],
+      LuaState :: luerlstate(),
+      Result :: luerldata(),
+      Error :: term().
 
 call_function(Epath, Args, St0) when is_list(Epath) ->
     {ok,Efunc,St1} = get_table_keys(Epath, St0),
@@ -245,6 +487,18 @@ call_function(Func, Args, St0) ->
 %% call_function_enc(DecodedFuncRef, Args, State) ->
 %%     {ok,LuaReturn,State} | {lua_error,Error,State}.
 
+?DOC( """
+Call a function already defined in the state. `KeyPath` is a list of keys to the function. `KeyPath` and `Args` are automatically encoded, while `Result` is **NOT** decoded.
+""").
+?DOC( #{group => <<"Function/Method Call functions">>} ).
+
+-spec call_function_enc(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | Error when
+      KeyPath :: [term()],
+      Args :: [term()],
+      LuaState :: luerlstate(),
+      Result :: luerldata(),
+      Error :: term().
+
 call_function_enc(Dtpath, Dargs, St0) ->
     {Epath,St1} = encode_list(Dtpath, St0),
     {Eargs,St2} = encode_list(Dargs, St1),
@@ -252,6 +506,18 @@ call_function_enc(Dtpath, Dargs, St0) ->
 
 %% call_function_dec(DecodedFuncRef, Args, State) ->
 %%     {ok,DecodedReturn,State} | {lua_error,Error,State}.
+
+?DOC( """
+Call a function already defined in the state. `KeyPath` is a list of keys to the function. `KeyPath` and `Args` are automatically encoded, while `Result` is automatically decoded.
+""").
+?DOC( #{group => <<"Function/Method Call functions">>} ).
+
+-spec call_function_dec(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | Error when
+      KeyPath :: [term()],
+      Args :: [term()],
+      LuaState :: luerlstate(),
+      Result :: term(),
+      Error :: term().
 
 call_function_dec(Dtpath, Dargs, St0) ->
     case call_function_enc(Dtpath, Dargs, St0) of
@@ -262,6 +528,8 @@ call_function_dec(Dtpath, Dargs, St0) ->
 
 %% call_method(LuaObject, Method, Args, State) ->
 %%     {ok,Return,State} | {lua_error,Error,State}.
+
+?DOC( #{group => <<"Function/Method Call functions">>} ).
 
 call_method(Obj, Meth, Args, St0) ->
     try
@@ -274,6 +542,8 @@ call_method(Obj, Meth, Args, St0) ->
 
 %% call_method_dec(DecodedObject, Method, Args, State) ->
 %%     {ok,DecodedReturn,State} | {lua_error,Error,State}.
+
+?DOC( #{group => <<"Function/Method Call functions">>} ).
 
 call_method_dec(Dobj, Dmeth, Dargs, St0) ->
     {ok,Eobj,St1} = get_table_keys_dec(Dobj, St0),
@@ -292,6 +562,18 @@ call_method_dec(Dobj, Dmeth, Dargs, St0) ->
 %% set_table_keys_dec(DecodedKeys, DecodedVal, State) ->
 %%     {ok,State} | {lua_error,Error,State}.
 
+?DOC( """
+Gets a value inside the Lua state. `KeyPath` is **NOT** encoded and
+`Result` is **NOT** decoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec get_table_keys(KeyPath, LuaState) -> {ok,Result,LuaState} | Error when
+      KeyPath :: [luerldata()],
+      LuaState :: luerlstate(),
+      Result :: luerldata(),
+      Error :: term().
+
 get_table_keys(Keys, St0) ->
     try
         {Eret,St1} = luerl_emul:get_table_keys(Keys, St0),
@@ -301,6 +583,17 @@ get_table_keys(Keys, St0) ->
             LuaErr
     end.
 
+?DOC( """
+Gets a value inside the Lua state. `KeyPath` is automatically encoded and `Result` is automatically decoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec get_table_keys_dec(KeyPath, LuaState) -> {ok,Result,LuaState} | Error when
+      KeyPath :: [luerldata()],
+      LuaState :: luerlstate(),
+      Result :: luerldata(),
+      Error :: term().
+
 get_table_keys_dec(Dkeys, St0) ->
     {Ekeys,St1} = encode_list(Dkeys, St0),
     case get_table_keys(Ekeys, St1) of
@@ -308,6 +601,17 @@ get_table_keys_dec(Dkeys, St0) ->
             {ok,decode(Eret, St2),St2};
         LuaError -> LuaError
     end.
+
+?DOC( """
+Sets a value inside the Lua state. `KeyPath` and `Value` are **NOT** encoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec set_table_keys(KeyPath, Value, LuaState) -> {ok,LuaState} | Error when
+      KeyPath :: [luerldata()],
+      Value :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 set_table_keys(Keys, Val, St0) ->
     try
@@ -317,6 +621,18 @@ set_table_keys(Keys, Val, St0) ->
         error:{lua_error,_E,_St} = LuaErr ->
             LuaErr
     end.
+
+?DOC( """
+Sets a value inside the Lua state. `KeyPath` and `Value` are
+automatically encoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec set_table_keys_dec(KeyPath, Value, LuaState) -> {ok,LuaState} | Error when
+      KeyPath :: [luerldata()],
+      Value :: luerldata(),
+      LuaState :: luerlstate(),
+      Error :: term().
 
 set_table_keys_dec(Dkeys, Dval, St0) ->
     {Ekeys,St1} = encode_list(Dkeys, St0),
@@ -328,6 +644,18 @@ set_table_keys_dec(Dkeys, Dval, St0) ->
 %% set_table_key(Tab, Key, Value, State) ->
 %%     {ok,State} | {lua_error,Error,State}.
 
+?DOC( """
+Get the value of a key in a table. `Table`, `Key` are
+**NOT** encoded and the `Result` is **NOT** decoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec get_table_key(Table, Key, LuaState) -> {ok,Result,LuaState} when
+      Table :: luerldata(),
+      Key :: luerldata(),
+      Result :: luerldata(),
+      LuaState :: luerlstate().
+
 get_table_key(Tab, Key, St0) ->
     try
         {Eret,St1} = luerl_emul:get_table_key(Tab, Key, St0),
@@ -336,6 +664,18 @@ get_table_key(Tab, Key, St0) ->
         error:{lua_error,_E,_St} = LuaErr ->
             LuaErr
     end.
+
+?DOC( """
+Set the value of a key in a table. `Table`, `Key` and `Value` are
+**NOT** encoded.
+""").
+?DOC( #{group => <<"Lua Table Access functions">>} ).
+
+-spec set_table_key(Table, Key, Value, LuaState) -> {ok,LuaState} when
+      Table :: luerldata(),
+      Key :: luerldata(),
+      Value :: luerldata(),
+      LuaState :: luerlstate().
 
 set_table_key(Tab, Key, Val, St0) ->
     try
@@ -347,6 +687,17 @@ set_table_key(Tab, Key, Val, St0) ->
     end.
 
 %% get_stacktrace(State) -> [{FuncName,[{file,FileName},{line,Line}]}].
+
+?DOC( """
+Return a stack trace of the current call stack in the state.
+""").
+
+-spec get_stacktrace(LuaState) -> [FuncCall] when
+      LuaState :: luerlstate(),
+      FuncCall :: {FuncName,CallArgs,ExtraInfo},
+      FuncName :: atom(),
+      ExtraInfo :: [{atom(),term()}],
+      CallArgs :: [term()].
 
 get_stacktrace(#luerl{cs=Stack}=St) ->
     Fun = fun (Frame, Acc) -> do_stackframe(Frame, Acc, St) end,
@@ -402,8 +753,30 @@ get_filename(Mod) ->
 %% encode_list([Term], State) -> {[LuerlTerm],State}.
 %% encode(Term, State) -> {LuerlTerm,State}.
 
-encode_list(Ts, St) ->
-    lists:mapfoldl(fun encode/2, St, Ts).
+?DOC( """
+Encode a list of Erlang terms into their Luerl representations if possible.
+""").
+?DOC( #{ group => <<"Encode/Decode Data functions">>} ).
+
+-spec encode_list([Term], LuaState) -> {[LuerlTerm],LuaState} when
+      LuerlTerm :: term(),
+      Term :: term(),
+      LuaState :: luerlstate().
+
+encode_list(Terms, LuaState) ->
+    lists:mapfoldl(fun encode/2, LuaState, Terms).
+
+?DOC( """
+encode(Term, LuaState)
+
+Encode an Erlang term into its Luerl representation if possible.
+""").
+?DOC( #{ group => <<"Encode/Decode Data functions">>} ).
+
+-spec encode(Term, LuaState) -> {LuerlTerm,LuaState} when
+      LuerlTerm :: luerldata(),
+      Term :: term(),
+      LuaState :: luerlstate().
 
 encode(nil, St) -> {nil,St};
 encode(false, St) -> {false,St};
@@ -448,11 +821,33 @@ encode(Term, _) -> error({badarg,Term}).        %Can't encode anything else
 
 %% decode_list([LuerlTerm], State) -> [Term].
 %% decode(LuerlTerm, State) -> Term.
-%%  In decode we track of which tables we have seen to detect
-%%  recursive references and generate an error when that occurs.
 
-decode_list(Lts, St) ->
-    lists:map(fun (Lt) -> decode(Lt, St) end, Lts).
+?DOC( """
+Decode a list of Luerl terms into their standard Erlang
+representation. Note that we have to detect recursive references and
+generate an error when this occurs.
+""").
+?DOC( #{ group => <<"Encode/Decode Data functions">>} ).
+
+-spec decode_list([LuerlTerm], LuaState) -> [Term] when
+      LuerlTerm :: luerldata(),
+      Term :: term(),
+      LuaState :: luerlstate().
+
+decode_list(LuerlTerms, LuaState) ->
+    lists:map(fun (Lt) -> decode(Lt, LuaState) end, LuerlTerms).
+
+?DOC( """
+Decode a Luerl term into its standard Erlang representation. Note that
+we have to detect recursive references and generate an error when this
+occurs.
+""").
+?DOC( #{ group => <<"Encode/Decode Data functions">>} ).
+
+-spec decode(LuerlTerm, LuaState) -> Term when
+      LuerlTerm :: luerldata(),
+      Term :: term(),
+      LuaState :: luerlstate().
 
 decode(LT, St) ->
     decode(LT, St, []).
@@ -524,13 +919,43 @@ internalize(S) ->
 %%   Value.
 %% delete_private(Key, State) ->
 %%   Value.
-put_private(Key, Value, S) ->
-    Private = maps:put(Key, Value, S#luerl.private),
-    S#luerl{private=Private}.
 
-get_private(Key, S) ->
-    maps:get(Key, S#luerl.private).
+?DOC( """
+Puts a private `Value` under `Key` that is not exposed to the runtime.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
 
-delete_private(Key, S) ->
-    Private = maps:remove(Key, S#luerl.private),
-    S#luerl{private=Private}.
+-spec put_private(Key, Value, LuaState) -> LuaState when
+      Key :: term(),
+      Value :: term(),
+      LuaState :: luerlstate().
+
+put_private(Key, Value, St) ->
+    Private = maps:put(Key, Value, St#luerl.private),
+    St#luerl{private=Private}.
+
+?DOC( """
+Get the private value for `Key`.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
+
+-spec get_private(Key, LuaState) -> Value when
+      Key :: term(),
+      Value :: term(),
+      LuaState :: luerlstate().
+
+get_private(Key, St) ->
+    maps:get(Key, St#luerl.private).
+
+?DOC( """
+Delete the private value for `Key`.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
+
+-spec delete_private(Key, LuaState) -> LuaState when
+      Key :: term(),
+      LuaState :: luerlstate().
+
+delete_private(Key, St) ->
+    Private = maps:remove(Key, St#luerl.private),
+    St#luerl{private=Private}.
