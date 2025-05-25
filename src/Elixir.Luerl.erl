@@ -61,18 +61,6 @@ interpreter with state as the first argument for better pipe operator usage.
 %% Storing and retrieving private data
 -export([put_private/3,get_private/2,delete_private/2]).
 
--type luerlstate() :: #luerl{}.
-
-%% -type luerldata() ::
-%%         nil | boolean() | binary() | number() |
-%%         #tref{} |                               %Table reference
-%%         #usdref{} |                             %Userdata reference
-%%         #eref{} |                               %Environment reference
-%%         #funref{} |                             %Lua function reference
-%%         #erl_func{} |                           %Erlang function
-%%         #erl_mfa{}                              %Erlang Mod, Func, Arg.
-%%         .
-
 ?DOC( #{equiv => luerl:init()} ).
 
 init() ->

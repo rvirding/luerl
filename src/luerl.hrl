@@ -126,6 +126,23 @@
 -define(IS_FLOAT_INT(N,I), ((I=round(N)) == N)).
 -define(IS_TRUE(X), (((X) =/= nil) and ((X) =/= false))).
 
+%%
+%% Global type specifications.
+%%
+
+%% The basic Luerl state.
+-type luerlstate() :: #luerl{}.
+
+%% Luerl data.
+-type luerldata() ::
+        nil | boolean() | binary() | number() |
+        #tref{} |                               %Table reference
+        #usdref{} |                             %Userdata reference
+        #eref{} |                               %Environment reference
+        #funref{} |                             %Lua function reference
+        #erl_func{} |                           %Erlang function
+        #erl_mfa{}.                             %Erlang Mod, Func, Arg.
+
 %% Different methods for storing tables in the global data #luerl{}.
 %% Access through macros to allow testing with different storage
 %% methods. This is inefficient with ETS tables where it would

@@ -16,7 +16,6 @@
 %% Authors : Tyler Butchart
 %% Purpose : Reduction limiting luerl sandbox.
 
-
 -module(luerl_sandbox).
 
 -include("luerl.hrl").
@@ -44,18 +43,6 @@ are ignored.
 -export([init/0,init/1,init/2,
          run/1,run/2,run/3,run/4,run/5]).
 
--type luerlstate() :: #luerl{}.
-
--type luerldata() ::
-        nil | boolean() | binary() | number() |
-        #tref{} |                               %Table reference
-        #usdref{} |                             %Userdata reference
-        #eref{} |                               %Environment reference
-        #funref{} |                             %Lua function reference
-        #erl_func{} |                           %Erlang function
-        #erl_mfa{}                              %Erlang Mod, Func, Arg.
-        .
-
 -define(LUERL_GLOBAL, '_G').
 -define(SANDBOXED_VALUE, sandboxed).
 -define(SANDBOXED_GLOBALS, [
@@ -76,6 +63,12 @@ are ignored.
         [?LUERL_GLOBAL, loadfile],
         [?LUERL_GLOBAL, loadstring]
     ]).
+
+%% The controlflags for controlling the execition.
+
+-type controlflags() :: #{atom() := term()} | [{atom(),term()}].
+
+-type sandboxtable() :: [[atom()]].
 
 -define(MAX_TIME, 100).
 
@@ -104,9 +97,9 @@ create a new Luerl state and run a sandboxing table on it.
 """).
 
 -spec init(LuaState) -> LuaState when LuaState :: luerlstate() ;
-          (TablePath) -> LuaState when
+          (TablePaths) -> LuaState when
       LuaState :: luerlstate(),
-      TablePath :: [[atom()]].
+      TablePaths :: sandboxtable().
 
 init(TablePaths) when is_list(TablePaths) ->
   init(luerl:init(), TablePaths);
@@ -139,7 +132,7 @@ default_flags() ->
 
 ?DOC( """
 Run the Lua expression controlled by the default `ControlFlags` in a
-new `LuaState` with the default sandboxing..
+new `LuaState` with the default sandboxing.
 """).
 
 -spec run(Expression) -> {Reply,LuaState} when
@@ -173,10 +166,10 @@ Run the Lua expression controlled by the `ControlFlags` in the `LuaState`.
 
 -spec run(Expression, ControlFlags, LuaState) -> {Reply,LuaState} when
       Expression :: string(),
-      ControlFlags :: map() | [{atom(),term()}],
+      ControlFlags :: controlflags(),
+      LuaState :: luerlstate(),
       Reply :: {ok,Result,LuaState} | Error,
       Result :: luerldata(),
-      LuaState :: luerlstate(),
       Error :: term().
 
 %% The new interface.
