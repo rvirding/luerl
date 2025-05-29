@@ -1,4 +1,4 @@
-%% Copyright (c) 2020 Robert Virding
+%% Copyright (c) 2020-2025 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -98,19 +98,20 @@ field_value(Fmt, F) -> {F,Fmt}.
 build({$q,_,_,_}, [A|As], St0) ->
     %% No trimming or adjusting of the $q string, we only get all of
     %% it. Use an RE to split string on quote needing characters.
-    {[S0],St1} = luerl_lib_basic:tostring([A], St0),
+    {S0,St1} = luerl_lib:tostring(A, St0),
     RE = "([\\0-\\39\\\n\\\"\\\\\\177-\\237])",	%You don't really want to know!
     Ss0 = re:split(S0, RE, [{return,binary},trim]),
     Ss1 = build_q(Ss0),
     {[$",Ss1,$"],As,St1};
 build({$s,Fl,F,P}, [A|As], St0) ->
-    {[S0],St1} = luerl_lib_basic:tostring([A], St0),
+    {S0,St1} = luerl_lib:tostring(A, St0),
     S1 = trim_bin(S0, P),
     {adjust_bin(S1, Fl, F),As,St1};
 %% Integer formats.
 build({$c,Fl,F,_}, [A|As], St) ->
     N = luerl_lib:arg_to_integer(A),
     C = N band 255,
+    io:format("c ~w ~w\n", [C,adjust_str([C], Fl, F)]),
     {adjust_str([C], Fl, F),As,St};
 build({$i,Fl,F,P}, [A|As], St) ->
     I = luerl_lib:arg_to_integer(A),
