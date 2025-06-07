@@ -30,6 +30,7 @@ Nonterminals
 chunk block stats stat semi retstat label_stat
 while_stat repeat_stat if_stat if_elseif if_else for_stat local_decl
 funcname dottedname varlist var namelist
+attrib attname attnamelist
 explist exp prefixexp args
 functioncall
 functiondef funcbody parlist
@@ -129,8 +130,8 @@ funcname -> dottedname : '$1' .
 
 local_decl -> function NAME funcbody :
 		  functiondef(line('$1'),'$2','$3') .
-local_decl -> namelist : {assign,line(hd('$1')),'$1',[]} .
-local_decl -> namelist '=' explist : {assign,line('$2'),'$1','$3'} .
+local_decl -> attnamelist : {assign,line(hd('$1')),'$1',[]} .
+local_decl -> attnamelist '=' explist : {assign,line('$2'),'$1','$3'} .
 
 dottedname -> NAME : '$1'.
 dottedname -> dottedname '.' NAME : dot_append(line('$2'), '$1', '$3') . 
@@ -145,6 +146,14 @@ var -> prefixexp '.' NAME : dot_append(line('$2'), '$1', '$3') .
 
 namelist -> NAME : ['$1'] .
 namelist -> namelist ',' NAME : '$1' ++ ['$3'] .
+
+attnamelist -> attname : ['$1'] .
+attnamelist -> attnamelist ',' attname : '$1' ++ ['$3'] .
+
+attname -> NAME : '$1'.
+attname -> NAME attrib : {'$1','$2'}.
+
+attrib -> '<' NAME '>' : {attrib,line('$2'),'$2'}.
 
 explist -> exp : ['$1'] .
 explist -> explist ',' exp : '$1' ++ ['$3'] .

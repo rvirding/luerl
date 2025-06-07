@@ -99,6 +99,9 @@ var({'.',L,Exp,Rest}, St0) ->
     {Ce,St1} = prefixexp_first(Exp, St0),
     {Cr,St2} = var_rest(Rest, St1),
     {dot(L, Ce, Cr),St2};
+var({{'NAME',L,N},_Attrib}, St) ->
+    %% Fro now we ignore attributes.
+    {var_name(L, N),St};
 var({'NAME',L,N}, St) -> {var_name(L, N),St}.
 
 var_rest({'.',L,Exp,Rest}, St0) ->
