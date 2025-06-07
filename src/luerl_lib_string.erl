@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2021 Robert Virding
+%% Copyright (c) 2013-2025 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -160,18 +160,21 @@ do_find(S, L, Pat0, I, false) ->		%Pattern search string
 	{error,E} -> throw({error,E})
     end.
 
-%% format(Format, ...) -> [String].
+%% format([Format|Args], State) -> {[String],State}.
 %%  Format a string. All errors are badarg errors.
 %%  Do all the work in luerl_string_format but generate errors here.
 
 format(_, [F|As], St0) ->
     try
+	%% io:format("format ~w\n", [element(1,luerl_lib_string_format:format(F, As, St0))]),
 	luerl_lib_string_format:format(F, As, St0)
     catch
-	%% If we have a specific error, default is badarg.
+	%% If we have no specific error, default is badarg.
 	throw:{error,E,St1} -> lua_error(E, St1);
 	throw:{error,E} -> lua_error(E, St0);
 	_:_ -> badarg_error(format, [F|As], St0)
+        %% ?CATCH(C, E, Stack)
+        %%     error({C,E,Stack})
     end;
 format(_, As, St) -> badarg_error(format, As, St).
 
