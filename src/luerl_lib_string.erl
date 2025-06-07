@@ -102,8 +102,14 @@ char(_, As, St) ->
     case luerl_lib:args_to_integers(As) of
 	error -> badarg_error(char, As, St);
 	Bs ->
-	    String = list_to_binary(Bs),
-	    {[String],St}
+            %% Errors here also become lua_error.
+            try
+                String = list_to_binary(Bs),
+                {[String],St}
+            catch
+                _:_ ->
+                    badarg_error(char, As, St)
+            end
     end.
 
 %% dump(Function) -> String.

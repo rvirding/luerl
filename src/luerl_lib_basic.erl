@@ -205,12 +205,25 @@ next_key(K, Dict, St) ->
 
 print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
-			      {Str,S1} = luerl_lib:tostring(A, S0),
-			      io:format("~ts ", [Str]),
-			      S1
-		      end, St0, Args),
+                              {Str,S1} = luerl_lib:tostring(A, S0),
+                              print_arg(Str),
+                              S1
+                      end, St0, Args),
     io:nl(),
     {[],St1}.
+
+print_arg(Str) ->
+    Fun = fun (C, Acc) when C >= 128 ->
+                  [$?|Acc];                     %Just mark with a ?
+              %% Some special case control characters.
+              (C, Acc) when
+                    C =:= $\t ; C =:= $\n ; C =:= $\v ; C =:= $\f ; C =:= $\r ->
+                  [C|Acc];
+              (C, Acc) when C =< 31 -> Acc;     %Skip other control characters
+              (C, Acc) -> [C|Acc]               %Output the rest
+          end,
+    Chars = lists:foldr(Fun, [], binary_to_list(Str)),
+    io:format("~s ", [Chars]).
 
 print(Args, St0) -> print(nil, Args, St0).
 

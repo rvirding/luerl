@@ -38,9 +38,7 @@
 
 format(F, As, St0) ->
     {Str,St1} = format_loop(luerl_lib:arg_to_list(F), As, St0),
-    %% io:format("f ~w\n", [iolist_to_binary(Str)]),
     {[iolist_to_binary(Str)],St1}.
-    %%{[unicode:characters_to_binary(Str)],St1}.
 
 format_loop(Fmt, As, St) -> format_loop(Fmt, As, St, []).
 
@@ -64,7 +62,7 @@ collect(Fmt0) ->
     {Fw,Fmt2} = field_width(Fmt1),              %The field width
     {P,Fmt3} = precision(Fmt2),                 %The precision
     {C,Fmt4} = collect_cc(Fmt3),                %The control character
-    %% io:format("col C=~w Fl=~.2b Fw=~w P=~w\n", [C,Fl,Fw,P]),
+    %% io:format("col C=~c Fl=~.2b Fw=~w P=~w\n", [C,Fl,Fw,P]),
     {{C,Fl,Fw,P},Fmt4}.
 
 %% Handling the flags of a format.
@@ -152,19 +150,13 @@ build({$G,Fl,Fw,P}, [A|As], St) ->
     N = luerl_lib:arg_to_float(A),
     {format_g_float(Fl, Fw, P, N),As,St};
 %% %p
-build({$q,Fl,Fw,P}, [A|As], St) ->
-    if Fl =/= 0, Fw =/= none, P =/= none ->
-            badarg_error(format, ['q',A], St);
-       true ->
-            S = build_q(A, St),
-            %% io:format("q ~w\n  ~w\n", [A, S]),
-            {S,As,St}
-    end;
+build({$q,Fl,Fw,P}, [A|As], St0) ->
+    {S,St1} = format_q(Fl, Fw, P, A, St0),
+    {S,As,St1};
 build({$s,Fl,Fw,P}, [A|As], St0) ->
-    {S0,St1} = luerl_lib:tostring(A, St0),
-    S1 = trim_bin(S0, P),
-    {adjust_bin(S1, Fl, Fw),As,St1};
-%% Literal % format.
+    {S,St1} = format_s(Fl, Fw, P, A, St0),
+    {S,As,St1};
+% Literal % format.
 build({$%,?FL_NONE,none,none}, As, St) ->       %No flags, field or precision!
     {"%",As,St}.
 
@@ -263,6 +255,21 @@ sign(Fl, _) ->
        true -> ""
     end.
 
+%% format_s(Fl, Fw, P, Arg, State) -> {String,State}.
+
+format_s(Fl, Fw, P, A, St0) ->
+    {S0,St1} = luerl_lib:tostring(A, St0),
+    %% If any field and there is a 0 in the string then we have an error.
+    %% Lua wants this.
+    Fargs = (Fl =/= ?FL_NONE) orelse (Fw =/= none) orelse (P =/= none),
+    case Fargs andalso binary:match(S0, <<0>>) =/= nomatch of
+        true -> badarg_error(format, ['s',A], St1);
+        false -> false
+    end,
+    S1 = trim_bin(S0, P),
+    S2 = adjust_bin(S1, Fl, Fw),
+    {S2,St1}.
+
 trim_bin(Bin, Prec) when is_integer(Prec), byte_size(Bin) > Prec ->
     binary:part(Bin, 0, Prec);
 trim_bin(Bin, _) -> Bin.
@@ -296,44 +303,51 @@ pad_char(Fl, F) ->
        true -> $\s
     end.
 
-%% build_q(Arg, State) -> String.
-%%  Build the quote for the right argument types.
+%% format_q(Fl, Fw, P, Arg, State) -> {Striing,State}.
 
-build_q(S0, _St) when is_binary(S0) ->
-    S1 = build_q_string(S0),
-    %% io:format("bq ~w\n   ~w\n", [S0,S1]),
-    [$",S1,$"];
-build_q(I, _St) when is_integer(I) ->
-    integer_to_binary(I);
-build_q(I, _St) when is_float(I) ->
-    float_to_binary(I);
-build_q(nil, _St) -> <<"nil">>;
-build_q(true, _St) -> <<"true">>;
-build_q(false, _St) -> <<"false">>;
-build_q(Arg, St) ->
+format_q(?FL_NONE, none, none, Arg, St) ->
+    S = format_q(Arg, St),
+    {S,St};
+format_q(_Fl, _Fw, _P, Arg, St) ->
     badarg_error(format, ['q',Arg], St).
 
-%% build_q_string(String) -> String.
+%% format_q(Arg, State) -> String.
+%%  Build the quote for the right argument types.
+
+format_q(S0, _St) when is_binary(S0) ->
+    S1 = format_q_string(S0),
+    [$",S1,$"];
+format_q(I, _St) when is_integer(I) ->
+    integer_to_binary(I);
+format_q(I, _St) when is_float(I) ->
+    float_to_binary(I);
+format_q(nil, _St) -> <<"nil">>;
+format_q(true, _St) -> <<"true">>;
+format_q(false, _St) -> <<"false">>;
+format_q(Arg, St) ->
+    badarg_error(format, ['q',Arg], St).
+
+%% format_q_string(String) -> String.
 %%  Build the quoted string.
 
-build_q_string(<<$\\,Q/binary>>) -> [$\\,$\\|build_q_string(Q)];
-build_q_string(<<$\",Q/binary>>) -> [$\\,$\"|build_q_string(Q)];
-build_q_string(<<$\n,Q/binary>>) -> [$\\,$\n|build_q_string(Q)];
+format_q_string(<<$\\,Q/binary>>) -> [$\\,$\\|format_q_string(Q)];
+format_q_string(<<$\",Q/binary>>) -> [$\\,$\"|format_q_string(Q)];
+format_q_string(<<$\n,Q/binary>>) -> [$\\,$\n|format_q_string(Q)];
 %% Control characters.
-build_q_string(<<C1,Q/binary>>) when C1 >= 0, C1 =< 31 ->
-    build_q_dec(C1, Q);
-build_q_string(<<C1,Q/binary>>) when C1 >= 127, C1 =< 159 ->
-    build_q_dec(C1, Q);
-build_q_string(<<173,Q/binary>>) ->
+format_q_string(<<C1,Q/binary>>) when C1 >= 0, C1 =< 31 ->
+    format_q_dec(C1, Q);
+format_q_string(<<C1,Q/binary>>) when C1 >= 127, C1 =< 159 ->
+    format_q_dec(C1, Q);
+format_q_string(<<173,Q/binary>>) ->
     %% Don't ask me why we do this for 173.
-    [io_lib:format("\\173",[])|build_q_string(Q)];
+    [io_lib:format("\\173",[])|format_q_string(Q)];
 %% And the rest.
-build_q_string(<<C,Q/binary>>) -> [C|build_q_string(Q)];
-build_q_string(<<>>) -> [].
+format_q_string(<<C,Q/binary>>) -> [C|format_q_string(Q)];
+format_q_string(<<>>) -> [].
 
-build_q_dec(C1, <<>> = Q) ->
-    [io_lib:format("\\~w", [C1])|build_q_string(Q)];
-build_q_dec(C1, <<C2,_/binary>> = Q) when not ?DIGIT(C2) ->
-    [io_lib:format("\\~w", [C1])|build_q_string(Q)];
-build_q_dec(C1, Q) ->
-    [io_lib:format("\\~.3.0w",[C1])|build_q_string(Q)].
+format_q_dec(C1, <<>> = Q) ->
+    [io_lib:format("\\~w", [C1])|format_q_string(Q)];
+format_q_dec(C1, <<C2,_/binary>> = Q) when not ?DIGIT(C2) ->
+    [io_lib:format("\\~w", [C1])|format_q_string(Q)];
+format_q_dec(C1, Q) ->
+    [io_lib:format("\\~.3.0w",[C1])|format_q_string(Q)].
