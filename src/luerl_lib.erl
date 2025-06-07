@@ -425,8 +425,8 @@ tostring_tag(#erl_mfa{m=M,f=F}, Name) ->      %Erlang MFA triplets
     iolist_to_binary([Tag,io_lib:write_atom(M),<<":">>,io_lib:write_atom(F)]);
 tostring_tag(#thread{}, Name) ->
     get_tag(Name, <<"thread">>);
-tostring_tag(_, Name) ->
-    get_tag(Name, <<"unknown">>).
+tostring_tag(_, _Name) ->
+    <<"unknown">>.
 
 get_tag(Name, Type) ->
     if is_binary(Name) -> <<Name/binary,": ">>;
