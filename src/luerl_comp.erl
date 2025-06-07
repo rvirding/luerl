@@ -165,7 +165,7 @@ file_passes() ->				%Reading from file
 list_passes() ->				%Scanning string
     [{do,fun do_scan_string/1},
      {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_parse/1}|
+     {do,fun do_parse/1} |
      chunk_passes()].
 
 chunk_passes() ->				%Doing the chunk
@@ -225,7 +225,7 @@ do_passes([], St) -> {ok,St}.
 
 do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
     %% Read the bytes in a file skipping an initial # line or Windows BOM.
-    case file:open(Name, [read,{encoding,unicode}]) of
+    case file:open(Name, [read,{encoding,latin1}]) of
 	{ok,F} ->
 	    %% Check if first line a script or Windows BOM, if so skip it.
 	    case io:get_line(F, '') of
@@ -236,7 +236,7 @@ do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
 	    end,
 	    %% Now read the file.
 	    Ret =
-          case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
+          case io:request(F, {get_until,latin1,'',luerl_scan,tokens,[1]}) of
               {ok,Ts,_} ->
                   debug_print(Opts, "scan: ~p\n", [Ts]),
                   {ok,St#luacomp{code=Ts}};
