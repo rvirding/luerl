@@ -58,6 +58,7 @@ format_loop([], _, St, Acc) ->                 %Ignore extra arguments
 %%  %[flags][width][.precision][conversion]
 
 collect(Fmt0) ->
+    %% io:format("~w\n", [Fmt0]),
     {Fl,Fmt1} = flags(Fmt0),                    %The flags characters
     {Fw,Fmt2} = field_width(Fmt1),              %The field width
     {P,Fmt3} = precision(Fmt2),                 %The precision
@@ -115,40 +116,34 @@ build({$c,Fl,Fw,_P}, [A|As], St) ->
     N = luerl_lib:arg_to_integer(A),
     C = N band 255,
     {adjust_str([C], Fl, Fw),As,St};
-build({Conv,Fl,Fw,P}, [A|As], St) when Conv =:= $d ; Conv =:= $i ->
-    I = luerl_lib:arg_to_integer(A),
-    {format_decimal(Fl, Fw, P, I),As,St};
-build({$u,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_integer(A),
-    {format_unsigned(Fl, Fw, P, N),As,St};
-build({$o,Fl,Fw,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
-    {format_octal(Fl, Fw, P, I),As,St};
-build({$x,Fl,Fw,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
-    {format_hex(Fl, Fw, P, I),As,St};
-build({$X,Fl,Fw,P}, [A|As], St) ->
-    I = luerl_lib:arg_to_integer(A),
-    {format_HEX(Fl, Fw, P, I),As,St};
+build({Conv,Fl,Fw,P}, [A|As], St0) when Conv =:= $d ; Conv =:= $i ->
+    {S,St1} = format_decimal(Fl, Fw, P, A, St0),
+    {S,As,St1};
+build({$u,Fl,Fw,P}, [A|As], St0) ->
+    {S,St1} = format_unsigned(Fl, Fw, P, A, St0),
+    {S,As,St1};
+build({$o,Fl,Fw,P}, [A|As], St0) ->
+    {S,St1} = format_octal(Fl, Fw, P, A, St0),
+    {S,As,St1};
+build({$x,Fl,Fw,P}, [A|As], St0) ->
+    {S,St1} = format_hex(Fl, Fw, P, A, St0),
+    {S,As,St1};
+build({$X,Fl,Fw,P}, [A|As], St0) ->
+    {S,St1} = format_HEX(Fl, Fw, P, A, St0),
+    {S,As,St1};
 %% Float formats.
 build({$e,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_e_float(Fl, Fw, P, N),As,St};
+    {format_e_float(Fl, Fw, P, A),As,St};
 build({$E,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_e_float(Fl, Fw, P, N),As,St};
+    {format_e_float(Fl, Fw, P, A),As,St};
 build({$f,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_f_float(Fl, Fw, P, N),As,St};
+    {format_f_float(Fl, Fw, P, A),As,St};
 build({$F,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_f_float(Fl, Fw, P, N),As,St};
+    {format_f_float(Fl, Fw, P, A),As,St};
 build({$g,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_g_float(Fl, Fw, P, N),As,St};
+    {format_g_float(Fl, Fw, P, A),As,St};
 build({$G,Fl,Fw,P}, [A|As], St) ->
-    N = luerl_lib:arg_to_float(A),
-    {format_g_float(Fl, Fw, P, N),As,St};
+    {format_g_float(Fl, Fw, P, A),As,St};
 %% %p
 build({$q,Fl,Fw,P}, [A|As], St0) ->
     {S,St1} = format_q(Fl, Fw, P, A, St0),
@@ -160,70 +155,98 @@ build({$s,Fl,Fw,P}, [A|As], St0) ->
 build({$%,?FL_NONE,none,none}, As, St) ->       %No flags, field or precision!
     {"%",As,St}.
 
-%% format_decimal(Flags, Field, Precision, Number) -> String.
-%% format_octal(Flags, Field, Precision, Number) -> String.
-%% format_hex(Flags, Field, Precision, Number) -> String.
-%% format_HEX(Flags, Field, Precision, Number) -> String.
-%% format_integer(Flags, Field, Precision, Number, String) -> String.
+%% format_decimal(Flags, Field, Precision, Argument, State) -> {String,State}.
+%% format_octal(Flags, Field, Precision, Argument, State) -> {String,State}.
+%% format_hex(Flags, Field, Precision, Argument, State) -> {String,State}.
+%% format_HEX(Flags, Field, Precision, Argument, State) -> {String,State}.
+%% format_unsigned(Flags, Field, Precision, Argument, State) -> {String,State}.
 %%  Print integer Number with base Base. This is a bit messy as we are
-%%  following string.format handling.
+%%  following string.format handling. Could actually generate any
+%%  error here as the error will be caught in the string.format
+%%  call. But to be safe.
 
-format_unsigned(Fl, F, P, N) ->
+format_decimal(Fl, _F, _P, A, St) when ?FLAG_SET(Fl, ?FL_H) ->
+    badarg_error(format, ['d',A], St);          %Could just generate any error
+format_decimal(Fl, F, P, A, St) ->
+    I = luerl_lib:arg_to_integer(A),
+    Str = integer_to_list(abs(I), 10),
+    {format_integer(Fl, F, P, I, "", Str),St}.
+
+format_octal(Fl, _F, _P, A, St) when ?FLAG_SET(Fl, ?FL_S) ->
+    badarg_error(format, ['o',A], St);          %Could just generate any error
+format_octal(Fl, F, P, A, St) ->
+    I = luerl_lib:arg_to_integer(A),
+    Str = integer_to_list(abs(I), 8),
+    {format_integer(Fl, F, P, I, "0", Str),St}.
+
+format_hex(Fl, F, P, A, St) ->
+    I = luerl_lib:arg_to_integer(A),
+    Str = lists:flatten(io_lib:fwrite("~.16b", [abs(I)])),
+    {format_integer(Fl, F, P, I, "0x", Str),St}.
+
+format_HEX(Fl, F, P, A, St) ->
+    I = luerl_lib:arg_to_integer(A),
+    Str = lists:flatten(io_lib:fwrite("~.16B", [abs(I)])),
+    {format_integer(Fl, F, P, I, "0X", Str),St}.
+
+format_unsigned(Fl, _F, _P, A, St) when
+      ?FLAG_SET(Fl, ?FL_H bor ?FL_S bor ?FL_P) ->
+    badarg_error(format, ['u',A], St);
+format_unsigned(Fl, F, P, A, St) ->
     %% We have to make the number always positive so we are assuming
     %% 124 bit integers which matches Lua 5.3.
+    N = luerl_lib:arg_to_integer(A),
     I = if N >= 0 -> N;
            true -> N band 16#FFFFFFFFFFFFFFFF
         end,
     Str = integer_to_list(I),
-    format_integer(Fl, F, P, I, Str).
+    {format_integer(Fl, F, P, I, Str),St}.
 
-format_decimal(Fl, F, P, N) ->
-    Str = integer_to_list(abs(N), 10),
-    format_integer(Fl, F, P, N, Str).
+%% format_integer(Flag, Field, Precision, Number, String) -> String.
+%% format_integer(Flag, Field, Precision, Number, Prefix, String) -> String.
+%%  Do the actual formatting of integers after the checking.
 
-format_octal(Fl, F, P, N) ->
-    Str = integer_to_list(abs(N), 8),
-    format_integer(Fl, F, P, N, Str).
+format_integer(Fl, F, P, N, Str) ->
+    format_integer(Fl, F, P, N, "", Str).
 
-format_hex(Fl, F, P, N) ->
-    Str = lists:flatten(io_lib:fwrite("~.16b", [abs(N)])),
-    format_integer(Fl, F, P, N, Str).
-
-format_HEX(Fl, F, P, N) ->
-    Str = lists:flatten(io_lib:fwrite("~.16B", [abs(N)])),
-    format_integer(Fl, F, P, N, Str).
-
-format_integer(Fl, F, P, N, Str0) ->
+format_integer(Fl, F, P, N, Prefix, Str0) ->
+    %% The # says add the prefix.
+    Str1 = if ?FLAG_SET(Fl, ?FL_H) -> Prefix ++ Str0;
+              true -> Str0
+           end,
     Sign = sign(Fl, N),
     if P =/= none ->
-            Str1 = Sign ++ lists:flatten(adjust_str(Str0, ?FL_Z, P)),
-            adjust_str(Str1, (Fl band ?FL_M), F);
+            Str2 = Sign ++ lists:flatten(adjust_str(Str1, ?FL_Z, P)),
+            adjust_str(Str2, (Fl band ?FL_M), F);
        ?FLAG_SET(Fl, ?FL_M) ->
-            Str1 = Sign ++ Str0,
-            adjust_str(Str1, Fl, F);
+            Str2 = Sign ++ Str1,
+            adjust_str(Str2, Fl, F);
        ?FLAG_SET(Fl, ?FL_Z) andalso F =/= none ->
-            Str1 = adjust_str(Str0, ?FL_Z, F-length(Sign)),
-            Sign ++ Str1;
+            Str2 = adjust_str(Str1, ?FL_Z, F-length(Sign)),
+            Sign ++ Str2;
        true ->
-            Str1 = Sign ++ Str0,
-            adjust_str(Str1, Fl, F)
+            Str2 = Sign ++ Str1,
+            adjust_str(Str2, Fl, F)
     end.
 
-%% format_e_float(Flags, Field, Precision, Number) -> String.
-%% format_f_float(Flags, Field, Precision, Number) -> String.
-%% format_g_float(Flags, Field, Precision, Number) -> String.
-%%  Print float Number in e/f/g format.
+%% format_e_float(Flags, Field, Precision, Argument) -> String.
+%% format_f_float(Flags, Field, Precision, Argument) -> String.
+%% format_g_float(Flags, Field, Precision, Argument) -> String.
+%%  Print float Argument in e/f/g format.
 
-format_e_float(Fl, F, P, N) ->
-    format_float(Fl, F, e_float_precision(P), "~.*e", float(N)).
+format_e_float(Fl, F, P, A) ->
+    format_float(Fl, F, e_float_precision(P), "~.*e", A).
 
-format_f_float(Fl, F, P, N) ->
-    format_float(Fl, F, f_float_precision(P), "~.*f", float(N)).
+format_f_float(Fl, F, P, A) ->
+    format_float(Fl, F, f_float_precision(P), "~.*f", A).
 
-format_g_float(Fl, F, P, N) ->
-    format_float(Fl, F, g_float_precision(P), "~.*g", float(N)).
+format_g_float(Fl, F, P, A) ->
+    format_float(Fl, F, g_float_precision(P), "~.*g", A).
 
-format_float(Fl, F, P, Format, N) ->
+%% format_float(Flag, Field, Precision, Format, Argument) -> String
+
+format_float(Fl, F, P, Format, A) ->
+    N = luerl_lib:arg_to_float(A),
     Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
     Sign = sign(Fl, N),
     if ?FLAG_SET(Fl, ?FL_M) ->
@@ -255,7 +278,7 @@ sign(Fl, _) ->
        true -> ""
     end.
 
-%% format_s(Fl, Fw, P, Arg, State) -> {String,State}.
+%% format_s(Flags, Field, Precision, Argument, State) -> {String,State}.
 
 format_s(Fl, Fw, P, A, St0) ->
     {S0,St1} = luerl_lib:tostring(A, St0),
@@ -304,12 +327,14 @@ pad_char(Fl, F) ->
     end.
 
 %% format_q(Fl, Fw, P, Arg, State) -> {Striing,State}.
+%%  Could actually generate any error here as the error will be caught
+%%  in the string.format call. But to be safe.
 
 format_q(?FL_NONE, none, none, Arg, St) ->
     S = format_q(Arg, St),
     {S,St};
 format_q(_Fl, _Fw, _P, Arg, St) ->
-    badarg_error(format, ['q',Arg], St).
+    badarg_error(format, ['q',Arg], St).        %Could just generate any error
 
 %% format_q(Arg, State) -> String.
 %%  Build the quote for the right argument types.
