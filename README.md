@@ -27,7 +27,7 @@ Luerl is implemented as a library, written in clean Erlang/OTP. For more informa
 
 ## Join the Community
 
-[Luerl on Discord](https://discord.gg/uxNjyysc)
+[Luerl on Discord](https://discord.gg/Y9Ww5wBhZh)
 
 [Luerl Forum - Erlang Forums](https://erlangforums.com/luerl)
 
