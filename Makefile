@@ -39,7 +39,7 @@ XSRCS  := $(notdir $(wildcard $(SRCDIR)/*.xrl))
 YSRCS  := $(notdir $(wildcard $(SRCDIR)/*.yrl))
 EBINS = $(ESRCS:.erl=.beam) $(XSRCS:.xrl=.beam) $(YSRCS:.yrl=.beam)
 
-ERLCFLAGS = -W1
+ERLCFLAGS = -W1 +debug_info
 ERLC ?= erlc
 
 all: compile

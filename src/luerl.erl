@@ -153,8 +153,8 @@ Parse Lua chunk code as string or binary, and return a compiled chunk function.
 -spec load(LuaCode, CompileOptions, LuaState) -> {ok,Function,LuaState} | CompileError when
       LuaCode :: binary() | string(),
       CompileOptions :: [term()],
-      Function :: #funref{},
       LuaState :: luerlstate(),
+      Function :: #funref{},
       CompileError :: {error,[term()],[term()]}.
 
 load(Bin, Opts, St) when is_binary(Bin) ->
@@ -176,8 +176,8 @@ load(Str, Opts, St0) ->
 
 -spec loadfile(FileName, LuaState) -> {ok,Function,LuaState} | CompileError when
       FileName :: string(),
-      Function :: #funref{},
       LuaState :: luerlstate(),
+      Function :: #funref{},
       CompileError :: {error,[term()],[term()]}.
 
 loadfile(Name, St) -> loadfile(Name, [return], St).
@@ -190,8 +190,8 @@ Parse a Lua file, and return a compiled chunk function.
 -spec loadfile(FileName, CompileOptions, LuaState) -> {ok,Function,LuaState} | CompileError when
       FileName :: string(),
       CompileOptions :: [term()],
-      Function :: #funref{},
       LuaState :: luerlstate(),
+      Function :: #funref{},
       CompileError :: {error,[term()],[term()]}.
 
 loadfile(Name, Opts, St0) ->
@@ -213,10 +213,13 @@ Calls `path_loadfile/4` with Path set the value of `LUA_LOAD_PATH` and
 """).
 ?DOC( #{group => <<"Load Code functions">>} ).
 
--spec path_loadfile(FileName, LuaState) -> {ok,Function,LuaState} when
+-spec path_loadfile(FileName, LuaState) ->
+          {ok,Function,FullName,LuaState} | CompileError when
       FileName :: string(),
+      LuaState :: luerlstate(),
       Function :: #funref{},
-      LuaState :: luerlstate().
+      FullName :: string(),
+      CompileError :: {error,[term()],term()}.
 
 path_loadfile(Name, St) ->
     Path = case os:getenv("LUA_LOAD_PATH") of
@@ -234,11 +237,13 @@ path_loadfile(Name, St) ->
 ?DOC( #{equiv => path_loadfile(Path, FileName, [return], LuaState)}).
 ?DOC( #{group => <<"Load Code functions">>} ).
 
--spec path_loadfile(Path, FileName, LuaState) -> {ok,Function,LuaState} when
+-spec path_loadfile(Path, FileName, LuaState) -> {ok,Function,FullName,LuaState} | CompileError when
       Path :: [string()],
       FileName :: string(),
+      LuaState :: luerlstate(),
       Function :: #funref{},
-      LuaState :: luerlstate().
+      FullName :: string(),
+      CompileError :: {error,[term()],[term()]}.
 
 path_loadfile(Dirs, Name, St) ->
     path_loadfile(Dirs, Name, [return], St).
@@ -248,12 +253,14 @@ Search down a `Path` to find the Lua file and return a compiled ('form').
 """).
 ?DOC( #{group => <<"Load Code functions">>} ).
 
--spec path_loadfile(Path, FileName, CompileOptions, LuaState) -> {ok,Function,LuaState} when
+-spec path_loadfile(Path, FileName, CompileOptions, LuaState) -> {ok,Function,FullName,LuaState} | CompileError when
       Path :: list(string()),
       FileName :: string(),
-      Function :: #funref{},
+      FullName :: string(),
+      CompileOptions :: [term()],
       LuaState :: luerlstate(),
-      CompileOptions :: [term()].
+      Function :: #funref{},
+      CompileError :: {error,[term()],[term()]}.
 
 path_loadfile([Dir|Dirs], Name, Opts, St0) ->
     Full = filename:join(Dir, Name),
@@ -311,11 +318,12 @@ load_module_dec(_, _, _) ->
 ?DOC( #{equiv => do(Expression, [return], LuaState)} ).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec do(Expression, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec do(Expression, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       Expression :: string(),
-      Result :: [luerldata()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [luerldata()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 do(S, St) -> do(S, [return], St).
 
@@ -325,28 +333,30 @@ Compile a Lua expression string, evaluate it and return its result, which is
 """).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec do(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec do(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       Expression :: string(),
       CompileOptions :: [term()],
-      Result :: [luerldata()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [luerldata()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 do(S, Opts, St0) ->
     case load(S, Opts, St0) of
-        {ok,Func,St1} ->
-            call_function(Func, [], St1);
+        {ok,FuncRef,St1} ->
+            call_function(FuncRef, [], St1);
         Error -> Error
     end.
 
 ?DOC( #{equiv => do_dec(Expression, [return], LuaState)} ).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec do_dec(Expression, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec do_dec(Expression, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       Expression :: string(),
       Result :: [term()],
       LuaState :: luerlstate(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 do_dec(S, St) ->
     do_dec(S, [return], St).
@@ -357,12 +367,13 @@ is decoded, and the new Lua State.
 """).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec do_dec(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec do_dec(Expression, CompileOptions, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       Expression :: string(),
       CompileOptions :: [term()],
-      Result :: [term()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [term()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 do_dec(S, Opts, St0) ->
     case do(S, Opts, St0) of
@@ -378,11 +389,12 @@ do_dec(S, Opts, St0) ->
 ?DOC( #{equiv => dofile(FileName, [return], LuaState)} ).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec dofile(FileName, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec dofile(FileName, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       FileName :: string(),
-      Result :: [luerldata()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [luerldata()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 dofile(File, St) -> dofile(File, [], St).
 
@@ -393,12 +405,13 @@ luerl:do("return dofile('FileName')").
 """).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec dofile(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec dofile(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       FileName :: string(),
       CompileOptions :: [term()],
-      Result :: [luerldata()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [luerldata()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 dofile(File, Opts, St0) ->
     case loadfile(File, Opts, St0) of
@@ -410,11 +423,12 @@ dofile(File, Opts, St0) ->
 ?DOC( #{equiv => dofile_dec(FileName, [return], LuaState)} ).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec dofile_dec(FileName, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec dofile_dec(FileName, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       FileName :: string(),
       Result :: [term()],
       LuaState :: luerlstate(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 dofile_dec(File, St) ->
     dofile_dec(File, [], St).
@@ -426,12 +440,13 @@ luerl:do_dec("return dofile('FileName')").
 """).
 ?DOC( #{group => <<"Evaluate Code functions">>} ).
 
--spec dofile_dec(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec dofile_dec(FileName, CompileOptions, LuaState) -> {ok,Result,LuaState} | LuaError | CompileError when
       FileName :: string(),
       CompileOptions :: [term()],
-      Result :: [term()],
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: [luerldata()],
+      LuaError :: {lua_error,term(),LuaState},
+      CompileError :: {error,[term()],[term()]}.
 
 dofile_dec(File, Opts, St0) ->
     case dofile(File, Opts, St0) of
@@ -473,12 +488,12 @@ automatically decoded.
 """).
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
--spec call_function(LuaFuncRef, Args, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
-      LuaFuncRef :: [luerldata()],
+-spec call_function(LuaFuncRef, Args, LuaState) -> {ok,Result,LuaState} | LuaError when
+      LuaFuncRef :: [luerldata()] | luerldata(),
       Args :: [luerldata()],
       LuaState :: luerlstate(),
       Result :: [luerldata()],
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 call_function(Epath, Args, St0) when is_list(Epath) ->
     {ok,Efunc,St1} = get_table_keys(Epath, St0),
@@ -502,12 +517,12 @@ while `Result` is **NOT** automatically decoded.
 """).
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
--spec call_function_enc(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec call_function_enc(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | LuaError when
       KeyPath :: [term()],
       Args :: [term()],
       LuaState :: luerlstate(),
       Result :: [luerldata()],
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 call_function_enc(Dtpath, Dargs, St0) ->
     {Epath,St1} = encode_list(Dtpath, St0),
@@ -522,12 +537,12 @@ Call a function already defined in the state. `KeyPath` is a list of keys to the
 """).
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
--spec call_function_dec(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec call_function_dec(KeyPath, Args, LuaState) -> {ok,Result,LuaState} | LuaError when
       KeyPath :: [term()],
       Args :: [term()],
       LuaState :: luerlstate(),
       Result :: [term()],
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 call_function_dec(Dtpath, Dargs, St0) ->
     case call_function_enc(Dtpath, Dargs, St0) of
@@ -548,13 +563,13 @@ is **NOT** automatically decoded
 """).
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
--spec call_method(LuaTable, Method, Args, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec call_method(LuaTable, Method, Args, LuaState) -> {ok,Result,LuaState} | LuaError when
       LuaTable :: #tref{},
       Method :: luerldata(),
       Args :: [luerldata()],
       LuaState :: luerlstate(),
       Result :: [luerldata()],
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 call_method(Obj, Meth, Args, St0) ->
     try
@@ -572,13 +587,13 @@ is  automatically decoded.
 """).
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
--spec call_method_dec(KeyPath, Method, Args, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec call_method_dec(KeyPath, Method, Args, LuaState) -> {ok,Result,LuaState} | LuaError when
       KeyPath :: [term()],
       Method :: term(),
       Args :: [term()],
       LuaState :: luerlstate(),
       Result :: [term()],
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 ?DOC( #{group => <<"Function/Method Call functions">>} ).
 
@@ -605,11 +620,11 @@ Gets a value inside the Lua state. `KeyPath` is **NOT** encoded and
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec get_table_keys(KeyPath, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec get_table_keys(KeyPath, LuaState) -> {ok,Result,LuaState} | LuaError when
       KeyPath :: [luerldata()],
       LuaState :: luerlstate(),
       Result :: luerldata(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 get_table_keys(Keys, St0) ->
     try
@@ -626,11 +641,11 @@ and `Result` is automatically decoded.
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec get_table_keys_dec(KeyPath, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec get_table_keys_dec(KeyPath, LuaState) -> {ok,Result,LuaState} | LuaError when
       KeyPath :: [term()],
       LuaState :: luerlstate(),
       Result :: term(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 get_table_keys_dec(Dkeys, St0) ->
     {Ekeys,St1} = encode_list(Dkeys, St0),
@@ -645,11 +660,11 @@ Sets a value inside the Lua state. `KeyPath` and `Value` are **NOT** encoded.
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec set_table_keys(KeyPath, Value, LuaState) -> {ok,LuaState} | {lua_error,Error,LuaState} when
+-spec set_table_keys(KeyPath, Value, LuaState) -> {ok,LuaState} | LuaError when
       KeyPath :: [luerldata()],
       Value :: luerldata(),
       LuaState :: luerlstate(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 set_table_keys(Keys, Val, St0) ->
     try
@@ -666,11 +681,11 @@ automatically encoded.
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec set_table_keys_dec(KeyPath, Value, LuaState) -> {ok,LuaState} | {lua_error,Error,LuaState} when
+-spec set_table_keys_dec(KeyPath, Value, LuaState) -> {ok,LuaState} | LuaError when
       KeyPath :: [term()],
       Value :: term(),
       LuaState :: luerlstate(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 set_table_keys_dec(Dkeys, Dval, St0) ->
     {Ekeys,St1} = encode_list(Dkeys, St0),
@@ -688,12 +703,12 @@ Get the value of a key in a table. `Table`, `Key` are
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec get_table_key(Table, Key, LuaState) -> {ok,Result,LuaState} | {lua_error,Error,LuaState} when
+-spec get_table_key(Table, Key, LuaState) -> {ok,Result,LuaState} | LuaError when
       Table :: luerldata(),
       Key :: luerldata(),
-      Result :: luerldata(),
       LuaState :: luerlstate(),
-      Error :: term().
+      Result :: luerldata(),
+      LuaError :: {lua_error,term(),LuaState}.
 
 get_table_key(Tab, Key, St0) ->
     try
@@ -710,12 +725,12 @@ Set the value of a key in a table. `Table`, `Key` and `Value` are
 """).
 ?DOC( #{group => <<"Lua Table Access functions">>} ).
 
--spec set_table_key(Table, Key, Value, LuaState) -> {ok,LuaState} | {lua_error,Error,LuaState} when
+-spec set_table_key(Table, Key, Value, LuaState) -> {ok,LuaState} | LuaError when
       Table :: luerldata(),
       Key :: luerldata(),
       Value :: luerldata(),
       LuaState :: luerlstate(),
-      Error :: term().
+      LuaError :: {lua_error,term(),LuaState}.
 
 set_table_key(Tab, Key, Val, St0) ->
     try
