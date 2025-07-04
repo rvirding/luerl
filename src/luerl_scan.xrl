@@ -44,7 +44,7 @@ Rules.
 %% 0[xX]{H}*\.{H}*([pP][-+]?{D}+)?{NAME}* :
 
 0[xX]{H}*\.?{H}*([pP][-+]?{D}*)?{NAME}* :
-	io:format("h2 ~p\n", [TokenChars]),
+	%% io:format("h2 ~p\n", [TokenChars]),
 	hex_number_token(TokenChars, TokenLine).
 
 %% Decimal numbers, we separate rules to ensure we don't have just a '.'.
@@ -181,7 +181,7 @@ name_string(Name) ->
 %%  {D}+\.?{D}*([eE][-+]?{D}+)?{NAME}* :
 
 decimal_number_token(TokenChars, TokenLine) ->
-    io:format("dnt ~p\n", [dec_number_split(TokenChars)]),
+    %% io:format("dnt ~p\n", [dec_number_split(TokenChars)]),
     Result = case dec_number_split(TokenChars) of
                  %% If there is anything after the number sections then
                  %% it is an error!
@@ -192,11 +192,8 @@ decimal_number_token(TokenChars, TokenLine) ->
                  {_,_,[_E],_Rest} -> error;     %Only "empty" exponent
                  {Hcs,Fcs,Ecs,_Rest} ->
                      DW = list_to_integer("0" ++ Hcs),
-                     io:format("dw ~p\n", [DW]),
                      DF = dec_number_fraction(Fcs, DW),
-                     io:format("ff ~p\n", [DF]),
                      Dnum = dec_number_exponent(Ecs, DF),
-                     io:format("dn ~p\n", [Dnum]),
                      {ok,Dnum}
              end,
     case Result of
@@ -259,7 +256,7 @@ dec_number_exponent([], DF) -> DF.
 %%  0[xX]{H}+\.?{H}*([pP][-+]?{D}+)?{NAME}*
 
 hex_number_token([$0,X|TokenChars], TokenLine) ->
-    io:format("hnt ~p\n", [hex_number_split(TokenChars)]),
+    %% io:format("hnt ~p\n", [hex_number_split(TokenChars)]),
     Result = case hex_number_split(TokenChars) of
                  %% If there is anything after the number sections then
                  %% it is an error!
@@ -270,11 +267,8 @@ hex_number_token([$0,X|TokenChars], TokenLine) ->
                  {_,_,[_P],_Rest} -> error;     %Only "empty" exponent
                  {Hcs,Fcs,Ecs,_Rest} ->
                      HW = list_to_integer("0" ++ Hcs, 16),
-                     io:format("hw ~p\n", [HW]),
                      HF = hex_number_fraction(Fcs, HW),
-                     io:format("hf ~p\n", [HF]),
                      Hnum = hex_number_exponent(Ecs, HF),
-                     io:format("hn ~p\n", [Hnum]),
                      {ok,Hnum}
              end,
     case Result of
@@ -293,7 +287,6 @@ hex_number_split(Tcs0) ->
     {Fcs,Tcs2} = hex_number_split_fraction(Tcs1),
     %% The exponent characters.
     {Ecs,Rest} = hex_number_split_exponent(Tcs2),
-    io:format("hnse ~p ~p\n", [Tcs2,Ecs]),
     {Hcs,Fcs,Ecs,Rest}.
 
 hex_number_split_fraction([$. | Fcs0]) ->
@@ -369,23 +362,22 @@ string_chars([$\\ | Cs], Acc) ->
     string_bq_chars(Cs, Acc);
 string_chars([$\n | _], _Acc) ->
     throw(string_error);
-string_chars([C0 | Cs], Acc) ->
-    C1 = string_unicode_char(C0),
-    string_chars(Cs, [C1|Acc]);
+string_chars([C | Cs], Acc) ->
+    string_chars(Cs, [C | Acc]);
 string_chars([], Acc) ->
     lists:reverse(Acc).
 
 %% string_unicode_char(Char) -> UnicodeChars.
 %%  If Char is not an ascii then handle it as unicode.
 
-string_unicode_char(C) when ?ASCII(C) -> C;
-string_unicode_char(C0) ->
-    case unicode:characters_to_binary([C0]) of
-        Bin when is_binary(Bin) ->
-            Bin;
-        _Error ->
-            throw(string_error)
-    end.
+%% string_unicode_char(C) when ?ASCII(C) -> C;
+%% string_unicode_char(C0) ->
+%%     case unicode:characters_to_binary([C0]) of
+%%         Bin when is_binary(Bin) ->
+%%             Bin;
+%%         _Error ->
+%%             throw(string_error)
+%%     end.
 
 %% string_bq_chars(Chars, Accumulator)
 %%  Handle the backquotes characters.
@@ -404,7 +396,7 @@ string_bq_chars([C1|Cs0], Acc) when ?DIGIT(C1) -> %1-3 decimal digits
     end,
     string_chars(Cs1, [Byte | Acc]);
 string_bq_chars([$x,C1,C2|Cs], Acc) ->          %2 hex digits
-    case ?HEX(C1) and ?HEX(C2) of
+    case ?HEX(C1) andalso ?HEX(C2) of
         true ->
             Byte = hex_val(C1)*16 + hex_val(C2),
             string_chars(Cs, [Byte|Acc]);
@@ -456,17 +448,17 @@ long_string_token(Cs0, Len, BrLen, Line) ->
             {error,"illegal long string"}
     end.
 
-long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
-    long_string_chars(Cs, [C|Acc]);
-long_string_chars([C | Cs], Acc) ->             %This could be unicode
-    case unicode:characters_to_binary([C]) of
-        Bin when is_binary(Bin) ->
-            long_string_chars(Cs, [Bin|Acc]);
-        _Error ->
-            throw(long_string_error)
-    end;
-long_string_chars([], Acc) ->
-    lists:reverse(Acc).
+%% long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
+%%     long_string_chars(Cs, [C|Acc]);
+%% long_string_chars([C | Cs], Acc) ->             %This could be unicode
+%%     case unicode:characters_to_binary([C]) of
+%%         Bin when is_binary(Bin) ->
+%%             long_string_chars(Cs, [Bin|Acc]);
+%%         _Error ->
+%%             throw(long_string_error)
+%%     end;
+%% long_string_chars([], Acc) ->
+%%     lists:reverse(Acc).
 
 hex_val(C) when C >= $0, C =< $9 -> C - $0;
 hex_val(C) when C >= $a, C =< $f -> C - $a + 10;

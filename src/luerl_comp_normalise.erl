@@ -35,9 +35,13 @@ chunk(Code0, #cinfo{opts=Opts}=Ci0) ->
     luerl_comp:debug_print(Opts, "cn: ~p\n", [Code1]),
     {ok,Code1}.
 
-%% stmts([{local,L,{functiondef,_,Name,_,_}=F}|Ss], St) ->
-%%     %% Need to split this to handle recursive definitions.
-%%     stmts([{local,L,{assign,L,[Name],[{nil,L}]}},F|Ss], St);
+stmts([{local,L,{functiondef,Lf,Name,Pars,Block}}|Ss], St) ->
+    %% Need to split this up to handle references to Name in the function.
+    Fdef = {functiondef,Lf,Pars,Block},
+    stmts([{local, L, {assign, L, [Name], [{nil,L}]}},
+           {';',L},
+           {local, Lf, {assign, Lf, [Name], [Fdef]}} | Ss],
+          St);
 stmts([{';',_}|Ss], St) -> stmts(Ss, St);	%No-op so we drop it
 stmts([S0|Ss0], St0) ->
     {S1,St1} = stmt(S0, St0),
@@ -93,14 +97,15 @@ assign_loop([], St) -> {[],St}.
 %% var(VarExp, State) -> {VarExp,State}.
 %%  Step down the prefixexp sequence evaluating as we go, stop at the
 %%  END and return a key and a table where to put data. This is a
-%%  prefixexp with different tail.
+%%  prefixexp with different tail. Attributes are only allowed in
+%%  local assigns and for now we just ignore them.
 
 var({'.',L,Exp,Rest}, St0) ->
     {Ce,St1} = prefixexp_first(Exp, St0),
     {Cr,St2} = var_rest(Rest, St1),
     {dot(L, Ce, Cr),St2};
-var({{'NAME',L,N},_Attrib}, St) ->
-    %% Fro now we ignore attributes.
+var({{'NAME',L,N},_Attribute}, St) ->
+    %% For now we ignore attributes.
     {var_name(L, N),St};
 var({'NAME',L,N}, St) -> {var_name(L, N),St}.
 
@@ -278,10 +283,10 @@ funcname_last({'NAME',L,N}, St) ->
 %% local_stmt(Line, Local, State) -> {Assign,State}.
 %%  Create and assign local variables.
 
-local_stmt(Line, {functiondef,Lf,Name,Ps,B}, St0) ->
-    {Var,F,St1} = functiondef(Lf, Name, Ps, B, St0),
-    Anno = line_file_anno(Line, St1),
-    {#local_fdef_stmt{l=Anno,var=Var,func=F},St1};
+%% local_stmt(Line, {functiondef,Lf,Name,Ps,B}, St0) ->
+%%     {Var,F,St1} = functiondef(Lf, Name, Ps, B, St0),
+%%     Anno = line_file_anno(Line, St1),
+%%     {#local_fdef_stmt{l=Anno,var=Var,func=F},St1};
 local_stmt(Line, {assign,_,Ns,Es}, St0) ->
     {Ces,St1} = explist(Es, St0),
     {Cns,St2} = lists:mapfoldl(fun (V, St) -> var(V, St) end, St1, Ns),
