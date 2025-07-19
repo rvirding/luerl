@@ -24,7 +24,16 @@
 Luerl is an implementation of Lua 5.3 written in Erlang.
 This is the main public API module for interfacing with Luerl.
 
-The `LuaState` parameter is the state of a Lua VM instance. It must be created with the `init/0` call and be carried from one call to the next.
+The `LuaState` parameter is the state of a Lua VM instance. It must be created with the `init/0` call and be threaded from one call to the next.
+
+Note that Luerl, following Lua, does do any implicit UTF-8 encoding of input strings. This means that all strings given as arguments to the calls or the strings to evaluate with `do/3` or `do_dec/3` need to have already been UTF-8 encoded. This can be quite easily do with the `~` or `~b` sigils. For example
+
+`luerl:do(~b\"return 'árvíztűrő tükörfúrógép'\", St0)`
+
+or
+
+`luerl:do(~\"return 'árvíztűrő tükörfúrógép'\", St0)`
+
 """).
 
 %% ?MODULEDOC( #{group => <<"Trace Control functions">>} ).

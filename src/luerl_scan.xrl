@@ -123,9 +123,14 @@ Rules.
 --\[\n :	skip_token.
 --\[[^[\n].* :	skip_token.
 
-%% comment --ab ... yz  --ab([^y]|y[^z])*yz
+%% Comment --ab ... yz  --ab([^y]|y[^z])*yz
 --\[\[([^]]|\][^]])*\]\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
+
+%% Catch other illegal tokens.
+
+. :
+	illegal_token(TokenChars, TokenLine).
 
 Erlang code.
 
@@ -151,6 +156,13 @@ Erlang code.
           C > 16#FFFF andalso C =< 16#10FFFF))).
 
 -define(UNI255(C), (is_integer(C) andalso 0 =< C andalso C =< 16#ff)).
+
+%% illegal_token(Chars, Line) -> {error,E}.
+%%  Generate a more Lua compatible error message.
+
+illegal_token(Chars, _Line) ->
+	C = hd(Chars),
+	{error,"syntax error near '<\\" ++ integer_to_list(C) ++ ">'"}.
 
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
@@ -333,9 +345,11 @@ hex_number_fraction(Cs, _Pow, SoFar) ->
 
 string_token([Qc|Cs0], _Len, L) ->
     Cs1 = lists:droplast(Cs0),                  %Strip trailing quote
+    %% io:format("st1 ~w ~w\n", [length(Cs1),Cs1]),
     try
-        Bytes = string_chars(Cs1),
+        Bytes = string_chars(Cs1),              %The bytes are encoded chars
         String = iolist_to_binary(Bytes),
+        %% io:format("st2 ~w ~w\n", [byte_size(String),String]),
         {token,{'LITERALSTRING',L,String}}
     catch
         throw:{string_error,What} ->            %Specific error message
@@ -363,21 +377,18 @@ string_chars([$\\ | Cs], Acc) ->
 string_chars([$\n | _], _Acc) ->
     throw(string_error);
 string_chars([C | Cs], Acc) ->
-    string_chars(Cs, [C | Acc]);
-string_chars([], Acc) ->
-    lists:reverse(Acc).
-
-%% string_unicode_char(Char) -> UnicodeChars.
-%%  If Char is not an ascii then handle it as unicode.
-
-%% string_unicode_char(C) when ?ASCII(C) -> C;
-%% string_unicode_char(C0) ->
-%%     case unicode:characters_to_binary([C0]) of
+     string_chars(Cs, [C | Acc]);
+%% string_chars([C | Cs], Acc) when ?ASCII(C) ->
+%%      string_chars(Cs, [C | Acc]);
+%% string_chars([C | Cs], Acc) ->
+%%     case unicode:characters_to_binary([C]) of
 %%         Bin when is_binary(Bin) ->
-%%             Bin;
+%%             string_chars(Cs, [Bin | Acc]);
 %%         _Error ->
 %%             throw(string_error)
-%%     end.
+%%     end;
+string_chars([], Acc) ->
+    lists:reverse(Acc).
 
 %% string_bq_chars(Chars, Accumulator)
 %%  Handle the backquotes characters.
@@ -434,20 +445,24 @@ skip_space(Cs) -> Cs.
 
 long_string_token(Cs0, Len, BrLen, Line) ->
     %% Strip the brackets and remove first char if a newline.
-    %% Note we export Cs1 here, :-)
+    %% Note we "export" Cs1 here, (this is Erlang).
     case string:substr(Cs0, BrLen+1, Len - 2*BrLen) of
         [$\n | Cs1] -> Cs1;
         Cs1 -> Cs1
     end,
+    %% io:format("lst1 ~w ~w\n", [length(Cs1),Cs1]),
     try
-        Bytes = Cs1,                            %The bytes are just the chars.
+        Bytes = long_string_chars(Cs1, []),     %The bytes are encoded chars
         String = iolist_to_binary(Bytes),
+        %% io:format("lst2 ~w ~w\n", [byte_size(String),String]),
         {token,{'LITERALSTRING',Line,String}}
     catch
         _:_ ->
             {error,"illegal long string"}
     end.
 
+long_string_chars([C | Cs], Acc) ->
+    long_string_chars(Cs, [C|Acc]);
 %% long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
 %%     long_string_chars(Cs, [C|Acc]);
 %% long_string_chars([C | Cs], Acc) ->             %This could be unicode
@@ -457,8 +472,8 @@ long_string_token(Cs0, Len, BrLen, Line) ->
 %%         _Error ->
 %%             throw(long_string_error)
 %%     end;
-%% long_string_chars([], Acc) ->
-%%     lists:reverse(Acc).
+long_string_chars([], Acc) ->
+    lists:reverse(Acc).
 
 hex_val(C) when C >= $0, C =< $9 -> C - $0;
 hex_val(C) when C >= $a, C =< $f -> C - $a + 10;
