@@ -12,31 +12,36 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 
-%% File    : luerl_new.erl
+%% File    : luerl.erl
 %% Authors : Robert Virding
-%% Purpose : The new basic LUA 5.3 interface.
+%% Purpose : The basic LUA 5.4 interface.
 
 -module(luerl).
 
 -include("luerl.hrl").
 
-?MODULEDOC( """
-Luerl is an implementation of Lua 5.3 written in Erlang.
+%% Use normal strings as it is easier to use " and make it readable
+%% with both old and new string parsing.
+
+?MODULEDOC(
+"Luerl is an implementation of Lua 5.3 written in Erlang.
 This is the main public API module for interfacing with Luerl.
 
-The `LuaState` parameter is the state of a Lua VM instance. It must be created with the `init/0` call and be threaded from one call to the next.
+The `LuaState` parameter is the state of a Lua VM instance. It must be
+created with the `init/0` call and be threaded from one call to the
+next.
 
-Note that Luerl, following Lua, does do any implicit UTF-8 encoding of input strings. This means that all strings given as arguments to the calls or the strings to evaluate with `do/3` or `do_dec/3` need to have already been UTF-8 encoded. This can be quite easily do with the `~` or `~b` sigils. For example
+Note that Luerl, following Lua, does do any implicit UTF-8 encoding of
+input strings. This means that all strings given as arguments to the
+calls or the strings to evaluate with `do/3` or `do_dec/3` need to
+have already been UTF-8 encoded. This can be quite easily do with the
+`~` or `~b` sigils. For example
 
 `luerl:do(~b\"return 'árvíztűrő tükörfúrógép'\", St0)`
 
 or
 
-`luerl:do(~\"return 'árvíztűrő tükörfúrógép'\", St0)`
-
-""").
-
-%% ?MODULEDOC( #{group => <<"Trace Control functions">>} ).
+`luerl:do(~\"return 'árvíztűrő tükörfúrógép'\", St0)`").
 
 %% Basic user API to luerl.
 -export([init/0,gc/1,
@@ -971,8 +976,14 @@ decode_erlmfa(#erl_mfa{m=Mod,f=Func,a=Arg}=_Mfa, _St, _In) ->
 %% can be stored externally or can be recreated from external storage.
 %% Currently very simple: only random state needs special treatment.
 
+-spec externalize(LuaState) -> LuaState when
+      LuaState :: luerlstate().
+
 externalize(S) ->
     luerl_lib_math:externalize(S).
+
+-spec internalize(LuaState) -> LuaState when
+      LuaState :: luerlstate().
 
 internalize(S) ->
     luerl_lib_math:internalize(S).
