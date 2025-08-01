@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## [1.5.0]
+
+### Changed
+
+- luerl_io with some basic io functions added
+- main Luerl discussions moved from slack to discord
+- tostring can now handle __tostring and __name metakeys
+- add ex_doc and move current docs to doc_legacy to avoid collisions
+
+### Fixed
+
+- luerl_scan is now Lua compliant and doesn't do utf-8 encoding
+- cleanup parser and fix handling of local functions
+- scanner now does Lua compliant numbers and strings
+- improve handling of string.format
+- add attributes for local variables
+- add typespecs to make dialyzer happy
+- improve documentation info in files
+- README now links to discord instead
+- fix pcall error messages
+
 ## [1.4.1]
 
 ### Fixed
