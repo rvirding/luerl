@@ -61,50 +61,84 @@ interpreter with state as the first argument for better pipe operator usage.
 %% Storing and retrieving private data
 -export([put_private/3,get_private/2,delete_private/2]).
 
+?DOC( #{equiv => luerl:init()} ).
+
 init() ->
     luerl:init().
 
-gc(St) ->
-    luerl:gc(St).
+?DOC( #{equiv => luerl:gc(LuaState)} ).
 
-set_trace_func(St, Func) ->
-    luerl:set_trace_func(Func, St).
+gc(LuaState) ->
+    luerl:gc(LuaState).
 
-clear_trace_func(St) ->
-    luerl:clear_trace_func(St).
+?DOC( #{equiv => luerl:set_trace_func(Function, LuaState),
+        group => <<"Trace Control functions">>} ).
 
-get_trace_data(St) ->
-    luerl:get_trace_data(St).
+set_trace_func(LuaState, Function) ->
+    luerl:set_trace_func(Function, LuaState).
 
-set_trace_data(St, Tdata) ->
-    luerl:set_trace_data(Tdata, St).
+?DOC( #{equiv => luerl:clear_trace_func(LuaState),
+        group => <<"Trace Control functions">>} ).
 
-load(St, Bin) ->
-    luerl:load(Bin, St).
+clear_trace_func(LuaState) ->
+    luerl:clear_trace_func(LuaState).
 
-load(St, Bin, Opts) ->
-    luerl:load(Bin, Opts, St).
+?DOC( #{equiv => luerl:get_trace_func(LuaState),
+        group => <<"Trace Control functions">>} ).
 
-loadfile(St, Name) ->
-    luerl:loadfile(Name, St).
+get_trace_data(LuaState) ->
+    luerl:get_trace_data(LuaState).
 
-loadfile(St, Name, Opts) ->
-    luerl:loadfile(Name, Opts, St).
+?DOC( #{equiv => luerl:set_trace_func(TraceData, LuaState),
+        group => <<"Trace Control functions">>} ).
 
-path_loadfile(St, Path, Name) ->
-    luerl:path_loadfile(Path, Name, St).
+set_trace_data(LuaState, TraceData) ->
+    luerl:set_trace_data(TraceData, LuaState).
 
-path_loadfile(St, Path, Name, Options) ->
-    luerl:path_loadfile(Path, Name, Options, St).
+?DOC( #{equiv => luerl:load(Chunk, LuaState)} ).
 
-path_loadfile(St, Name) ->
-    luerl:path_loadfile(Name, St).
+load(LuaState, Chunk) ->
+    luerl:load(LuaState, Chunk).
 
-load_module(St, Lfp, Mod) ->
-    luerl:load_module(Lfp, Mod, St).
+?DOC( #{equiv => luerl:load(Chunk, CompileOptions, LuaState)} ).
 
-load_module_dec(St, Dfp, Mod) ->
-    luerl:load_module_dec(Dfp, Mod, St).
+load(LuaState, Chunk, CompileOptions) ->
+    luerl:load(Chunk, CompileOptions, LuaState).
+
+?DOC( #{equiv => luerl:loadfile(FileName, LuaState)} ).
+
+loadfile(LuaState, FileName) ->
+    luerl:loadfile(FileName, LuaState).
+
+?DOC( #{equiv => luerl:loadfile(FileName, CompileOptions, LuaState)} ).
+
+loadfile(LuaState, FileName, CompileOptions) ->
+    luerl:loadfile(FileName, CompileOptions, LuaState).
+
+?DOC( #{equiv => luerl:path_loadfile(FileName, LuaState)} ).
+
+path_loadfile(LuaState, FileName) ->
+    luerl:path_loadfile(FileName, LuaState).
+
+?DOC( #{equiv => luerl:path_loadfile(Path, FileName, LuaState)} ).
+
+path_loadfile(LuaState, Path, FileName) ->
+    luerl:path_loadfile(Path, FileName, LuaState).
+
+?DOC( #{equiv => luerl:path_loadfile(Path, FileName, CompileOptions, LuaState)} ).
+
+path_loadfile(LuaState, Path, FileName, CompileOptions) ->
+    luerl:path_loadfile(Path, FileName, CompileOptions, LuaState).
+
+?DOC( #{equiv => luerl:load_module(KeyPath, ErlangModule, LuaState)} ).
+
+load_module(LuaState, KeyPath, ErlangModule) ->
+    luerl:load_module(KeyPath, ErlangModule, LuaState).
+
+?DOC( #{equiv => luerl:load_module_dec(KeyPath, ErlangModule, LuaState)} ).
+
+load_module_dec(LuaState, KeyPath, ErlangModule) ->
+    luerl:load_module_dec(KeyPath, ErlangModule, LuaState).
 
 do(St, S) ->
     luerl:do(S, St).
@@ -175,17 +209,32 @@ set_table_key(St, Tab, Key, Val) ->
 get_stacktrace(St) ->
     luerl:get_stacktrace(St).
 
-encode(St, V) ->
-    luerl:encode(V, St).
+?DOC( """
+encode(luastate, term)
+Equivalent to `:luerl.encode(term, luastate)`.
+""").
+?DOC( #{group => <<"Encode/Decode Date functions">>} ).
 
-encode_list(St, Ts) ->
-    luerl:encode_list(Ts, St).
+encode(LuaState, Term) ->
+    luerl:encode(Term, LuaState).
 
-decode(St, V) ->
-    luerl:decode(V, St).
+?DOC( #{equiv => luerl:encode_list(Terms, LuaState),
+        group => <<"Encode/Decode Date functions">>} ).
 
-decode_list(St, Lts) ->
-    luerl:decode_list(Lts, St).
+encode_list(LuaState, Terms) ->
+    luerl:encode_list(Terms, LuaState).
+
+?DOC( #{equiv => luerl:decode(LuerlTerm, LuaState),
+        group => <<"Encode/Decode Date functions">>} ).
+
+decode(LuaState, LuerlTerm) ->
+    luerl:decode(LuerlTerm, LuaState).
+
+?DOC( #{equiv => luerl:decode_list(LuerlTerms, LuaState),
+        group => <<"Encode/Decode Date functions">>} ).
+
+decode_list(LuaState, LuerlTerms) ->
+    luerl:decode_list(LuerlTerms, LuaState).
 
 externalize(St) ->
     luerl:externalize(St).
@@ -193,8 +242,28 @@ externalize(St) ->
 internalize(St) ->
     luerl:internalize(St).
 
+?DOC( """
+Puts a private `Value` under `Key` that is not exposed to the runtime.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
+
+-spec put_private(LuaState, Key, Value) -> LuaState when
+      Key :: term(),
+      Value :: term(),
+      LuaState :: luerlstate().
+
 put_private(St, K, V) ->
     luerl:put_private(K, V, St).
+
+?DOC( """
+Get the private value for `Key`.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
+
+-spec get_private(LuaState, Key) -> Value when
+      Key :: term(),
+      Value :: term(),
+      LuaState :: luerlstate().
 
 get_private(St, Key) ->
     try
@@ -204,6 +273,14 @@ get_private(St, Key) ->
             error
     end.
 
+?DOC( """
+Delete the private value for `Key`.
+""").
+?DOC( #{group => <<"Private Data functions">>} ).
+
+-spec delete_private(LuaState, Key) -> LuaState when
+      Key :: term(),
+      LuaState :: luerlstate().
 
 delete_private(St, K) ->
     try

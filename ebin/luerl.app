@@ -1,6 +1,6 @@
 {application,luerl,
              [{description,"Luerl - an implementation of Lua on Erlang"},
-              {vsn,"1.4.1"},
+              {vsn,"1.5.0"},
               {modules,['Elixir.Luerl.New','Elixir.Luerl',luerl,luerl_anno,
                         luerl_app,luerl_comp,luerl_comp_cg,luerl_comp_env,
                         luerl_comp_lint,luerl_comp_locf,luerl_comp_normalise,

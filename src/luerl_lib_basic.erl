@@ -31,7 +31,7 @@
          select/3,setmetatable/3,tonumber/3,tostring/3,type/3,unpack/3]).
 
 %% Export some functions which can be called from elsewhere.
--export([print/2,tostring/1,tostring/2,type/1]).
+-export([print/2,type/1]).
 
 -import(luerl_lib, [lua_error/2,badarg_error/3]). %Shorten these
 
@@ -205,12 +205,25 @@ next_key(K, Dict, St) ->
 
 print(_, Args, St0) ->
     St1 = lists:foldl(fun (A, S0) ->
-			      {[Str],S1} = tostring([A], S0),
-			      io:format("~ts ", [Str]),
-			      S1
-		      end, St0, Args),
+                              {Str,S1} = luerl_lib:tostring(A, S0),
+                              print_arg(Str),
+                              S1
+                      end, St0, Args),
     io:nl(),
     {[],St1}.
+
+print_arg(Str) ->
+    Fun = fun (C, Acc) when C >= 128 ->
+                  [$?|Acc];                     %Just mark with a ?
+              %% Some special case control characters.
+              (C, Acc) when
+                    C =:= $\t ; C =:= $\n ; C =:= $\v ; C =:= $\f ; C =:= $\r ->
+                  [C|Acc];
+              (C, Acc) when C =< 31 -> Acc;     %Skip other control characters
+              (C, Acc) -> [C|Acc]               %Output the rest
+          end,
+    Chars = lists:foldr(Fun, [], binary_to_list(Str)),
+    io:format("~s ", [Chars]).
 
 print(Args, St0) -> print(nil, Args, St0).
 
@@ -266,43 +279,13 @@ tonumber(_, As, St) -> badarg_error(tonumber, As, St).
 tonumber(Num) when is_number(Num) -> Num;
 tonumber(_) -> nil.
 
-tostring(_, [Arg|_], St) ->
-    case luerl_heap:get_metamethod(Arg, <<"__tostring">>, St) of
-        nil -> {[tostring(Arg)],St};
-        M when ?IS_FUNCTION(M) ->
-            luerl_emul:functioncall(M, [Arg], St)  %Return {R,St1}
-    end;
-tostring(_, As, St) -> badarg_error(tostring, As, St).
-
-tostring(As, St) -> tostring(nil, As, St).
-
 %% tostring([Arg|_], Stated) -> {String,State}.
 %%  Return the type as a string.
 
-tostring(nil) -> <<"nil">>;
-tostring(false) -> <<"false">>;
-tostring(true) -> <<"true">>;
-tostring(N) when is_number(N) ->
-    %% A = abs(N),
-    %% %% Print really big/small "integers" as floats as well.
-    %% S = if ?IS_FLOAT_INT(N), A < 1.0e14 ->
-    %%             integer_to_list(round(N));
-    %%        true -> io_lib:write(N)
-    %%     end,
-    iolist_to_binary(io_lib:write(N));
-tostring(S) when is_binary(S) -> S;
-tostring(#tref{i=I}) ->
-    iolist_to_binary([<<"table: ">>,integer_to_list(I)]);
-tostring(#usdref{i=I}) ->
-    iolist_to_binary([<<"userdata: ">>,integer_to_list(I)]);
-tostring(#funref{i=I}) ->                       %Functions defined in Lua
-    iolist_to_binary([<<"function: ">>,integer_to_list(I)]);
-tostring(#erl_func{code=C}) ->                  %Erlang functions
-    iolist_to_binary([<<"function: ">>,io_lib:write(C)]);
-tostring(#erl_mfa{m=M,f=F}) ->                  %Erlang MFA triplets
-    iolist_to_binary([<<"function: ">>,io_lib:write_atom(M),<<":">>,io_lib:write_atom(F)]);
-tostring(#thread{}) -> <<"thread">>;
-tostring(_) -> <<"unknown">>.
+tostring(_, [Arg|_], St0) ->
+    {Str,St1} = luerl_lib:tostring(Arg, St0),
+    {[Str],St1};
+tostring(_, As, St) -> badarg_error(tostring, As, St).
 
 %% type([Data|_], State) -> {Type,State}.
 %%  Return the type of the argument.
@@ -360,11 +343,11 @@ do_setmetatable(#tref{}=Tref, Meta, St0) ->
 
 dofile(_, As, St) ->
     case luerl_lib:conv_list(As, [erl_string]) of
-	[File] ->
-            %% Compile the file so it returns errors.
-	    Ret = luerl_comp:file(File, [verbose,return]),
-	    dofile_ret(Ret, As, St);
-	_ -> badarg_error(dofile, As, St)
+       [File] ->
+           %% Compile the file so it returns errors.
+           Ret = luerl_comp:file(File, [verbose,return]),
+           dofile_ret(Ret, As, St);
+       _ -> badarg_error(dofile, As, St)
     end.
 
 dofile_ret({ok,Chunk}, _, St0) ->
@@ -418,7 +401,9 @@ pcall(_, [F|As], St0) ->
         %% Only catch Lua errors here, signal system errors.
         error:{lua_error,{error_call, Eas},St2} ->
             Msg = case Eas of
-                      [E|_] -> tostring(E);
+                      [E|_] ->
+                          {Str,_} = luerl_lib:tostring(E, St2),
+                          Str;
                       [] -> <<"nil">>
                   end,
             {[false,Msg],St2};

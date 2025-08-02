@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2017 Robert Virding
+%% Copyright (c) 2013-2025 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -16,15 +16,29 @@
 %% Authors : Tyler Butchart
 %% Purpose : Reduction limiting luerl sandbox.
 
-
 -module(luerl_sandbox).
 
-%% @doc Sandboxed execution environment for Luerl with reduction counting.
-%% This module provides a way to run Lua code with controlled execution,
-%% limiting the number of reductions (computational steps) to prevent
-%% excessive resource consumption.
-
 -include("luerl.hrl").
+
+?MODULEDOC( """
+Sandboxed execution environment for Luerl with reduction counting.
+This module provides a way to run Lua code with controlled execution,
+limiting the number of reductions (computational steps) to prevent
+excessive resource consumption.
+
+The `ControlFlags` is a map or keyword list which can contain the
+following fields
+```
+    #{max_time => MaxTime,              % 100 msecs
+      max_reductions => MaxReds,        % none
+      spawn_opts => SpawnOpts}          % []
+```
+`MaxReds` limits the number of reductions (default no max) and
+`MaxTime` (default 100 msecs) limits the maximum time to run the
+string. `SpawnOpts` are spawn options to the process running the
+evaluation. The default values are shown as comments. Any other fields
+are ignored.
+""").
 
 -export([init/0,init/1,init/2,
          run/1,run/2,run/3,run/4,run/5]).
@@ -50,6 +64,12 @@
         [?LUERL_GLOBAL, loadstring]
     ]).
 
+%% The controlflags for controlling the execition.
+
+-type controlflags() :: #{atom() := term()} | [{atom(),term()}].
+
+-type sandboxtable() :: [[atom()]].
+
 -define(MAX_TIME, 100).
 
 %% Define IS_MAP/1 macro for is_map/1 bif.
@@ -59,16 +79,40 @@
 -define(IS_MAP(T), false).
 -endif.
 
+?DOC( """
+Create a new Luerl state with the standard sandboxing.
+""").
 
-%% init([, State|TablePaths[, TablePaths]]) -> State
+-spec init() -> LuaState when
+      LuaState :: luerlstate().
+
 init() ->
   init(luerl:init()).
+
+%% init([, State|TablePaths[, TablePaths]]) -> State
+
+?DOC( """
+Take an existing Luerl state and run the default sandboxing on it. Or
+create a new Luerl state and run a sandboxing table on it.
+""").
+
+-spec init(LuaState) -> LuaState when LuaState :: luerlstate() ;
+          (TablePaths) -> LuaState when
+      LuaState :: luerlstate(),
+      TablePaths :: sandboxtable().
 
 init(TablePaths) when is_list(TablePaths) ->
   init(luerl:init(), TablePaths);
 init(St) ->
   init(St, ?SANDBOXED_GLOBALS).
 
+?DOC( """
+Take an existing Luerl state and run the `TablePaths` on it to control the sandboxing.
+""").
+
+-spec init(LuaState, TablePaths) -> LuaState when
+      LuaState :: luerlstate(),
+      TablePaths :: [[atom()]].
 
 init(St, []) -> luerl:gc(St);
 init(St0, [Path|Tail]) ->
@@ -84,23 +128,49 @@ default_flags() ->
 %% run(String|Binary) -> {Term,State} | {error,Term}.
 %% run(String|Binary, State) -> {Term,State} | {error,Term}.
 %% run(String|Binary, Flags, State) -> {Term,State} | {error,Term}.
-%%  The new interface where Flags is a map which can contain:
-%%
-%%  #{max_time => Time,                 (100 msec)
-%%    max_reductions => Reductions,     (none)
-%%    spawn_opts => Spawn_Options}      ([])
-%%
-%%  Any other fields are ignored. The default values are shown above.
-%%  This can also be given as a keyword list.
+%%  The new interface.
 
-%% run(String|Binary|Form[, State[, MaxReductions|Flags[, Flags[, Timeout]]]]) -> {Term,State}|{error,Term}
-%%  This is the old interface which still works.
+?DOC( """
+Run the Lua expression controlled by the default `ControlFlags` in a
+new `LuaState` with the default sandboxing.
+""").
+
+-spec run(Expression) -> {Reply,LuaState} when
+      Expression :: string(),
+      LuaState :: luerlstate(),
+      Reply :: {ok,Result,LuaState} | Error,
+      Result :: luerldata(),
+      Error :: term().
 
 run(S) ->
   run(S, init()).
 
+?DOC( """
+Run the Lua expression controlled by the default `ControlFlags` in the
+`LuaState`.
+""").
+
+-spec run(Expression, LuaState) -> {Reply,LuaState} when
+      Expression :: string(),
+      LuaState :: luerlstate(),
+      Reply :: {ok,Result,LuaState} | Error,
+      Result :: luerldata(),
+      Error :: term().
+
 run(S, St) ->
    do_run(S, default_flags(), St).
+
+?DOC( """
+Run the Lua expression controlled by the `ControlFlags` in the `LuaState`.
+""").
+
+-spec run(Expression, ControlFlags, LuaState) -> {Reply,LuaState} when
+      Expression :: string(),
+      ControlFlags :: controlflags(),
+      LuaState :: luerlstate(),
+      Reply :: {ok,Result,LuaState} | Error,
+      Result :: luerldata(),
+      Error :: term().
 
 %% The new interface.
 run(S, Flags, St) when ?IS_MAP(Flags) ->
@@ -114,8 +184,21 @@ run(S, St, MaxR) when is_integer(MaxR) ->
 run(S, St, Flags) when is_list(Flags) ->
     run(S, St, 0, Flags).
 
+%% run(String|Binary|Form[, State[, MaxReductions|Flags[, Flags[, Timeout]]]]) -> {Term,State}|{error,Term}
+%%  This is the old interface which still works.
+
+?DOC( """
+run(String, LuaState, MaxReds, SpawnOpts)
+""").
+?DOC( #{deprecated => "Use `run/3`" } ).
+
 run(S, St, MaxR, Flags) ->
     run(S, St, MaxR, Flags, ?MAX_TIME).
+
+?DOC( """
+run(String, LuaState, MaxReds, SpawnOpts, Timeout)
+""").
+?DOC( #{deprecated => "Use `run/3`" } ).
 
 run(S, St, 0, Opts, MaxT) ->
     %% Need to get the old no reductions to the new no reductions.

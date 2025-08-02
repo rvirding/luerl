@@ -1,4 +1,4 @@
-%% Copyright (c) 2013-2024 Robert Virding
+%% Copyright (c) 2013-2025 Robert Virding
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -26,8 +26,8 @@
 
 ?MODULEDOC(false).
 
--export([lua_error/2,badarg_error/3,badarith_error/3,format_error/1,
-         format_value/1]).
+-export([lua_error/2,badarg_error/3,badarith_error/3,
+         format_error/1,format_value/1]).
 
 -export([boolean_value/1,first_value/1]).
 
@@ -45,8 +45,16 @@
 
 -export([conv_list/2,conv_list/3]).
 
+-export([tostring/2]).
+
+-dialyzer({[no_return], [lua_error/2, badarg_error/3, badarith_error/3]}).
+
 -spec lua_error(_,_) -> no_return().
 -spec badarg_error(_,_,_) -> no_return().
+
+%% lua_error(Error, State) -> no_return().
+%% badarg_error(What, Args, State) -> no_return().
+%% badarith_error(What, Args, State) -> no_return().
 
 lua_error(E, St) -> error({lua_error,E,St}).
 
@@ -72,16 +80,17 @@ format_error({illegal_value,Where,Val}) ->
 format_error({illegal_value,Val}) ->
     format_error("invalid value: ~ts", [Val]);
 format_error({illegal_comp,Where}) ->
-    Msg = io_lib:format("illegal comparison in ~ts", [Where]),
-    unicode:characters_to_binary(Msg);
+    format_error(<<"illegal comparison in ~ts">>, [Where]);
 %% format_error({invalid_order,Where}) ->          %Keep text!
-%%     io_lib:format("invalid order function in ~w", [Where]);
+%%     format_error(<<"invalid order function in ~w">>, [Where]);
 format_error({undefined_function,Name}) ->
-    format_error("undefined function ~ts", [Name]);
+    format_error(<<"undefined function ~ts">>, [Name]);
 format_error({undefined_method,Object,Name}) ->
-    format_error("undefined method ~ts in ~ts", [Name,Object]);
+    format_error(<<"undefined method ~ts in ~ts">>, [Name,Object]);
 format_error(illegal_return_value) ->
     <<"illegal format of return value">>;
+format_error({illegal_return_value,Func}) ->
+    format_error(<<"illegal format of return value to ~ts">>, [Func]);
 %% Pattern errors.
 format_error(invalid_pattern) ->                %Keep text!
     <<"malformed pattern">>;
@@ -187,15 +196,15 @@ bin_to_number(B) -> str_to_number(binary_to_list(B)).
 
 str_to_number(S) ->
     case luerl_scan:string(S) of
-	{ok,[{'NUMERAL',_,N}],_} -> {ok,N};
-	{ok,[{'+',_},{'NUMERAL',_,N}],_} -> {ok,N};
-	{ok,[{'-',_},{'NUMERAL',_,N}],_} -> {ok,-N};
-	_ -> error
+        {ok,[{'NUMERAL',_,N}],_} -> {ok,N};
+        {ok,[{'+',_},{'NUMERAL',_,N}],_} -> {ok,N};
+        {ok,[{'-',_},{'NUMERAL',_,N}],_} -> {ok,-N};
+        _ -> error
     end.
 
 number_to_list(N) ->
     io_lib:write(N).
-    %% case ?IS_FLOAT_INT(N, I) of			%Is it an "integer"?
+    %% case ?IS_FLOAT_INT(N, I) of                 %Is it an "integer"?
     %%     true -> integer_to_list(I);
     %%     false -> io_lib:write(N)
     %% end.
@@ -359,3 +368,67 @@ conv_list([A|As], [To|Tos], Rs) ->
     end;
 conv_list([], _, Rs) -> lists:reverse(Rs);	%No more arguments, done
 conv_list(_, [], Rs) -> lists:reverse(Rs).	%No more conversions, done
+
+%% tostring(Data, State) -> {Ret,State} | LuaError
+%%  Convert Data to a string representation using the standard method
+%%  taking into account both the datatype and __tostring and __name
+%%  metakeys.
+
+tostring(Data, St) ->
+    case luerl_heap:get_metamethod(Data, <<"__tostring">>, St) of
+        Meta when Meta =/= nil ->
+            tostring_meta(Data, Meta, St);
+        nil ->
+            case luerl_heap:get_metamethod(Data, <<"__name">>, St) of
+                Tag when is_binary(Tag) ->
+                    {tostring_tag(Data, Tag),St};
+                _Other ->                       %Even nil here
+                    {tostring_tag(Data, false),St}
+            end
+    end.
+
+%% tostring_meta(Arg, Meta, St0) when ?IS_FUNCTION(Meta) ->
+tostring_meta(Arg, Meta, St0) ->
+    %% We will be nice here!
+    {[Ret|_],St1} = luerl_emul:functioncall(Meta, [Arg], St0),
+    if is_binary(Ret) -> {Ret,St1};
+       is_number(Ret) -> {iolist_to_binary(io_lib:write(Ret)),St1};
+       true ->
+            lua_error({illegal_return_value,tostring}, St1)
+    end.
+
+%% tostring_tag(Data, NameTag) -> Binary.
+%%  We ignore the NameTag for the types with untagged values.
+
+tostring_tag(nil, _Name) -> <<"nil">>;
+tostring_tag(false, _Name) -> <<"false">>;
+tostring_tag(true, _Name) -> <<"true">>;
+tostring_tag(N, _Name) when is_number(N) ->
+    %% A = abs(N),
+    %% %% Print really big/small "integers" as floats as well.
+    %% S = if ?IS_FLOAT_INT(N), A < 1.0e14 ->
+    %%             integer_to_list(round(N));
+    %%        true -> io_lib:write(N)
+    %%     end,
+    iolist_to_binary(io_lib:write(N));
+tostring_tag(S, _Name) when is_binary(S) -> S;
+tostring_tag(#tref{i=I}, Name) ->
+    iolist_to_binary([get_tag(Name, <<"table">>),integer_to_list(I)]);
+tostring_tag(#usdref{i=I}, Name) ->
+    iolist_to_binary([get_tag(Name, <<"userdata">>),integer_to_list(I)]);
+tostring_tag(#funref{i=I}, Name) ->           %Functions defined in Lua
+    iolist_to_binary([get_tag(Name, <<"function">>),integer_to_list(I)]);
+tostring_tag(#erl_func{code=C}, Name) ->      %Erlang functions
+    iolist_to_binary([get_tag(Name, <<"function">>),io_lib:write(C)]);
+tostring_tag(#erl_mfa{m=M,f=F}, Name) ->      %Erlang MFA triplets
+    Tag = get_tag(Name, <<"function">>),
+    iolist_to_binary([Tag,io_lib:write_atom(M),<<":">>,io_lib:write_atom(F)]);
+tostring_tag(#thread{}, Name) ->
+    get_tag(Name, <<"thread">>);
+tostring_tag(_, _Name) ->
+    <<"unknown">>.
+
+get_tag(Name, Type) ->
+    if is_binary(Name) -> <<Name/binary,": ">>;
+       true -> <<Type/binary,": ">>
+    end.

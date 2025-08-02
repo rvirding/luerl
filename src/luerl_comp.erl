@@ -165,7 +165,7 @@ file_passes() ->				%Reading from file
 list_passes() ->				%Scanning string
     [{do,fun do_scan_string/1},
      {when_flag,to_scan,{done,fun(St) -> {ok,St} end}},
-     {do,fun do_parse/1}|
+     {do,fun do_parse/1} |
      chunk_passes()].
 
 chunk_passes() ->				%Doing the chunk
@@ -224,30 +224,14 @@ do_passes([], St) -> {ok,St}.
 %%  The actual compiler passes.
 
 do_scan_file(#luacomp{lfile=Name,opts=Opts}=St) ->
-    %% Read the bytes in a file skipping an initial # line or Windows BOM.
-    case file:open(Name, [read,{encoding,unicode}]) of
-	{ok,F} ->
-	    %% Check if first line a script or Windows BOM, if so skip it.
-	    case io:get_line(F, '') of
-		"#" ++ _ -> ok;			%Skip line
-		[239,187,191|_] ->
-		    file:position(F, 3);	%Skip BOM
-		_ -> file:position(F, bof)	%Get it all
-	    end,
-	    %% Now read the file.
-	    Ret =
-          case io:request(F, {get_until,unicode,'',luerl_scan,tokens,[1]}) of
-              {ok,Ts,_} ->
-                  debug_print(Opts, "scan: ~p\n", [Ts]),
-                  {ok,St#luacomp{code=Ts}};
-              {eof,_} ->
-                  {ok,St#luacomp{code=[]}};
-              {error,E,_} ->
-                  {error,St#luacomp{errors=[E]}}
-          end,
-        file:close(F),
-	    Ret;
-	{error,E} -> {error,St#luacomp{errors=[{none,file,E}]}}
+    case luerl_io:scan_file(Name, 1) of
+        {ok,Ts} ->
+            debug_print(Opts, "scan: ~p\n", [Ts]),
+            {ok,St#luacomp{code=Ts}};
+        {eof,_} ->
+            {ok,St#luacomp{code=[]}};
+        {error,E} ->
+            {error,St#luacomp{errors=[E]}}
     end.
 
 do_scan_string(#luacomp{code=Str,opts=Opts}=St) ->

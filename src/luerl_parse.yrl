@@ -28,8 +28,10 @@ Expect 2.					%Suppress shift/reduce warning
 
 Nonterminals
 chunk block stats stat semi retstat label_stat
-while_stat repeat_stat if_stat if_elseif if_else for_stat local_decl
+while_stat repeat_stat if_stat if_elseif if_else for_stat func_stat
+local_stat local_decl
 funcname dottedname varlist var namelist
+attrib attname attnamelist
 explist exp prefixexp args
 functioncall
 functiondef funcbody parlist
@@ -39,8 +41,8 @@ binop unop uminus.
 Terminals
 NAME NUMERAL LITERALSTRING
 
-'and' 'break' 'do' 'else' 'elseif' 'end' 'false' 'for' 'function' 'goto' 'if' 
-'in' 'local' 'nil' 'not' 'or' 'repeat' 'return' 'then' 'true' 'until' 'while' 
+'and' 'break' 'do' 'else' 'elseif' 'end' 'false' 'for' 'function' 'goto' 'if'
+'in' 'local' 'nil' 'not' 'or' 'repeat' 'return' 'then' 'true' 'until' 'while'
 
 '+' '-' '*' '/' '//' '%' '^' '&' '|' '~' '>>' '<<' '#'
 '==' '~=' '<=' '>=' '<' '>' '='
@@ -71,12 +73,6 @@ chunk -> block : '$1'  .
 block -> stats : '$1' .
 block -> stats retstat : '$1' ++ ['$2'] .
 
-retstat -> return semi : {return,line('$1'),[]} .
-retstat -> return explist semi : {return,line('$1'),'$2'} .
-
-semi -> ';' .					%semi is never returned
-semi -> '$empty' .
-
 stats -> '$empty' : [] .
 stats -> stats stat : '$1' ++ ['$2'] .
 
@@ -94,8 +90,31 @@ stat -> while_stat : '$1' .
 stat -> repeat_stat : '$1' .
 stat -> if_stat : '$1' .
 stat -> for_stat : '$1' .
-stat -> function funcname funcbody : functiondef(line('$1'),'$2','$3') .
-stat -> local local_decl : {local,line('$1'),'$2'} .
+stat -> func_stat : '$1' .
+stat -> local_stat : '$1' .
+%% stat -> local local_decl : {local,line('$1'),'$2'} .
+
+%% retstat ::= return [explist] [‘;’]
+
+retstat -> return semi : {return,line('$1'),[]} .
+retstat -> return explist semi : {return,line('$1'),'$2'} .
+
+semi -> ';' .					%semi is never returned
+semi -> '$empty' .
+
+%% attnamelist ::= Name attrib {‘,’ Name attrib}
+
+attnamelist -> attname : ['$1'] .
+attnamelist -> attnamelist ',' attname : '$1' ++ ['$3'] .
+
+attname -> NAME : '$1'.
+attname -> NAME attrib : {'$1','$2'}.
+
+%% attrib ::= [‘<’ Name ‘>’]
+
+attrib -> '<' NAME '>' : {attribute,line('$2'),'$2'}.
+
+%% label ::= ‘::’ Name ‘::’
 
 label_stat -> '::' NAME '::' : {label,line('$1'),'$2'} .
 
@@ -116,10 +135,15 @@ if_else -> '$empty' : [] .			%An empty block
 %% stat ::= for Name '=' exp ',' exp [',' exp] do block end
 %% stat ::= for namelist in explist do block end
 
-for_stat -> 'for' NAME '=' explist do block end : 
+for_stat -> 'for' NAME '=' explist do block end :
 	    numeric_for(line('$1'), '$2', '$4', '$6') .
 for_stat -> 'for' namelist 'in' explist 'do' block 'end' :
 	    generic_for(line('$1'), '$2', '$4', '$6') .
+
+%% stat ::= function funcname funcbody
+
+func_stat -> function funcname funcbody :
+                 functiondef(line('$1'),'$2','$3') .
 
 %% funcname ::= Name {'.' Name} [':' Name]
 
@@ -127,24 +151,37 @@ funcname -> dottedname ':' NAME :
 		dot_append(line('$2'), '$1', {method,line('$2'),'$3'}) .
 funcname -> dottedname : '$1' .
 
+%% stat ::= local function Name funcbody
+%% stat ::= local attnamelist [‘=’ explist]
+
+local_stat -> 'local' local_decl : {local,line('$1'),'$2'} .
+
 local_decl -> function NAME funcbody :
-		  functiondef(line('$1'),'$2','$3') .
-local_decl -> namelist : {assign,line(hd('$1')),'$1',[]} .
-local_decl -> namelist '=' explist : {assign,line('$2'),'$1','$3'} .
+                  functiondef(line('$1'),'$2','$3') .
+local_decl -> attnamelist : {assign,line(hd('$1')),'$1',[]} .
+local_decl -> attnamelist '=' explist : {assign,line('$2'),'$1','$3'} .
 
 dottedname -> NAME : '$1'.
-dottedname -> dottedname '.' NAME : dot_append(line('$2'), '$1', '$3') . 
+dottedname -> dottedname '.' NAME : dot_append(line('$2'), '$1', '$3') .
+
+%% varlist ::= var {‘,’ var}
 
 varlist -> var : ['$1'] .
 varlist -> varlist ',' var : '$1' ++ ['$3'] .
 
+%% var ::= Name | prefixexp ‘[’ exp ‘]’ | prefixexp ‘.’ Name
+
 var -> NAME : '$1' .
 var -> prefixexp '[' exp ']' :
 	   dot_append(line('$2'), '$1', {key_field,line('$2'),'$3'}) .
-var -> prefixexp '.' NAME : dot_append(line('$2'), '$1', '$3') . 
+var -> prefixexp '.' NAME : dot_append(line('$2'), '$1', '$3') .
+
+%% namelist ::= Name {‘,’ Name}
 
 namelist -> NAME : ['$1'] .
 namelist -> namelist ',' NAME : '$1' ++ ['$3'] .
+
+%% explist ::= exp {‘,’ exp}
 
 explist -> exp : ['$1'] .
 explist -> explist ',' exp : '$1' ++ ['$3'] .
@@ -158,34 +195,50 @@ exp -> '...' : '$1' .
 exp -> functiondef : '$1' .
 exp -> prefixexp : '$1' .
 exp -> tableconstructor : '$1' .
-exp -> binop : '$1' . 
+exp -> binop : '$1' .
 exp -> unop : '$1' .
+
+%% prefixexp ::= var | functioncall | ‘(’ exp ‘)’
 
 prefixexp -> var : '$1' .
 prefixexp -> functioncall : '$1' .
 prefixexp -> '(' exp ')' : {single,line('$1'),'$2'} .
+
+%% functioncall ::= prefixexp args | prefixexp ‘:’ Name args
 
 functioncall -> prefixexp args :
 		    dot_append(line('$1'), '$1', {functioncall,line('$1'), '$2'}) .
 functioncall -> prefixexp ':' NAME args :
 		    dot_append(line('$2'), '$1', {methodcall,line('$2'),'$3','$4'}) .
 
+%% args ::= ‘(’ [explist] ‘)’ | tableconstructor | LiteralString
+
 args -> '(' ')' : [] .
 args -> '(' explist ')' : '$2' .
 args -> tableconstructor : ['$1'] .		%Syntactic sugar
 args -> LITERALSTRING : ['$1'] .		%Syntactic sugar
 
+%% functiondef ::= function funcbody
+
 functiondef -> 'function' funcbody : functiondef(line('$1'), '$2').
+
+%% funcbody ::= ‘(’ [parlist] ‘)’ block end
 
 funcbody -> '(' ')' block 'end' : {[],'$3'} .
 funcbody -> '(' parlist ')' block 'end' : {'$2','$4'} .
+
+%% parlist ::= namelist [‘,’ ‘...’] | ‘...
 
 parlist -> namelist : '$1' .
 parlist -> namelist ',' '...' : '$1' ++ ['$3'] .
 parlist -> '...' : ['$1'] .
 
+%% tableconstructor ::= ‘{’ [fieldlist] ‘}’
+
 tableconstructor -> '{' '}' : {table,line('$1'),[]} .
 tableconstructor -> '{' fieldlist '}' : {table,line('$1'),'$2'} .
+
+%% fieldlist ::= field {fieldsep field} [fieldsep]
 
 fieldlist -> fields : '$1' .
 fieldlist -> fields fieldsep : '$1' .
@@ -193,12 +246,16 @@ fieldlist -> fields fieldsep : '$1' .
 fields ->  field : ['$1'] .
 fields ->  fields fieldsep field : '$1' ++ ['$3'] .
 
+%% field ::= ‘[’ exp ‘]’ ‘=’ exp | Name ‘=’ exp | exp
+
 field -> '[' exp ']' '=' exp : {key_field,line('$1'),'$2','$5'} .
 field -> NAME '=' exp : {name_field,line('$1'),'$1','$3'} .
 field -> exp : {exp_field,line('$1'),'$1'} .
 
 fieldsep -> ',' .
 fieldsep -> ';' .
+
+%% fieldsep ::= ‘,’ | ‘;’
 
 %% exp ::= exp binop exp
 %% exp ::= unop exp
@@ -230,7 +287,7 @@ unop -> 'not' exp : {op,line('$1'),cat('$1'),'$2'} .
 unop -> '#' exp : {op,line('$1'),cat('$1'),'$2'} .
 unop -> '~' exp : {op,line('$1'),cat('$1'),'$2'} .
 unop -> uminus : '$1' .
-     
+
 uminus -> '-' exp : {op,line('$1'),'-','$2'} .
 
 Erlang code.

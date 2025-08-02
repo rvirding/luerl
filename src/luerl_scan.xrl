@@ -23,54 +23,44 @@ D = [0-9]
 H = [0-9A-Fa-f]
 U = [A-Z]
 L = [a-z]
+NAME = ({U}|{L}|_|{D})
+SNAME = ({U}|{L}|_)
 
 Rules.
 
 %% Names/identifiers.
 ({U}|{L}|_)({U}|{L}|_|{D})* :
 	name_token(TokenChars, TokenLine).
-%% Numbers, we separately parse (Erlang) integers and floats.
-%% Integers.
-{D}+ : 
-	case catch {ok,list_to_integer(TokenChars)} of
-	    {ok,I} -> {token,{'NUMERAL',TokenLine,I}};
-	    _ -> {error,"illegal number"}
-	end.
-0[xX]{H}+ :
-        Int = list_to_integer(string:substr(TokenChars, 3), 16),
-        {token,{'NUMERAL',TokenLine,Int}}.
 
-%% Floats, we have separate rules to make them easier to handle.
-{D}+\.{D}+([eE][-+]?{D}+)? :
-	case catch {ok,list_to_float(TokenChars)} of
-	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
-	    _ -> {error,"illegal number"}
-	end.
-{D}+[eE][-+]?{D}+ :
-	[M,E] = string:tokens(TokenChars, "eE"),
-	case catch {ok,list_to_float(M ++ ".0e" ++ E)} of
-	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
-	    _ -> {error,"illegal number"}
-	end.
-{D}+\.([eE][-+]?{D}+)? :
-	[M|E] = string:tokens(TokenChars, "."),
-	case catch {ok,list_to_float(lists:append([M,".0"|E]))} of
-	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
-	    _ -> {error,"illegal number"}
-	end.
-\.{D}+([eE][-+]?{D}+)? :
-	case catch {ok,list_to_float("0" ++ TokenChars)} of
-	    {ok,F} -> {token,{'NUMERAL',TokenLine,F}};
-	    _ -> {error,"illegal number"}
-	end.
+%% Numbers, we parse integers and floats in one go as they can
+%% interact with each other.
 
-%% Hexadecimal floats, we have one complex rule to handle bad formats
-%% more like the Lua parser.
+%% Hexadecimal numbers, we have separate rule to ensure we don't have
+%% just a '.'. NOTE THESE MUST COME FIRST TO CATCH 0[xX]!!!!
+%%
+%% 0[xX]{H}+\.?{H}+([pP][-+]?{D}+)?{NAME}* :
+%% 0[xX]{H}+\.?{H}*([pP][-+]?{D}+)?{NAME}* :
+%%
+%% 0[xX]{H}*\.{H}*([pP][-+]?{D}+)?{NAME}* :
 
-0[xX]{H}*\.?{H}*([pP][+-]?{D}+)? :
-	hex_float_token(TokenChars, TokenLine).
+0[xX]{H}*\.?{H}*([pP][-+]?{D}*)?{NAME}* :
+	%% io:format("h2 ~p\n", [TokenChars]),
+	hex_number_token(TokenChars, TokenLine).
 
-%% Strings. 
+%% Decimal numbers, we separate rules to ensure we don't have just a '.'.
+%% Both integers and floats are handled here.
+%%
+%% {D}*\.?{D}*([eE][-+]?{D}+)?{NAME}*
+%% (({D}+\.?{D*})|(\.{D}+))([eE][-+]?{D}+)?{NAME}* :
+
+\.{D}+([eE][-+]?{D}+)?{NAME}* :
+	%% io:format("d1 ~p\n", [TokenChars]),
+	decimal_number_token(TokenChars, TokenLine).
+{D}+\.?{D}*([eE][-+]?{D}+)?{NAME}* :
+	%% io:format("d2 ~p\n", [TokenChars]),
+	decimal_number_token(TokenChars, TokenLine).
+
+%% Strings.
 %% Handle the illegal newlines in string_token.
 \"(\\.|\\\n|[^"\\])*\" :
 	string_token(TokenChars, TokenLen, TokenLine).
@@ -133,9 +123,14 @@ Rules.
 --\[\n :	skip_token.
 --\[[^[\n].* :	skip_token.
 
-%% comment --ab ... yz  --ab([^y]|y[^z])*yz
+%% Comment --ab ... yz  --ab([^y]|y[^z])*yz
 --\[\[([^]]|\][^]])*\]\] : skip_token.
 --\[\[([^]]|\][^]])* : {error,"unfinished long comment"}.
+
+%% Catch other illegal tokens.
+
+. :
+	illegal_token(TokenChars, TokenLine).
 
 Erlang code.
 
@@ -148,9 +143,12 @@ Erlang code.
 
 %% Luerl definitions of these types.
 -define(WHITE_SPACE(C), (C >= $\000 andalso C =< $\s)).
--define(DIGIT(C), (C >= $0 andalso C =< $9)).
--define(CHAR(C), (C >= O andalso C < 16#110000)).
 -define(ASCII(C), (C >= 0 andalso C =< 127)).
+-define(DIGIT(C), (C >= $0 andalso C =< $9)).
+-define(HEX(C), (C >= $A andalso C =< $F orelse
+                 C >= $a andalso C =< $f orelse
+                 ?DIGIT(C))).
+-define(CHAR(C), (C >= O andalso C < 16#110000)).
 -define(UNICODE(C),
         (is_integer(C) andalso
          (C >= 0 andalso C < 16#D800 orelse
@@ -158,6 +156,13 @@ Erlang code.
           C > 16#FFFF andalso C =< 16#10FFFF))).
 
 -define(UNI255(C), (is_integer(C) andalso 0 =< C andalso C =< 16#ff)).
+
+%% illegal_token(Chars, Line) -> {error,E}.
+%%  Generate a more Lua compatible error message.
+
+illegal_token(Chars, _Line) ->
+	C = hd(Chars),
+	{error,"syntax error near '<\\" ++ integer_to_list(C) ++ ">'"}.
 
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
@@ -176,73 +181,185 @@ name_token(Cs, L) ->
 name_string(Name) ->
     binary_to_atom(Name, latin1).               %Only latin1 in Lua
 
-%% hex_float_token(TokenChars, TokenLine) ->
+%% decimal_number_token(TokenChars, TokenLine)
 %%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
-%%  Build a float form a hex float string.
+%%  Build either an integer or a float from a decimal number
+%%  string. We first collect the specific number section, then we
+%%  create the number. This makes it easier to keep track of which
+%%  sections we need to make Lua compliant Luerl numbers, as Lua has
+%%  some very "specific" handling.
+%%
+%%  \.{D}+([eE][-+]?{D}+)?{NAME}* :
+%%  {D}+\.?{D}*([eE][-+]?{D}+)?{NAME}* :
 
-hex_float_token(TokenChars, TokenLine) ->
-    Tcs = string:substr(TokenChars, 3),
-    case lists:splitwith(fun (C) -> (C =/= $p) and (C =/= $P) end, Tcs) of
-        {Mcs,[]} when Mcs /= [] ->
-            hex_float(Mcs, [], TokenLine);
-        {Mcs,[_P|Ecs]} when Ecs /= [] ->
-            hex_float(Mcs, Ecs, TokenLine);
-        _Other -> {error,"malformed number"}
+decimal_number_token(TokenChars, TokenLine) ->
+    %% io:format("dnt ~p\n", [dec_number_split(TokenChars)]),
+    Result = case dec_number_split(TokenChars) of
+                 %% If there is anything after the number sections then
+                 %% it is an error!
+                 {_,_,_,Rest} when Rest =/= [] -> error;
+                 {[],[],[],_Rest} -> error;     %Nothing at all
+                 {[],[],_Ecs,_Rest} -> error;   %No number data
+                 {[],".",_Ecs,_Rest} -> error;  %Only "empty" fraction
+                 {_,_,[_E],_Rest} -> error;     %Only "empty" exponent
+                 {Hcs,Fcs,Ecs,_Rest} ->
+                     DW = list_to_integer("0" ++ Hcs),
+                     DF = dec_number_fraction(Fcs, DW),
+                     Dnum = dec_number_exponent(Ecs, DF),
+                     {ok,Dnum}
+             end,
+    case Result of
+        {ok,Number} ->
+            {token,{'NUMERAL',TokenLine,Number}};
+        error ->
+            number_token_error(TokenChars)
     end.
 
-%% hex_float(Mantissa, Exponent) -> {token,{'NUMERAL',Line,Float}} | {error,E}.
-%% hex_mantissa(Chars) -> {float,Float} | error.
-%% hex_fraction(Chars, Pow, SoFar) -> Fraction.
+number_token_error(Tcs) ->
+    {error,"malformed number near '" ++ Tcs ++ "'"}.
 
-hex_float(Mcs, [], Line) ->
-    case hex_mantissa(Mcs) of
-        {float,M} -> {token,{'NUMERAL',Line,M}};
-        error -> {error,"malformed number"}
+dec_number_split(Tcs0) ->
+    Digit = fun (C) -> ?DIGIT(C) end,
+    %% The whole number characters.
+    {Hcs,Tcs1} = lists:splitwith(Digit, Tcs0),
+    %% The fraction characters.
+    {Fcs,Tcs2} = dec_number_split_fraction(Tcs1),
+    %% The exponent characters.
+    {Ecs,Rest} = dec_number_split_exponent(Tcs2),
+    {Hcs,Fcs,Ecs,Rest}.
+
+dec_number_split_fraction([$. | Fcs0]) ->
+    {Fcs1,Frest} = lists:splitwith(fun (C) -> ?DIGIT(C) end, Fcs0),
+    {[$.|Fcs1],Frest};
+dec_number_split_fraction(Tcs) ->
+    {[],Tcs}.
+
+dec_number_split_exponent([P | Pcs0]) when P =:= $e ; P =:= $E ->
+    Digit = fun (C) -> ?DIGIT(C) end,
+    case Pcs0 of
+        [S | Pcs1] when S =:= $+ ; S =:= $- ->
+            {Pcs2,Rest} = lists:splitwith(Digit, Pcs1),
+            {[P,S|Pcs2],Rest};
+        Pcs1 ->
+            {Pcs2,Rest} = lists:splitwith(Digit, Pcs1),
+            {[P|Pcs2],Rest}
     end;
-hex_float(Mcs, Ecs, Line) ->
-    case hex_mantissa(Mcs) of
-        {float,M} ->
-            case catch list_to_integer(Ecs, 10) of
-                {'EXIT',_} -> {error,"malformed number"};
-                E -> {token,{'NUMERAL',Line,M * math:pow(2, E)}}
-            end;
-        error -> {error,"malformed number"}
+dec_number_split_exponent(Tcs) ->
+    {[],Tcs}.
+
+dec_number_fraction(".", DW) -> float(DW);
+dec_number_fraction([$. | Fcs], DW) ->
+    DW + list_to_float("0." ++ Fcs);
+dec_number_fraction([], DW) -> DW.
+
+dec_number_exponent([_E | Ecs], DF) ->
+    DF * math:pow(10, list_to_integer(Ecs));
+dec_number_exponent([], DF) -> DF.
+
+%% hex_number_token(TokenChars, TokenLine)
+%%     {token,{'NUMERAL',TokenLine,Float}} | {error,E}.
+%%  Build either an integer or a float from a hexadecimal number
+%%  string. We first collect the specific number section, then we
+%%  create the number. This makes it easier to keep track of which
+%%  sections we need to make Lua compliant Luerl numbers, as Lua has
+%%  some very "specific" handling.
+%%
+%%  0[xX]\.{H}+([pP][-+]?{D}+)?{NAME}* :
+%%  0[xX]{H}+\.?{H}*([pP][-+]?{D}+)?{NAME}*
+
+hex_number_token([$0,X|TokenChars], TokenLine) ->
+    %% io:format("hnt ~p\n", [hex_number_split(TokenChars)]),
+    Result = case hex_number_split(TokenChars) of
+                 %% If there is anything after the number sections then
+                 %% it is an error!
+                 {_,_,_,Rest} when Rest =/= [] -> error;
+                 {[],[],[],_Rest} -> error;     %Nothing at all
+                 {[],[],_Ecs,_Rest} -> error;   %No number data
+                 {[],".",_Ecs,_Rest} -> error;  %Only "empty" fraction
+                 {_,_,[_P],_Rest} -> error;     %Only "empty" exponent
+                 {Hcs,Fcs,Ecs,_Rest} ->
+                     HW = list_to_integer("0" ++ Hcs, 16),
+                     HF = hex_number_fraction(Fcs, HW),
+                     Hnum = hex_number_exponent(Ecs, HF),
+                     {ok,Hnum}
+             end,
+    case Result of
+        {ok,Number} ->
+            {token,{'NUMERAL',TokenLine,Number}};
+        error ->
+            number_token_error([$0,X|TokenChars])
     end.
 
-hex_mantissa(Mcs) ->
-    case lists:splitwith(fun (C) -> C =/= $. end, Mcs) of
-        {[],[]} -> error;                       %Nothing at all
-        {[],[$.]} -> error;                     %Only a '.'
-        {[],[$.|Fcs]} -> {float,hex_fraction(Fcs, 16.0, 0.0)};
-        {Hcs,[]} -> {float,float(list_to_integer(Hcs, 16))};
-        {Hcs,[$.|Fcs]} ->
-            H = float(list_to_integer(Hcs, 16)),
-            {float,hex_fraction(Fcs, 16.0, H)}
-    end.
+hex_number_split(Tcs0) ->
+    Hex = fun (C) -> ?HEX(C) end,
+    %% Digit = fun (C) -> ?DIGIT(C) end,
+    %% The whole number characters.
+    {Hcs,Tcs1} = lists:splitwith(Hex, Tcs0),
+    %% The fraction characters.
+    {Fcs,Tcs2} = hex_number_split_fraction(Tcs1),
+    %% The exponent characters.
+    {Ecs,Rest} = hex_number_split_exponent(Tcs2),
+    {Hcs,Fcs,Ecs,Rest}.
 
-hex_fraction([C|Cs], Pow, SoFar) when C >= $0, C =< $9 ->
-    hex_fraction(Cs, Pow*16, SoFar + (C - $0)/Pow);
-hex_fraction([C|Cs], Pow, SoFar) when C >= $a, C =< $f ->
-    hex_fraction(Cs, Pow*16, SoFar + (C - $a + 10)/Pow);
-hex_fraction([C|Cs], Pow, SoFar) when C >= $A, C =< $F ->
-    hex_fraction(Cs, Pow*16, SoFar + (C - $A + 10)/Pow);
-hex_fraction([], _Pow, SoFar) -> SoFar.
+hex_number_split_fraction([$. | Fcs0]) ->
+    {Fcs1,Frest} = lists:splitwith(fun (C) -> ?HEX(C) end, Fcs0),
+    {[$.|Fcs1],Frest};
+hex_number_split_fraction(Tcs) ->
+    {[],Tcs}.
+
+hex_number_split_exponent([P | Pcs0]) when P =:= $p ; P =:= $P ->
+    Digit = fun (C) -> ?DIGIT(C) end,
+    case Pcs0 of
+        [S | Pcs1] when S =:= $+ ; S =:= $- ->
+            {Pcs2,Rest} = lists:splitwith(Digit, Pcs1),
+            {[P,S|Pcs2],Rest};
+        Pcs1 ->
+            {Pcs2,Rest} = lists:splitwith(Digit, Pcs1),
+            {[P|Pcs2],Rest}
+    end;
+hex_number_split_exponent(Tcs) ->
+    {[],Tcs}.
+
+hex_number_fraction([$. | Fcs], HW) ->
+    {HF,_} = hex_number_fraction(Fcs, 16.0, HW + 0.0),
+    HF;
+hex_number_fraction([], HW) -> HW.
+
+hex_number_exponent([_P | Ecs], HF) ->
+    HF * math:pow(2, list_to_integer(Ecs));
+hex_number_exponent([], HF) -> HF.
+
+hex_number_fraction([C|Cs], Pow, SoFar) when C >= $0, C =< $9 ->
+    hex_number_fraction(Cs, Pow*16.0, SoFar + (C - $0)/Pow);
+hex_number_fraction([C|Cs], Pow, SoFar) when C >= $a, C =< $f ->
+    hex_number_fraction(Cs, Pow*16.0, SoFar + (C - $a + 10)/Pow);
+hex_number_fraction([C|Cs], Pow, SoFar) when C >= $A, C =< $F ->
+    hex_number_fraction(Cs, Pow*16.0, SoFar + (C - $A + 10)/Pow);
+hex_number_fraction(Cs, _Pow, SoFar) ->
+    {SoFar,Cs}.
 
 %% string_token(InputChars, Length, Line) ->
 %%     {token,{'LITERALSTRING',Line,Cs}} | {error,Error}.
 %%  Convert an input string into the corresponding string characters.
 %%  We know that the input string is correct.
 
-string_token(Cs0, Len, L) ->
-    Cs1 = string:substr(Cs0, 2, Len - 2),       %Strip quotes
+string_token([Qc|Cs0], _Len, L) ->
+    Cs1 = lists:droplast(Cs0),                  %Strip trailing quote
+    %% io:format("st1 ~w ~w\n", [length(Cs1),Cs1]),
     try
-        Bytes = string_chars(Cs1),
+        Bytes = string_chars(Cs1),              %The bytes are encoded chars
         String = iolist_to_binary(Bytes),
+        %% io:format("st2 ~w ~w\n", [byte_size(String),String]),
         {token,{'LITERALSTRING',L,String}}
     catch
-        _:_ ->
-            {error,"illegal string"}
+        throw:{string_error,What} ->            %Specific error message
+            string_token_error(What, Qc);
+        _:_ ->                                  %General error message
+            string_token_error("illegal string", Qc)
     end.
+
+string_token_error(What, Qc) ->
+    {error,What ++ " near '" ++ [Qc] ++ "'"}.
 
 %% string_chars(Chars)
 %% chars(Chars)
@@ -259,60 +376,68 @@ string_chars([$\\ | Cs], Acc) ->
     string_bq_chars(Cs, Acc);
 string_chars([$\n | _], _Acc) ->
     throw(string_error);
-string_chars([C0 | Cs], Acc) ->
-    C1 = if ?ASCII(C0) -> C0;
-            true ->
-                 case unicode:characters_to_binary([C0]) of
-                     Bin when is_binary(Bin) ->
-                         Bin;
-                     _Error ->
-                         throw(string_error)
-                 end
-         end,
-    string_chars(Cs, [C1|Acc]);
+string_chars([C | Cs], Acc) ->
+     string_chars(Cs, [C | Acc]);
+%% string_chars([C | Cs], Acc) when ?ASCII(C) ->
+%%      string_chars(Cs, [C | Acc]);
+%% string_chars([C | Cs], Acc) ->
+%%     case unicode:characters_to_binary([C]) of
+%%         Bin when is_binary(Bin) ->
+%%             string_chars(Cs, [Bin | Acc]);
+%%         _Error ->
+%%             throw(string_error)
+%%     end;
 string_chars([], Acc) ->
     lists:reverse(Acc).
 
 %% string_bq_chars(Chars, Accumulator)
-%%  Handle the backquotes characters. These always fit directly into
-%%  one byte and are never UTF-8 encoded.
+%%  Handle the backquotes characters.
 
-string_bq_chars([C1|Cs0], Acc) when C1 >= $0, C1 =< $9 ->   %1-3 decimal digits
+string_bq_chars([C1|Cs0], Acc) when ?DIGIT(C1) -> %1-3 decimal digits
     I1 = C1 - $0,
+    %% Note here we "export" Byte and Cs1 (this is Erlang).
     case Cs0 of
-        [C2|Cs1] when C2 >= $0, C2 =< $9 ->
-            I2 = C2 - $0,
-            case Cs1 of
-                [C3|Cs2] when C3 >= $0, C3 =< $9 ->
-                    I3 = C3 - $0,
-                    Byte = 100*I1 + 10*I2 + I3,
-                    %% Must fit into one byte!
-                    (Byte =< 255) orelse throw(string_error),
-                    string_chars(Cs2, [Byte|Acc]);
-                _ ->
-                    Byte = 10*I1 + I2,
-                    string_chars(Cs1, [Byte|Acc])
-            end;
-        _ -> string_chars(Cs0, [I1|Acc])
-    end;
+        [C2,C3|Cs1] when ?DIGIT(C2), ?DIGIT(C3) ->
+            Byte = 100 * I1 + 10 * (C2 - $0) + (C3 - $0),
+            (Byte =< 255) orelse throw(string_error);
+        [C2|Cs1] when ?DIGIT(C2)  ->
+            Byte = 10 * I1 + (C2 - $0);
+        Cs1 ->
+            Byte = I1
+    end,
+    string_chars(Cs1, [Byte | Acc]);
 string_bq_chars([$x,C1,C2|Cs], Acc) ->          %2 hex digits
-    case hex_char(C1) and hex_char(C2) of
+    case ?HEX(C1) andalso ?HEX(C2) of
         true ->
             Byte = hex_val(C1)*16 + hex_val(C2),
             string_chars(Cs, [Byte|Acc]);
-        false -> throw(string_error)
+        false -> throw({string_error,"hexadecimal digit expected"})
     end;
+string_bq_chars([$u,${|Cs], Acc) ->             %Explicit utf-8 character
+    string_bq_chars_utf8(Cs, 0, Acc);
 string_bq_chars([$z|Cs], Acc) ->                %Skip whitespace
     string_chars(skip_space(Cs), Acc);
 string_bq_chars([C|Cs], Acc) ->
     case escape_char(C) of
-        error -> throw(string_error);
+        error -> throw({string_error,"invalid escape sequence"});
         Esc -> string_chars(Cs, [Esc|Acc])
     end;
 string_bq_chars([], Acc) ->
     Acc.
 
-skip_space([C|Cs]) when C >= 0, C =< $\s -> skip_space(Cs);
+string_bq_chars_utf8([C|Cs], Uchar, Acc) when ?HEX(C) ->
+    string_bq_chars_utf8(Cs, Uchar*16 + hex_val(C), Acc);
+string_bq_chars_utf8([$}|Cs], Uchar, Acc) ->
+    case unicode:characters_to_binary([Uchar]) of
+        Bin when is_binary(Bin) ->
+            string_chars(Cs, [Bin|Acc]);
+        _Error ->
+            throw({string_error,"UTF-8 value error"})
+    end;
+string_bq_chars_utf8(_Cs, _Uchar, _Acc) ->
+    throw({string_error,"missing '}'"}).
+
+skip_space([$\s|Cs]) -> skip_space(Cs);
 skip_space(Cs) -> Cs.
 
 %% long_string_token(InputChars, Length, BracketLength, Line) ->
@@ -320,36 +445,35 @@ skip_space(Cs) -> Cs.
 
 long_string_token(Cs0, Len, BrLen, Line) ->
     %% Strip the brackets and remove first char if a newline.
-    %% Note we export Cs1 here, :-)
+    %% Note we "export" Cs1 here, (this is Erlang).
     case string:substr(Cs0, BrLen+1, Len - 2*BrLen) of
         [$\n | Cs1] -> Cs1;
         Cs1 -> Cs1
     end,
+    %% io:format("lst1 ~w ~w\n", [length(Cs1),Cs1]),
     try
-        Bytes = long_string_chars(Cs1, []),
+        Bytes = long_string_chars(Cs1, []),     %The bytes are encoded chars
         String = iolist_to_binary(Bytes),
+        %% io:format("lst2 ~w ~w\n", [byte_size(String),String]),
         {token,{'LITERALSTRING',Line,String}}
     catch
         _:_ ->
-            {error,"illegal string"}
+            {error,"illegal long string"}
     end.
 
-long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
+long_string_chars([C | Cs], Acc) ->
     long_string_chars(Cs, [C|Acc]);
-long_string_chars([C | Cs], Acc) ->             %This could be unicode
-    case unicode:characters_to_binary([C]) of
-        Bin when is_binary(Bin) ->
-            long_string_chars(Cs, [Bin|Acc]);
-        _Error ->
-            throw(string_error)
-    end;
+%% long_string_chars([C | Cs], Acc) when ?ASCII(C) ->
+%%     long_string_chars(Cs, [C|Acc]);
+%% long_string_chars([C | Cs], Acc) ->             %This could be unicode
+%%     case unicode:characters_to_binary([C]) of
+%%         Bin when is_binary(Bin) ->
+%%             long_string_chars(Cs, [Bin|Acc]);
+%%         _Error ->
+%%             throw(long_string_error)
+%%     end;
 long_string_chars([], Acc) ->
     lists:reverse(Acc).
-
-hex_char(C) when C >= $0, C =< $9 -> true;
-hex_char(C) when C >= $a, C =< $f -> true;
-hex_char(C) when C >= $A, C =< $F -> true;
-hex_char(_) -> false.
 
 hex_val(C) when C >= $0, C =< $9 -> C - $0;
 hex_val(C) when C >= $a, C =< $f -> C - $a + 10;
@@ -362,9 +486,11 @@ escape_char($n) -> $\n;                         %\n = LF
 escape_char($r) -> $\r;                         %\r = CR
 escape_char($t) -> $\t;                         %\t = TAB
 escape_char($v) -> $\v;                         %\v = VT
-escape_char($\\) -> $\\;                        %\e = BACKSLASH
-escape_char($") -> $";                          %\s = SPC
-escape_char($') -> $';                          %\d = DEL
+escape_char($\\) -> $\\;                        %\\ = BACKSLASH
+escape_char($") -> $";                          %\" = STRING QUOTE
+escape_char($') -> $';                          %\' = STRING QUOTE
+escape_char($\n) -> $\n;                        %\LF = LF
+escape_char($\r) -> $\n;                        %\RET = LF
 escape_char(_C) -> error.                       %Illegal
 
 %% is_keyword(Name) -> boolean().
