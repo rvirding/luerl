@@ -161,8 +161,7 @@ Erlang code.
 %%  Generate a more Lua compatible error message.
 
 illegal_token(Chars, _Line) ->
-	C = hd(Chars),
-	{error,"syntax error near '<\\" ++ integer_to_list(C) ++ ">'"}.
+	{error,"syntax error near '" ++ Chars ++ "'"}.
 
 %% name_token(Chars, Line) ->
 %%     {token,{'NAME',Line,Symbol}} | {Name,Line} | {error,E}.
