@@ -43,6 +43,8 @@ or
 
 `luerl:do(~\"return 'árvíztűrő tükörfúrógép'\", St0)`").
 
+-export_type([luerlstate/0, luerldata/0]).
+
 %% Basic user API to luerl.
 -export([init/0,gc/1,
          load/2,load/3,loadfile/2,loadfile/3,
