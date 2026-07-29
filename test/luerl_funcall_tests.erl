@@ -190,5 +190,24 @@ newindex_metamethod_test() ->
     ?assertEqual(456, TVal),
     ?assertEqual(nil, MVal).
 
+local_function_recursion_test() ->
+    State = luerl:init(),
+    Chunk = <<"local function fact(n)\n"
+              "  if n <= 1 then return 1 else return n * fact(n - 1) end\n"
+              "end\n"
+              "return fact(5)">>,
+    {ok, [Res], _State1} = luerl:do_dec(Chunk, State),
+    ?assertEqual(120, Res).
+
+local_assign_function_recursion_test() ->
+    State = luerl:init(),
+    Chunk = <<"local fact\n"
+              "fact = function(n)\n"
+              "  if n <= 1 then return 1 else return n * fact(n - 1) end\n"
+              "end\n"
+              "return fact(5)">>,
+    {ok, [Res], _State1} = luerl:do_dec(Chunk, State),
+    ?assertEqual(120, Res).
+
 bad_return_value(_Arg, _Args, State) ->
     lua_error(something_bad_happened, State).
