@@ -184,11 +184,57 @@ format(_, [F|As], St0) ->
     end;
 format(_, As, St) -> badarg_error(format, As, St).
 
--spec gmatch(_, [_], _) -> no_return().		%To keep dialyzer quiet
-
 %% gmatch(String, Pattern) -> [Function].
+%%  Returns an iterator function that, each time it is called, returns
+%%  the next captures from pattern over string s. If pattern has no
+%%  captures, the whole match is returned.
+%%
+%%  Implementation: pre-compute all matches using gsub_match_loop/6,
+%%  store the match list in the luerl private state under a unique
+%%  ref, and return an erl_func iterator that pops matches on each
+%%  call.
 
-gmatch(_, As, St) -> badarg_error(gmatch, As, St).
+gmatch(_, As, St) ->
+    case luerl_lib:conv_list(As, [lua_string,lua_string]) of
+	[S,P] ->
+	    do_gmatch(S, P, St);
+	_ -> badarg_error(gmatch, As, St)
+    end.
+
+do_gmatch(S, P, St0) ->
+    case pat(binary_to_list(P)) of
+	{ok,{Pat,_},_} ->
+	    L = byte_size(S),
+	    Matches = gsub_match_loop(S, L, Pat, 1, 1, all),
+	    %% Store the match state in private data.
+	    Ref = make_ref(),
+	    St1 = luerl:put_private(Ref, {Matches, S}, St0),
+	    %% Build the iterator function.
+	    Iter = #erl_func{code=fun(_, St2) ->
+		case luerl:get_private(Ref, St2) of
+		    {[], _} ->
+			St3 = luerl:delete_private(Ref, St2),
+			{[nil], St3};
+		    {[Cas|Rest], S1} ->
+			St3 = luerl:put_private(Ref, {Rest, S1}, St2),
+			Vals = gmatch_vals(Cas, S1),
+			{Vals, St3}
+		end
+	    end},
+	    {[Iter], St1};
+	{error,E} -> lua_error(E, St0)
+    end.
+
+%% gmatch_vals(Captures, String) -> [Values].
+%%  Extract the match values from a capture list.
+%%  If there are explicit captures (length > 1), return only the
+%%  sub-captures (skip the whole-match entry at the head).
+%%  If no explicit captures, return the whole match.
+
+gmatch_vals([Ca], S) ->
+    [match_cap(Ca, S)];
+gmatch_vals([_Ca|Cas], S) ->
+    match_caps(Cas, S).
 
 %% gsub(String, Pattern, Repl [, N]) -> [String]
 
