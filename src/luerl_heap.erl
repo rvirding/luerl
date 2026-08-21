@@ -596,10 +596,14 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
           envs=#tstruct{data=Et0,free=Ef0}=Env0,
           usds=#tstruct{data=Ut0,free=Uf0}=Usd0,
           fncs=#tstruct{data=Ft0,free=Ff0}=Fnc0,
-          g=G,stk=Stk,cs=Cs,meta=Meta}=St) ->
-    %% The root set consisting of global table and stack.
+          g=G,stk=Stk,cs=Cs,meta=Meta,private=Priv}=St) ->
+    %% The root set consisting of global table, stack and private store.
+    %% The private store holds values the embedder put there with
+    %% luerl:put_private/3. They are unreachable from Lua by design, so
+    %% without them here the collector frees the tables underneath any
+    %% reference kept in it and the embedder's next decode fails.
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
-            G|Stk],
+            G|Stk] ++ maps:values(Priv),
     %% Mark all seen tables and frames, i.e. return them.
     GcT = #gct{t=Tt0,s=[]},
     GcE = #gct{t=Et0,s=[]},
