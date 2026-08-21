@@ -601,10 +601,10 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
     Root = [Meta#meta.nil,Meta#meta.boolean,Meta#meta.number,Meta#meta.string,
             G|Stk],
     %% Mark all seen tables and frames, i.e. return them.
-    GcT = #gct{t=Tt0,s=[]},
-    GcE = #gct{t=Et0,s=[]},
-    GcU = #gct{t=Ut0,s=[]},
-    GcF = #gct{t=Ft0,s=[]},
+    GcT = #gct{t=Tt0,s=#{}},
+    GcE = #gct{t=Et0,s=#{}},
+    GcU = #gct{t=Ut0,s=#{}},
+    GcF = #gct{t=Ft0,s=#{}},
     {SeenT,SeenE,SeenU,SeenF} = mark(Root, [Cs], GcT, GcE, GcU, GcF),
     %% io:format("gc: ~p\n", [{SeenT,SeenF,SeenU}]),
     %% Free unseen tables and add freed to free list.
@@ -622,17 +622,20 @@ gc(#luerl{tabs=#tstruct{data=Tt0,free=Tf0}=Tab0,
 %% mark(ToDo, MoreTodo, GcTabs, GcEnv, GcUserdata, GcFuncdefs) ->
 %%     {SeenTabs,SeenFrames,SeenUserdata,SeenFuncdefs}.
 %% Scan over all live objects and mark seen tables by adding them to
-%% the seen list.
+%% the seen set. The seen set is a map used only for membership: the
+%% object tables it is checked against are themselves maps, so an
+%% ordset here made both the mark and the sweep quadratic in the live
+%% set.
 
 mark([{in_table,_}=_T|Todo], More, GcT, GcE, GcU, GcF) ->
     %%io:format("gc: ~p\n", [_T]),
     mark(Todo, More, GcT, GcE, GcU, GcF);
 mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
-    case ordsets:is_element(T, Ts0) of
+    case maps:is_key(T, Ts0) of
         true ->                                 %Already done
             mark(Todo, More, GcT, GcE, GcU, GcF);
         false ->                                %Mark it and add to todo
-            Ts1 = ordsets:add_element(T, Ts0),
+            Ts1 = Ts0#{T => []},
             #table{a=Arr,d=Dict,meta=Meta} = ?GET_TABLE(T, Tt),
             %% Have to be careful when adding Tab and Meta as Tab is
             %% [{Key,Val}], Arr is array and Meta is
@@ -644,21 +647,21 @@ mark([#tref{i=T}|Todo], More, #gct{t=Tt,s=Ts0}=GcT, GcE, GcU, GcF) ->
     end;
 mark([#eref{i=F}|Todo], More, GcT, #gct{t=Et,s=Es0}=GcE, GcU, GcF) ->
     %% io:format("eref0: ~p\ ~p ~pn", [F,Et,Es0]),
-    case ordsets:is_element(F, Es0) of
+    case maps:is_key(F, Es0) of
         true ->                                 %Already done
             mark(Todo, More, GcT, GcE, GcU, GcF);
         false ->                                %Mark it and add to todo
-            Es1 = ordsets:add_element(F, Es0),
+            Es1 = Es0#{F => []},
             Ses = tuple_to_list(?GET_TABLE(F, Et)),
             %% io:format("eref1: ~p ~p\n", [Et,Es1]),
             mark(Todo, [Ses|More], GcT, GcE#gct{s=Es1}, GcU, GcF)
     end;
 mark([#usdref{i=U}|Todo], More, GcT, GcE, #gct{s=Us0}=GcU, GcF) ->
-    case ordsets:is_element(U, Us0) of
+    case maps:is_key(U, Us0) of
        true ->                                 %Already done
            mark(Todo, More, GcT, GcE, GcU, GcF);
        false ->
-           Us1 = ordsets:add_element(U, Us0),
+           Us1 = Us0#{U => []},
            mark(Todo, More, GcT, GcE, GcU#gct{s=Us1}, GcF)
     end;
 mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
@@ -666,12 +669,12 @@ mark([#funref{i=F,env=Erefs}|ToDo], More, GcT, GcE, GcU,
     %% io:format("funref0: ~p ~p ~p\n", [F,Fs0,Erefs]),
     %% Each funref has its own environments but we only need to add
     %% the function definition once.
-    case ordsets:is_element(F, Fs0) of
+    case maps:is_key(F, Fs0) of
         true ->
             mark(ToDo, [Erefs|More], GcT, GcE, GcU, GcF);
         false ->
             %% And mark the function definition.
-            Fs1 = ordsets:add_element(F, Fs0),
+            Fs1 = Fs0#{F => []},
             Fdef = ?GET_TABLE(F, Ft0),
             %% io:format("funref1: ~p ~p ~p\n", [F,Fs1,Erefs]),
             mark([Fdef|ToDo], [Erefs|More], GcT, GcE, GcU, GcF#gct{s=Fs1})
@@ -718,46 +721,46 @@ mark([], [], #gct{s=St}, #gct{s=Se}, #gct{s=Su}, #gct{s=Sf}) ->
 filter_tables(Seen, Tf0, Tt0) ->
     %% Update the free list.
     Tf1 = ?FOLD_TABLES(fun (K, _, Free) ->
-                               case ordsets:is_element(K, Seen) of
+                               case maps:is_key(K, Seen) of
                                    true -> Free;
                                    false -> [K|Free]
                                end
                        end, Tf0, Tt0),
-    Tt1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Tt0),
+    Tt1 = ?FILTER_TABLES(fun (K, _) -> maps:is_key(K, Seen) end, Tt0),
     {Tf1,Tt1}.
 
 filter_environment(Seen, Ef0, Et0) ->
     %% io:format("env0: ~p ~p ~p\n", [Seen,Ef0,Et0]),
     %% Update the free list.
     Ef1 = ?FOLD_TABLES(fun (K, _, Free) ->
-                               case ordsets:is_element(K, Seen) of
+                               case maps:is_key(K, Seen) of
                                    true -> Free;
                                    false -> [K|Free]
                                end
                        end, Ef0, Et0),
-    Et1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Et0),
+    Et1 = ?FILTER_TABLES(fun (K, _) -> maps:is_key(K, Seen) end, Et0),
     %% io:format("env1: ~p ~p\n", [Ef1,Et1]),
     {Ef1,Et1}.
 
 filter_userdata(Seen, Uf0, Ut0) ->
     %% Update the free list.
     Uf1 = ?FOLD_TABLES(fun (K, _, Free) ->
-                              case ordsets:is_element(K, Seen) of
+                              case maps:is_key(K, Seen) of
                                   true -> Free;
                                   false -> [K|Free]
                               end
                       end, Uf0, Ut0),
     %% Reclaim free table slots.
-    Ut1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ut0),
+    Ut1 = ?FILTER_TABLES(fun (K, _) -> maps:is_key(K, Seen) end, Ut0),
     {Uf1,Ut1}.
 
 filter_funcdefs(Seen, Ff0, Ft0) ->
     %% Update the free list.
     Ff1 = ?FOLD_TABLES(fun (K, _, Free) ->
-                                case ordsets:is_element(K, Seen) of
+                                case maps:is_key(K, Seen) of
                                     true -> Free;
                                     false -> [K|Free]
                                 end
                         end, Ff0, Ft0),
-    Ft1 = ?FILTER_TABLES(fun (K, _) -> ordsets:is_element(K, Seen) end, Ft0),
+    Ft1 = ?FILTER_TABLES(fun (K, _) -> maps:is_key(K, Seen) end, Ft0),
     {Ff1,Ft1}.
