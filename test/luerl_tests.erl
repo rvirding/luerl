@@ -54,3 +54,14 @@ private_test() ->
 loadfile_only_comments_test() ->
     State1 = luerl:init(),
     ?assertMatch({ok, _, _}, luerl:loadfile("./test/luerl_return_SUITE_data/only_comments.lua", State1)).
+
+%% A reference put in the private store must survive a collection. It is
+%% unreachable from Lua by design, so if gc does not treat the store as a
+%% root it frees the table underneath and the next decode fails.
+private_store_survives_gc_test() ->
+    St0 = luerl:init(),
+    {Ref,St1} = luerl:encode(#{<<"keep">> => <<"me">>}, St0),
+    St2 = luerl:put_private(mine, Ref, St1),
+    St3 = luerl:gc(St2),
+    ?assertEqual([{<<"keep">>,<<"me">>}],
+                 luerl:decode(luerl:get_private(mine, St3), St3)).
