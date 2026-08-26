@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- `string.format("%.0f", ...)` (and `%.0e`, `%.0g`) raised `badarg` instead
+  of formatting, because Erlang's own `io_lib:format("~.*f"/"~.*e"/"~.*g", ...)`
+  cannot represent every precision C's `printf` (and Lua's `%f`/`%e`/`%g`,
+  defined the same way) allows: `~f`/`~g` both refuse precision 0, and `~e`
+  refuses anything below 2 (its own "precision" counts the leading digit
+  too). `%.0f` now rounds to the nearest integer and omits the decimal
+  point directly, matching C; `%.0g` clamps to precision 1, matching C's
+  own stated rule ("if the precision is zero, it is taken as 1"); `%.0e`
+  formats at Erlang's floor (1 fractional digit, already correctly rounded
+  and renormalised by Erlang itself) and rounds that last digit away by
+  hand, including the renormalisation that step can itself still trigger
+  (9.5 and 9.96 both correctly become `1e+1`, not `10e+0`).
+
 ## [1.5.1]
 
 ### Fixed

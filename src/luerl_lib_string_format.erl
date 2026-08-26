@@ -234,20 +234,63 @@ format_integer(Fl, F, P, N, Prefix, Str0) ->
 %% format_g_float(Flags, Field, Precision, Argument) -> String.
 %%  Print float Argument in e/f/g format.
 
+%% Erlang's own io_lib "~.*f"/"~.*e"/"~.*g" cannot represent every
+%% precision C's printf (and Lua's %f/%e/%g, defined the same way)
+%% allows: io_lib:format("~.*f",[0,_]) and io_lib:format("~.*g",[0,_])
+%% both raise badarg (their floor is precision 1), and
+%% io_lib:format("~.*e",[P,_]) raises badarg below P=2 (its "precision"
+%% counts the leading digit too, unlike f/g, which is why
+%% e_float_precision/1 already adds 1 — Lua %.Ne means N digits *after*
+%% the point, e_float_precision converts that to Erlang's "N+1 total
+%% significant digits" convention; only Lua's own precision 0 still
+%% lands below Erlang's floor of 2 after that conversion). Below, only
+%% Lua's %.0f/%.0e/%.0g actually hit one of these floors — every other
+%% precision was already fine before this patch, and stays on the
+%% original io_lib path unchanged.
+
 format_e_float(Fl, F, P, A) ->
-    format_float(Fl, F, e_float_precision(P), "~.*e", A).
+    EP = e_float_precision(P),
+    if EP < 2 ->
+            N = luerl_lib:arg_to_float(A),
+            Str0 = format_e_zero_precision(abs(N)),
+            format_float_str(Fl, F, N, Str0);
+       true ->
+            format_float(Fl, F, EP, "~.*e", A)
+    end.
 
 format_f_float(Fl, F, P, A) ->
-    format_float(Fl, F, f_float_precision(P), "~.*f", A).
+    FP = f_float_precision(P),
+    if FP < 1 ->
+            N = luerl_lib:arg_to_float(A),
+            %% "%.0f": round to the nearest integer and print with no
+            %% decimal point at all — exactly what C's own %.0f does.
+            Str0 = integer_to_list(round(abs(N))),
+            format_float_str(Fl, F, N, Str0);
+       true ->
+            format_float(Fl, F, FP, "~.*f", A)
+    end.
 
 format_g_float(Fl, F, P, A) ->
-    format_float(Fl, F, g_float_precision(P), "~.*g", A).
+    GP = g_float_precision(P),
+    %% C's own %g: "if the precision is zero, it is taken as 1" — this
+    %% is both the correct semantics (not a workaround) and happens to
+    %% sidestep Erlang's identical precision-0 floor for ~g.
+    format_float(Fl, F, max(GP, 1), "~.*g", A).
 
 %% format_float(Flag, Field, Precision, Format, Argument) -> String
 
 format_float(Fl, F, P, Format, A) ->
     N = luerl_lib:arg_to_float(A),
     Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
+    format_float_str(Fl, F, N, Str0).
+
+%% format_float_str(Flags, Field, Number, UnsignedNumeralString) -> String
+%%  The shared sign/field/zero-pad handling every format_*_float/4
+%%  clause needs, independent of how the unsigned numeral string
+%%  itself was produced — factored out so the precision-0 special
+%%  cases above can reuse it instead of duplicating this logic.
+
+format_float_str(Fl, F, N, Str0) ->
     Sign = sign(Fl, N),
     if ?FLAG_SET(Fl, ?FL_M) ->
             Str1 = Sign ++ Str0,
@@ -259,6 +302,30 @@ format_float(Fl, F, P, Format, A) ->
             Str1 = Sign ++ Str0,
             adjust_str(Str1, Fl, F)
     end.
+
+%% format_e_zero_precision(AbsN) -> String
+%%  "%.0e": a single mantissa digit, no decimal point at all (matching
+%%  C's own %.0e). Erlang's ~e cannot go straight to 1 total
+%%  significant digit, so this formats at 2 (~e's own floor — a single
+%%  fractional digit, e.g. "3.7e+0"; already correctly rounded and
+%%  renormalised by Erlang itself, e.g. 9.96 comes back as "1.0e+1",
+%%  not "10.0e+0") and then rounds that one remaining fractional digit
+%%  away by hand, including the one edge case *that* step can still
+%%  trigger: a mantissa of 9.5..9.9 rounds up to "10", which must
+%%  renormalise again to "1" with the exponent bumped once more
+%%  (matching what C's own %.0e does for the same input).
+format_e_zero_precision(AbsN) ->
+    Str = lists:flatten(io_lib:format("~.*e", [2, AbsN])),
+    [D1C, $., D2C, $e | ExpStr] = Str,
+    D1 = D1C - $0,
+    D2 = D2C - $0,
+    Exp = list_to_integer(ExpStr),
+    {Mantissa, Exp1} = if D2 >= 5, D1 =:= 9 -> {1, Exp+1};
+                          D2 >= 5 -> {D1+1, Exp};
+                          true -> {D1, Exp}
+                       end,
+    ExpSign = if Exp1 < 0 -> "-"; true -> "+" end,
+    lists:flatten(io_lib:format("~we~s~w", [Mantissa, ExpSign, abs(Exp1)])).
 
 e_float_precision(none) -> 7;
 e_float_precision(P) -> P+1.
