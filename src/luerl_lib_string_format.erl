@@ -93,7 +93,12 @@ field_width(Fmt) ->
     %% io:format("fv ~s\n", [Fmt]),
     field_value(Fmt).
 
-precision([$.|Fmt]) -> field_value(Fmt);
+precision([$.|Fmt0]) ->
+    %% A bare "." is precision 0, as in C ("%.f").
+    case field_value(Fmt0) of
+        {none,Fmt1} -> {0,Fmt1};
+        Val -> Val
+    end;
 precision(Fmt) -> {none,Fmt}.
 
 collect_cc([C|Fmt]) -> {C,Fmt};
@@ -132,18 +137,10 @@ build({$X,Fl,Fw,P}, [A|As], St0) ->
     {S,St1} = format_HEX(Fl, Fw, P, A, St0),
     {S,As,St1};
 %% Float formats.
-build({$e,Fl,Fw,P}, [A|As], St) ->
-    {format_e_float(Fl, Fw, P, A),As,St};
-build({$E,Fl,Fw,P}, [A|As], St) ->
-    {format_e_float(Fl, Fw, P, A),As,St};
-build({$f,Fl,Fw,P}, [A|As], St) ->
-    {format_f_float(Fl, Fw, P, A),As,St};
-build({$F,Fl,Fw,P}, [A|As], St) ->
-    {format_f_float(Fl, Fw, P, A),As,St};
-build({$g,Fl,Fw,P}, [A|As], St) ->
-    {format_g_float(Fl, Fw, P, A),As,St};
-build({$G,Fl,Fw,P}, [A|As], St) ->
-    {format_g_float(Fl, Fw, P, A),As,St};
+build({C,Fl,Fw,P}, [A|As], St) when C =:= $e ; C =:= $E ;
+                                     C =:= $f ; C =:= $F ;
+                                     C =:= $g ; C =:= $G ->
+    {format_float(C, Fl, Fw, P, A),As,St};
 %% %p
 build({$q,Fl,Fw,P}, [A|As], St0) ->
     {S,St1} = format_q(Fl, Fw, P, A, St0),
@@ -229,26 +226,29 @@ format_integer(Fl, F, P, N, Prefix, Str0) ->
             adjust_str(Str2, Fl, F)
     end.
 
-%% format_e_float(Flags, Field, Precision, Argument) -> String.
-%% format_f_float(Flags, Field, Precision, Argument) -> String.
-%% format_g_float(Flags, Field, Precision, Argument) -> String.
-%%  Print float Argument in e/f/g format.
+%% format_float(Conversion, Flags, Field, Precision, Argument) -> String.
+%%  Print float Argument in e/E, f/F or g/G format as C printf does. We
+%%  do not use io_lib here as it differs from C in ways which are
+%%  visible: no zero precision, exact ties rounded away from zero
+%%  ("%.1f" of 1.25 gives "1.3" not "1.2"), an unpadded exponent
+%%  ("1.25e+0" not "1.25e+00") and a ~g which neither strips trailing
+%%  zeros nor chooses fixed notation. Instead the digits are generated
+%%  from the exact value of the double, mantissa * 2^exponent, using
+%%  integer arithmetic and rounding half to even.
 
-format_e_float(Fl, F, P, A) ->
-    format_float(Fl, F, e_float_precision(P), "~.*e", A).
-
-format_f_float(Fl, F, P, A) ->
-    format_float(Fl, F, f_float_precision(P), "~.*f", A).
-
-format_g_float(Fl, F, P, A) ->
-    format_float(Fl, F, g_float_precision(P), "~.*g", A).
-
-%% format_float(Flag, Field, Precision, Format, Argument) -> String
-
-format_float(Fl, F, P, Format, A) ->
-    N = luerl_lib:arg_to_float(A),
-    Str0 = lists:flatten(io_lib:format(Format, [P,abs(N)])),
-    Sign = sign(Fl, N),
+format_float(C, Fl, F, P0, A) ->
+    X = luerl_lib:arg_to_float(A),
+    P = float_precision(P0),
+    Alt = ?FLAG_SET(Fl, ?FL_H),
+    Str0 = case C of
+               $f -> float_fixed(X, P, Alt);
+               $F -> float_fixed(X, P, Alt);
+               $e -> float_sci(X, P, Alt);
+               $E -> string:uppercase(float_sci(X, P, Alt));
+               $g -> float_general(X, max(P, 1), Alt);
+               $G -> string:uppercase(float_general(X, max(P, 1), Alt))
+           end,
+    Sign = float_sign(Fl, X),
     if ?FLAG_SET(Fl, ?FL_M) ->
             Str1 = Sign ++ Str0,
             adjust_str(Str1, Fl, F);
@@ -260,14 +260,121 @@ format_float(Fl, F, P, Format, A) ->
             adjust_str(Str1, Fl, F)
     end.
 
-e_float_precision(none) -> 7;
-e_float_precision(P) -> P+1.
+float_precision(none) -> 6;
+float_precision(P) -> P.
 
-f_float_precision(none) -> 6;
-f_float_precision(P) -> P.
+%% float_sign(Flags, Float) -> SignString.
+%%  As sign/2 but -0.0 is also negative, as in C.
 
-g_float_precision(none) -> 6;
-g_float_precision(P) -> P.
+float_sign(Fl, X) ->
+    case <<X/float>> of
+        <<1:1,_:63>> -> "-";
+        _ -> sign(Fl, 0)
+    end.
+
+%% float_fixed(Float, Precision, Alt) -> String.
+%%  The absolute value with Precision decimals.
+
+float_fixed(X, P, Alt) ->
+    Ds = zero_pad(integer_to_list(float_scaled(X, P)), P + 1),
+    {Int,Frac} = lists:split(length(Ds) - P, Ds),
+    float_point(Int, Frac, Alt).
+
+%% float_sci(Float, Precision, Alt) -> String.
+%%  The absolute value as d.ddd (Precision decimals) e[+-]dd.
+
+float_sci(X, P, Alt) ->
+    {Q,E10} = float_sci_digits(X, P),
+    [D|Frac] = zero_pad(integer_to_list(Q), P + 1),
+    float_point([D], Frac, Alt) ++ float_exponent(E10).
+
+%% float_general(Float, Precision, Alt) -> String.
+%%  Precision significant digits, in e style if the exponent is < -4
+%%  or >= Precision otherwise in f style, trailing zeros removed
+%%  unless Alt.
+
+float_general(X, P, Alt) ->
+    {Q,E10} = float_sci_digits(X, P - 1),
+    if E10 < -4 orelse E10 >= P ->
+            [D|Frac] = zero_pad(integer_to_list(Q), P),
+            float_strip(float_point([D], Frac, Alt), Alt) ++ float_exponent(E10);
+       true ->
+            float_strip(float_fixed(X, P - 1 - E10, Alt), Alt)
+    end.
+
+float_point(Int, [], false) -> Int;
+float_point(Int, Frac, _) -> Int ++ "." ++ Frac.
+
+float_strip(Str, true) -> Str;
+float_strip(Str, false) ->
+    case lists:member($., Str) of
+        true -> string:trim(string:trim(Str, trailing, "0"), trailing, ".");
+        false -> Str
+    end.
+
+float_exponent(E) when E < 0 -> "e-" ++ zero_pad(integer_to_list(-E), 2);
+float_exponent(E) -> "e+" ++ zero_pad(integer_to_list(E), 2).
+
+zero_pad(Ds, N) -> lists:duplicate(max(0, N - length(Ds)), $0) ++ Ds.
+
+%% float_sci_digits(Float, Precision) -> {Digits,Exponent}.
+%%  abs(Float) rounded to Digits * 10^(Exponent - Precision), where
+%%  Digits has exactly Precision+1 digits (Digits is 0 for 0.0).
+
+float_sci_digits(X, P) ->
+    case float_rational(X) of
+        {0,_} -> {0,0};
+        {Num,Den} ->
+            %% The float log10 may be one off, so settle it exactly.
+            E0 = floor(math:log10(abs(X))),
+            E10 = case {at_least_pow10(Num, Den, E0),
+                        at_least_pow10(Num, Den, E0 + 1)} of
+                      {false,_} -> E0 - 1;
+                      {true,true} -> E0 + 1;
+                      {true,false} -> E0
+                  end,
+            Q = round_ratio(Num, Den, P - E10),
+            case Q >= pow10(P + 1) of
+                true -> {round_ratio(Num, Den, P - E10 - 1),E10 + 1};
+                false -> {Q,E10}
+            end
+    end.
+
+%% at_least_pow10(Num, Den, E) -> Num / Den >= 10^E.
+
+at_least_pow10(Num, Den, E) ->
+    Num * pow10(max(0, -E)) >= Den * pow10(max(0, E)).
+
+%% float_scaled(Float, K) -> abs(Float) * 10^K rounded half to even.
+
+float_scaled(X, K) ->
+    {Num,Den} = float_rational(X),
+    round_ratio(Num, Den, K).
+
+round_ratio(Num, Den, K) when K >= 0 -> half_even(Num * pow10(K), Den);
+round_ratio(Num, Den, K) -> half_even(Num, Den * pow10(-K)).
+
+half_even(N, D) ->
+    Q = N div D,
+    R = N rem D,
+    if 2*R > D orelse (2*R =:= D andalso Q rem 2 =:= 1) -> Q + 1;
+       true -> Q
+    end.
+
+%% float_rational(Float) -> {Num,Den}.
+%%  The exact value of abs(Float) as Num / Den.
+
+float_rational(X) ->
+    <<_:1,Exp:11,Frac:52>> = <<X/float>>,
+    {M,E} = if Exp =:= 0 -> {Frac,-1074};
+               true -> {Frac + (1 bsl 52),Exp - 1075}
+            end,
+    if E >= 0 -> {M bsl E,1};
+       true -> {M,1 bsl -E}
+    end.
+
+pow10(0) -> 1;
+pow10(N) -> 10 * pow10(N - 1).
 
 %% sign(Flags, Number) -> SignString.
 
