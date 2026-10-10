@@ -201,11 +201,10 @@ decimal_number_token(TokenChars, TokenLine) ->
                  {[],[],_Ecs,_Rest} -> error;   %No number data
                  {[],".",_Ecs,_Rest} -> error;  %Only "empty" fraction
                  {_,_,[_E],_Rest} -> error;     %Only "empty" exponent
+                 {Hcs,[],[],_Rest} ->           %An integer
+                     {ok,list_to_integer(Hcs)};
                  {Hcs,Fcs,Ecs,_Rest} ->
-                     DW = list_to_integer("0" ++ Hcs),
-                     DF = dec_number_fraction(Fcs, DW),
-                     Dnum = dec_number_exponent(Ecs, DF),
-                     {ok,Dnum}
+                     {ok,dec_number_float(Hcs, Fcs, Ecs)}
              end,
     case Result of
         {ok,Number} ->
@@ -245,6 +244,26 @@ dec_number_split_exponent([P | Pcs0]) when P =:= $e ; P =:= $E ->
     end;
 dec_number_split_exponent(Tcs) ->
     {[],Tcs}.
+
+%% dec_number_float(WholeChars, FractionChars, ExponentChars) -> Float.
+%%  Convert the whole decimal number string in one go with
+%%  list_to_float/1, which is correctly rounded. Building it up with
+%%  float arithmetic rounds several times so a literal could end up a
+%%  bit off, e.g. 9.9995e-05 as 9.999500000000001e-5, and 10^E
+%%  underflows for small exponents so 5e-324 became 0.0. Only when the
+%%  number is too large for a float do we fall back to that.
+
+dec_number_float(Hcs, Fcs, Ecs) ->
+    Whole = case Hcs of [] -> "0"; _ -> Hcs end,
+    Frac = case Fcs of [] -> "0"; "." -> "0"; [$.|Ds] -> Ds end,
+    Exp = case Ecs of [] -> ""; [_E|Es] -> "e" ++ Es end,
+    try
+        list_to_float(Whole ++ "." ++ Frac ++ Exp)
+    catch
+        error:badarg ->
+            DW = list_to_integer("0" ++ Hcs),
+            dec_number_exponent(Ecs, dec_number_fraction(Fcs, DW))
+    end.
 
 dec_number_fraction(".", DW) -> float(DW);
 dec_number_fraction([$. | Fcs], DW) ->
