@@ -264,9 +264,12 @@ compute_time(Map, _As, St) ->
                                 (_,Acc) -> Acc end, undefined, [<<"day">>, <<"month">>, <<"year">>]),
     badarg_error(time, MissingArg, St).
 
+%% current_timestamp() -> Seconds.
+%%  Whole seconds since the epoch: os.time() returns an integer in Lua
+%%  5.3, as it does for a time table (see compute_time/3).
+
 current_timestamp() ->
-    {Mega,Sec,Micro} = os:timestamp(),
-    1.0e6*Mega+Sec+Micro*1.0e-6.
+    erlang:system_time(second).
 
 timestamp_to_datetime(Timestamp) ->
     SecondsSinceEpoch = round(Timestamp),
