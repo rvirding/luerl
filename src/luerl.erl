@@ -999,6 +999,11 @@ internalize(S) ->
 
 ?DOC( """
 Puts a private `Value` under `Key` that is not exposed to the runtime.
+
+A `Value` which is itself a Lua reference (a table, userdata or
+function, as returned undecoded by e.g. `luerl:do/2`) is a garbage
+collection root, so it stays valid even when nothing in Lua refers to
+it any more.
 """).
 ?DOC( #{group => <<"Private Data functions">>} ).
 
