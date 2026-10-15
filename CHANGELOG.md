@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- local function losing its name in luerl:get_stacktrace/1
 - `string.format("%.0f", ...)` (and `%.0e`, `%.0g`) raised `badarg` instead
   of formatting, because Erlang's own `io_lib:format("~.*f"/"~.*e"/"~.*g", ...)`
   cannot represent every precision C's `printf` (and Lua's `%f`/`%e`/`%g`,
