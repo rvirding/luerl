@@ -147,6 +147,8 @@ do_find(_, L, _, I, _) when I > L+1 -> [nil];
 do_find(S, L, Pat, I, Pl) when I < -L -> do_find(S, L, Pat, 1, Pl);
 do_find(S, L, Pat, I, Pl) when I < 0 -> do_find(S, L, Pat, L+I+1, Pl);
 do_find(S, L, Pat, 0, Pl) ->  do_find(S, L, Pat, 1, Pl);
+do_find(_, _, <<>>, I, true) ->			%Empty plain string matches at I
+    [I,I-1];					%binary:match/3 rejects <<>>
 do_find(S, L, Pat, I, true) ->			%Plain text search string
     case binary:match(S, Pat, [{scope,{I-1,L-I+1}}]) of
 	{Fs,Fl} -> [Fs+1,Fs+Fl];
