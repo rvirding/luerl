@@ -209,5 +209,21 @@ local_assign_function_recursion_test() ->
     {ok, [Res], _State1} = luerl:do_dec(Chunk, State),
     ?assertEqual(120, Res).
 
+local_function_stacktrace_name_test() ->
+    %% A named local function keeps its name in the stack trace, like the
+    %% other named forms; only genuinely anonymous functions are unnamed.
+    State0 = luerl:init(),
+    Chunk = <<"local function foo() error('boom') end\nfoo()">>,
+    {lua_error, _E, State1} = luerl:do_dec(Chunk, State0),
+    Names = [N || {N, _, _} <- luerl:get_stacktrace(State1)],
+    ?assert(lists:member(<<"foo">>, Names)).
+
+anonymous_function_stacktrace_name_test() ->
+    State0 = luerl:init(),
+    Chunk = <<"local foo = function() error('boom') end\nfoo()">>,
+    {lua_error, _E, State1} = luerl:do_dec(Chunk, State0),
+    Names = [N || {N, _, _} <- luerl:get_stacktrace(State1)],
+    ?assertNot(lists:member(<<"foo">>, Names)).
+
 bad_return_value(_Arg, _Args, State) ->
     lua_error(something_bad_happened, State).

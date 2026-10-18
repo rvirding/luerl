@@ -39,10 +39,9 @@ stmts([{local,L,{functiondef,Lf,Name,Pars,Block}}|Ss], St) ->
     %% Need to split this up to handle references to Name in the
     %% function. Desugar to "local Name; Name = function ... end" so
     %% the closure captures the declared local and recursion works.
-    Fdef = {functiondef,Lf,Pars,Block},
     stmts([{local, L, {assign, L, [Name], [{nil,L}]}},
            {';',L},
-           {assign, Lf, [Name], [Fdef]} | Ss],
+           {functiondef, Lf, Name, Pars, Block} | Ss],
           St);
 stmts([{';',_}|Ss], St) -> stmts(Ss, St);	%No-op so we drop it
 stmts([S0|Ss0], St0) ->
