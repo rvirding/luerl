@@ -19,7 +19,8 @@
 
 -export([all/0, groups/0]).
 -export([os_date_formatting/1, os_date_table/1,
-         os_date_integrated/1, os_date_integrated_table/1]).
+         os_date_integrated/1, os_date_integrated_table/1,
+         os_time_is_integer/1]).
 
 all() ->
   [
@@ -30,7 +31,8 @@ all() ->
 groups() ->
   [
     {date_support, [parallel], [os_date_formatting, os_date_table]},
-    {integrated, [parallel], [os_date_integrated, os_date_integrated_table]}
+    {integrated, [parallel], [os_date_integrated, os_date_integrated_table,
+                              os_time_is_integer]}
   ].
 
 os_date_formatting(_) ->
@@ -95,3 +97,13 @@ os_date_integrated_table(_) ->
   {ok, [Result], _State1} = luerl:do(Chunk, State),
   {{Year, _, _}, _} = calendar:local_time(),
   ?assertEqual(Year, Result).
+
+%% os.time() is an integer number of seconds, as in Lua 5.3 (it used to
+%% be a float with a fractional part).
+os_time_is_integer(_) ->
+  State = luerl:init(),
+  Chunk = <<"return os.time(), math.type(os.time())">>,
+  {ok, [Time, Type], _State1} = luerl:do(Chunk, State),
+  ?assert(is_integer(Time)),
+  ?assertEqual(<<"integer">>, Type),
+  ?assert(abs(Time - erlang:system_time(second)) =< 1).
