@@ -265,19 +265,24 @@ pack_loop([], N) -> [{<<"n">>,N}].
 
 %% unpack - unpack table into return values.
 
-unpack(_, [#tref{}=Tref|As], St) ->
-    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St),
+unpack(_, [#tref{}=Tref|As], St0) ->
     case luerl_lib:args_to_integers(unpack_args(As)) of
 	[I] ->
-	    Unp = do_unpack(Arr, Dict, I, length_loop(Arr)),
-	    %% io:fwrite("unp: ~p\n", [{Arr,I,Start,Unp}]),
-	    {Unp,St};
+	    {Len,St1} = length(Tref, St0),
+	    case luerl_lib:arg_to_integer(Len) of
+		J when is_integer(J) ->
+		    %% The length metamethod may have changed the table.
+		    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St1),
+		    {do_unpack(Arr, Dict, I, J),St1};
+		error -> badarg_error(unpack, [Tref|As], St1)
+	    end;
 	[I,J] ->
+	    #table{a=Arr,d=Dict} = luerl_heap:get_table(Tref, St0),
 	    Unp = do_unpack(Arr, Dict, I, J),
 	    %% io:fwrite("unp: ~p\n", [{Arr,I,J,Start,Unp}]),
-	    {Unp,St};
+	    {Unp,St0};
 	error ->				%Not numbers
-	    badarg_error(unpack, [Tref|As], St)
+	    badarg_error(unpack, [Tref|As], St0)
     end;
 unpack(_, [], St) -> badarg_error(unpack, [], St).
 
